@@ -300,4 +300,14 @@ project("simple_gltf")
 	targetdir "bin"
 	files ( gkit_files )
 	files { gkit_dir .. "/tutos/gltf/simple.cpp" }
+	
+project("tp1")
+	language "C++"
+	kind "ConsoleApp"
+	targetdir "bin"
+	files ( gkit_files )
+	files { gkit_dir .. "/TPs/tp1/*.cpp" }
 
+--~ postbuildcommands "{COPYDIR} data \"build/bin/%{cfg.buildcfg}\" /s /h /e /k /f /c"
+--~ ok, err = os.copyfile("extern/visual/bin/*.dll", "bin/")
+os.execute("cp extern/visual/bin/*.dll bin/")

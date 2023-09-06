@@ -4,7 +4,12 @@ bin/*.pdb
 build
 *.make
 *.cbp
+extern/
 
 *.workspace
 
 Makefile
+
+shader_kit0*.png
+orbiter.txt
+premake5.exe
