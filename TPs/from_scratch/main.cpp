@@ -64,12 +64,42 @@ public:
 		// decrire un repere / grille
 		m_repere = make_grid(10);
 
+		m_robot_mesh = read_mesh("data/robot.obj");
+
 		// etat openGL par defaut
 		glClearColor(0.2f, 0.2f, 0.2f, 1.f);        // couleur par defaut de la fenetre
-
 		glClearDepth(1.f);                          // profondeur par defaut
+
 		glDepthFunc(GL_LESS);                       // ztest, conserver l'intersection la plus proche de la camera
 		glEnable(GL_DEPTH_TEST);                    // activer le ztest
+
+		//Lecture du shader
+		m_shader_from_buffer = read_program("data/shaders_persos/shader_from_buffer.glsl");
+		program_print_errors(m_shader_from_buffer);
+
+		glUseProgram(m_shader_from_buffer);
+
+		//Creation du position buffer
+		GLuint position_buffer;
+		glGenBuffers(1, &position_buffer);
+		//On selectionne le position buffer
+		glBindBuffer(GL_ARRAY_BUFFER, position_buffer);
+		//On remplit le buffer selectionne (le position buffer)
+		glBufferData(GL_ARRAY_BUFFER, m_robot_mesh.vertex_buffer_size(), m_robot_mesh.vertex_buffer(), GL_STATIC_DRAW);
+
+		//Craetion du VAO
+		glGenVertexArrays(1, &m_robot_vao);
+		//Selection du VAO pour le configurer apres
+		glBindVertexArray(m_robot_vao);
+
+		//On recupere l'id de l'attribut position du vertex shader "in vec3 position"
+		GLint position_attribute = glGetAttribLocation(m_shader_from_buffer, "position");
+		glVertexAttribPointer(position_attribute, 3, GL_FLOAT, GL_FALSE, 0, 0);
+		glEnableVertexAttribArray(position_attribute);
+
+		//Nettoyage
+		glBindVertexArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
 
 		return 0;   // pas d'erreur, sinon renvoyer -1
 	}
@@ -88,11 +118,28 @@ public:
 
 		draw(m_repere, /* model */ Identity(), camera());
 		
+		//On selectionne notre shader
+		glUseProgram(m_shader_from_buffer);
+
+		//On update l'uniform mvpMatrix de notre shader
+		Transform mvpMatrix = camera().projection() * camera().view() * Identity();
+		GLuint mvpMatrixLocation = glGetUniformLocation(m_shader_from_buffer, "mvpMatrix");
+		glUniformMatrix4fv(mvpMatrixLocation, 1, GL_TRUE, mvpMatrix.data());
+
+		//On selectionne le vao du robot
+		glBindVertexArray(m_robot_vao);
+		//On draw le robot
+		glDrawArrays(GL_TRIANGLES, 0, m_robot_mesh.vertex_count());
+
 		return 1;
 	}
 
 protected:
 	Mesh m_repere;
+	Mesh m_robot_mesh;
+
+	GLuint m_robot_vao;
+	GLuint m_shader_from_buffer;
 };
 
 
