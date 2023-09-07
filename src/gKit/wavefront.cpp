@@ -10,7 +10,6 @@
 #include "files.h"
 #include "wavefront.h"
 
-
 Mesh read_mesh( const char *filename )
 {
     FILE *in= fopen(filename, "rb");

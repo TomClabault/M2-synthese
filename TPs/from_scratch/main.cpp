@@ -64,7 +64,7 @@ public:
 		// decrire un repere / grille
 		m_repere = make_grid(10);
 
-		m_robot_mesh = read_mesh("data/robot.obj");
+		m_robot_mesh = read_mesh("data/robot_smooth.obj");
 
 		// etat openGL par defaut
 		glClearColor(0.2f, 0.2f, 0.2f, 1.f);        // couleur par defaut de la fenetre
@@ -78,6 +78,19 @@ public:
 		program_print_errors(m_shader_from_buffer);
 
 		glUseProgram(m_shader_from_buffer);
+		GLint light_position_location = glGetUniformLocation(m_shader_from_buffer, "light_position");
+		glUniform3f(light_position_location, 2, 0, 10);
+
+		GLuint diffuse_colors_location = glGetUniformLocation(m_shader_from_buffer, "diffuse_colors");
+		std::vector<Color> diffuse_colors_buffer;
+		for (const Material& mat : m_robot_mesh.materials().materials)
+			diffuse_colors_buffer.push_back(mat.diffuse);
+		glUniform4fv(diffuse_colors_location, m_robot_mesh.materials().materials.size(), (GLfloat*)diffuse_colors_buffer.data());
+
+		//Creation du VAO
+		glGenVertexArrays(1, &m_robot_vao);
+		//Selection du VAO pour le configurer apres
+		glBindVertexArray(m_robot_vao);
 
 		//Creation du position buffer
 		GLuint position_buffer;
@@ -87,17 +100,56 @@ public:
 		//On remplit le buffer selectionne (le position buffer)
 		glBufferData(GL_ARRAY_BUFFER, m_robot_mesh.vertex_buffer_size(), m_robot_mesh.vertex_buffer(), GL_STATIC_DRAW);
 
-		//Craetion du VAO
-		glGenVertexArrays(1, &m_robot_vao);
-		//Selection du VAO pour le configurer apres
-		glBindVertexArray(m_robot_vao);
-
 		//On recupere l'id de l'attribut position du vertex shader "in vec3 position"
 		GLint position_attribute = glGetAttribLocation(m_shader_from_buffer, "position");
 		glVertexAttribPointer(position_attribute, 3, GL_FLOAT, GL_FALSE, 0, 0);
 		glEnableVertexAttribArray(position_attribute);
 
-		//Nettoyage
+
+
+
+
+		//Creation du normal buffer
+		GLuint normal_buffer;
+		glGenBuffers(1, &normal_buffer);
+		//On selectionne le normal buffer
+		glBindBuffer(GL_ARRAY_BUFFER, normal_buffer);
+		//On remplit le buffer selectionne (le normal buffer)
+		glBufferData(GL_ARRAY_BUFFER, m_robot_mesh.normal_buffer_size(), m_robot_mesh.normal_buffer(), GL_STATIC_DRAW);
+
+		//On recupere l'id de l'attribut normal du vertex shader "in vec3 normal"
+		GLint normal_attribute = glGetAttribLocation(m_shader_from_buffer, "normal");
+		glVertexAttribPointer(normal_attribute, 3, GL_FLOAT, GL_FALSE, 0, 0);
+		glEnableVertexAttribArray(normal_attribute);
+
+
+
+
+
+		std::vector<unsigned int> material_index_buffer;
+		for (unsigned int index : m_robot_mesh.material_indices())
+		{
+			material_index_buffer.push_back(index);
+			material_index_buffer.push_back(index);
+			material_index_buffer.push_back(index);
+		}
+
+		//Creation du buffer des materiaux
+		GLuint material_index_buffer_id;
+		glGenBuffers(1, &material_index_buffer_id);
+		//On selectionne le normal buffer
+		glBindBuffer(GL_ARRAY_BUFFER, material_index_buffer_id);
+		//On remplit le buffer selectionne (le material index buffer). On divise par 3 parce qu'on a un material par TRIANGLE, pas par vertex
+		glBufferData(GL_ARRAY_BUFFER, m_robot_mesh.vertex_buffer_size(), material_index_buffer.data(), GL_STATIC_DRAW);
+
+		//On recupere l'id de l'attribut normal du vertex shader "in vec3 normal"
+		GLint material_index_attribute = glGetAttribLocation(m_shader_from_buffer, "material_index");
+		glVertexAttribIPointer(material_index_attribute, 1, GL_UNSIGNED_INT, 0, 0);
+		glEnableVertexAttribArray(material_index_attribute);
+
+
+
+		//Nettoyage (on repositionne les buffers selectionnes sur les valeurs par defaut)
 		glBindVertexArray(0);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 
