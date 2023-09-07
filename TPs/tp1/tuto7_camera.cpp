@@ -65,8 +65,10 @@ public:
 		m_repere = make_grid(10);
 
 		// charge un objet
-		m_cube = read_mesh("data/cube.obj");
-		m_bigguy = read_mesh("data/bigguy.obj");
+		m_robot = read_mesh("data/robot.obj");
+		//Extraction des couleurs du modele
+		for (int i = 0; i < m_robot.materials().materials.size(); i++)
+			m_robot_colors.push_back(m_robot.materials().materials.at(i).diffuse);
 
 		// etat openGL par defaut
 		glClearColor(0.2f, 0.2f, 0.2f, 1.f);        // couleur par defaut de la fenetre
@@ -80,13 +82,8 @@ public:
 		Transform projection = camera().projection();
 		m_vpMatrix = projection * view;
 
-		m_shader_custom_color = read_program("data/shaders_persos/shader_normal.glsl");
-		program_print_errors(m_shader_custom_color);
-
-		//Initialisation par defaut
-		program_uniform(m_shader_custom_color, "meshColor", vec4(0, 0, 1, 1));
-		program_uniform(m_shader_custom_color, "mvpMatrix", m_vpMatrix);
-		program_uniform(m_shader_custom_color, "light_position", LIGHT_POSITION);
+		m_shader_custom = read_program("data/shaders_persos/shader_obj_color.glsl");
+		program_print_errors(m_shader_custom);
 
 		return 0;   // pas d'erreur, sinon renvoyer -1
 	}
@@ -94,7 +91,7 @@ public:
 	// destruction des objets de l'application
 	int quit()
 	{
-		m_bigguy.release();
+		m_robot.release();
 		m_repere.release();
 		return 0;   // pas d'erreur
 	}
@@ -112,30 +109,27 @@ public:
 		draw(m_repere, /* model */ Identity(), camera());
 		
 		//Rouge
-		glUseProgram(m_shader_custom_color);
-		program_uniform(m_shader_custom_color, "meshColor", vec4(1, 0, 0, 1));
+		glUseProgram(m_shader_custom);
+		program_uniform(m_shader_custom, "light_position", LIGHT_POSITION);
+		program_uniform(m_shader_custom, "robotMaterials", m_robot_colors);
 		//On scale le bigguy en rajoutant la model matrix (le scale 0.1x du bigguy) a la matrice projection * view existante.
 		//On obtient donc la matrice mvp complete puisqu'on a rajoute la matrice du model (scale 0.1x)
-		program_uniform(m_shader_custom_color, "mvpMatrix", m_vpMatrix * Scale(0.1f));
-		m_bigguy.draw(m_shader_custom_color, true, false, true, false, false);
-
-		//On dessine un autre bigguy mais au dessus du premier (donc on rajoute un translation) 
-		//et d'une autre couleur (on change l'uniform entre deux appels a draw() )
-		program_uniform(m_shader_custom_color, "meshColor", vec4(0, 1, 0, 1));
-		program_uniform(m_shader_custom_color, "mvpMatrix", m_vpMatrix * Translation(0, 2, 0) * Scale(0.1f));
-		m_bigguy.draw(m_shader_custom_color, true, false, true, false, false);
+		program_uniform(m_shader_custom, "mvpMatrix", m_vpMatrix * Scale(0.3f));
+		m_robot.draw(m_shader_custom, true, false, true, false, true);
 
 
 		return 1;
 	}
 
 protected:
-	Mesh m_bigguy;
+	Mesh m_robot;
+	std::vector<Color> m_robot_colors;
+
 	Mesh m_cube;
 	Mesh m_repere;
 
 	Transform m_vpMatrix;
-	GLuint m_shader_custom_color;
+	GLuint m_shader_custom;
 };
 
 
