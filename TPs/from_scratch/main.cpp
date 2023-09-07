@@ -61,14 +61,8 @@ public:
 	// creation des objets de l'application
 	int init()
 	{
-		// decrire un repere / grille 
+		// decrire un repere / grille
 		m_repere = make_grid(10);
-
-		// charge un objet
-		m_robot = read_mesh("data/robot.obj");
-		//Extraction des couleurs du modele
-		for (int i = 0; i < m_robot.materials().materials.size(); i++)
-			m_robot_colors.push_back(m_robot.materials().materials.at(i).diffuse);
 
 		// etat openGL par defaut
 		glClearColor(0.2f, 0.2f, 0.2f, 1.f);        // couleur par defaut de la fenetre
@@ -77,21 +71,12 @@ public:
 		glDepthFunc(GL_LESS);                       // ztest, conserver l'intersection la plus proche de la camera
 		glEnable(GL_DEPTH_TEST);                    // activer le ztest
 
-
-		Transform view = camera().view();
-		Transform projection = camera().projection();
-		m_vpMatrix = projection * view;
-
-		m_shader_custom = read_program("data/shaders_persos/shader_obj_color.glsl");
-		program_print_errors(m_shader_custom);
-
 		return 0;   // pas d'erreur, sinon renvoyer -1
 	}
 
 	// destruction des objets de l'application
 	int quit()
 	{
-		m_robot.release();
 		m_repere.release();
 		return 0;   // pas d'erreur
 	}
@@ -101,35 +86,13 @@ public:
 	{
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		//On recalcule la nouvelle camera si l'utilisateur l'a deplace avec la souris par exemple
-		Transform view = camera().view();
-		Transform projection = camera().projection();
-		m_vpMatrix = projection * view;
-
 		draw(m_repere, /* model */ Identity(), camera());
 		
-		//Rouge
-		glUseProgram(m_shader_custom);
-		program_uniform(m_shader_custom, "light_position", LIGHT_POSITION);
-		program_uniform(m_shader_custom, "robotMaterials", m_robot_colors);
-		//On scale le bigguy en rajoutant la model matrix (le scale 0.1x du bigguy) a la matrice projection * view existante.
-		//On obtient donc la matrice mvp complete puisqu'on a rajoute la matrice du model (scale 0.1x)
-		program_uniform(m_shader_custom, "mvpMatrix", m_vpMatrix * Scale(0.3f));
-		m_robot.draw(m_shader_custom, true, false, true, false, true);
-
 		return 1;
 	}
 
 protected:
-	Mesh m_robot;
-	std::vector<Color> m_robot_colors;
-
-	Mesh m_cube;
 	Mesh m_repere;
-
-	Transform m_vpMatrix;
-
-	GLuint m_shader_custom;
 };
 
 
