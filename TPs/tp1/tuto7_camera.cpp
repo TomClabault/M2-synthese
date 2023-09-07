@@ -10,6 +10,7 @@
 #include "orbiter.h"
 #include "uniforms.h"
 
+const vec3 LIGHT_POSITION(2, 0, 11);
 
 // utilitaire. creation d'une grille / repere.
 Mesh make_grid(const int n = 10)
@@ -65,7 +66,6 @@ public:
 
 		// charge un objet
 		m_cube = read_mesh("data/cube.obj");
-
 		m_bigguy = read_mesh("data/bigguy.obj");
 
 		// etat openGL par defaut
@@ -80,12 +80,13 @@ public:
 		Transform projection = camera().projection();
 		m_vpMatrix = projection * view;
 
-		m_shader_custom_color = read_program("data/shaders_persos/shader_custom_color.glsl");
+		m_shader_custom_color = read_program("data/shaders_persos/shader_normal.glsl");
 		program_print_errors(m_shader_custom_color);
 
 		//Initialisation par defaut
 		program_uniform(m_shader_custom_color, "meshColor", vec4(0, 0, 1, 1));
 		program_uniform(m_shader_custom_color, "mvpMatrix", m_vpMatrix);
+		program_uniform(m_shader_custom_color, "light_position", LIGHT_POSITION);
 
 		return 0;   // pas d'erreur, sinon renvoyer -1
 	}
@@ -108,29 +109,22 @@ public:
 		Transform projection = camera().projection();
 		m_vpMatrix = projection * view;
 
-		//GKit positionne pour nous la matrice mvp
-
-		// dessine le repere, place au centre du monde, pour le point de vue de la camera 
-		program_uniform(m_shader_custom_color, "meshColor", vec4(0.75, 0.75, 0.75, 1));
-		program_uniform(m_shader_custom_color, "mvpMatrix", m_vpMatrix * Identity());
-		m_repere.draw(m_shader_custom_color, true, false, false, false, false);
-		//draw(m_repere, /* model */ Identity(), camera());
-
-		// dessine un bigguy rouge, scale 0.1x
-		//draw(m_bigguy, /* model */ Scale(0.1f), camera());
+		draw(m_repere, /* model */ Identity(), camera());
 		
 		//Rouge
+		glUseProgram(m_shader_custom_color);
 		program_uniform(m_shader_custom_color, "meshColor", vec4(1, 0, 0, 1));
-		//On scale le bigguy en rajoutant la model matrix (le scale 0.1x du bigguy) à la matrice projection * view existante.
+		//On scale le bigguy en rajoutant la model matrix (le scale 0.1x du bigguy) a la matrice projection * view existante.
 		//On obtient donc la matrice mvp complete puisqu'on a rajoute la matrice du model (scale 0.1x)
 		program_uniform(m_shader_custom_color, "mvpMatrix", m_vpMatrix * Scale(0.1f));
-		m_bigguy.draw(m_shader_custom_color, true, false, false, false, false);
+		m_bigguy.draw(m_shader_custom_color, true, false, true, false, false);
 
 		//On dessine un autre bigguy mais au dessus du premier (donc on rajoute un translation) 
 		//et d'une autre couleur (on change l'uniform entre deux appels a draw() )
 		program_uniform(m_shader_custom_color, "meshColor", vec4(0, 1, 0, 1));
 		program_uniform(m_shader_custom_color, "mvpMatrix", m_vpMatrix * Translation(0, 2, 0) * Scale(0.1f));
-		m_bigguy.draw(m_shader_custom_color, true, false, false, false, false);
+		m_bigguy.draw(m_shader_custom_color, true, false, true, false, false);
+
 
 		return 1;
 	}
