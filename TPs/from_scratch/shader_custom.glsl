@@ -24,8 +24,10 @@ void main()
 
 #ifdef FRAGMENT_SHADER
 
-uniform vec3 light_position;
-uniform vec4 diffuse_colors[16];
+uniform vec3 u_light_position;
+uniform vec4 u_diffuse_colors[16];
+uniform bool u_use_ambient;
+uniform vec4 u_ambient_color;
 
 in vec3 vs_normal;
 in vec3 vs_position;
@@ -33,6 +35,9 @@ flat in uint vs_material_index;
 
 void main()
 {
-	gl_FragColor = dot(vs_normal, normalize(light_position - vs_position)) * diffuse_colors[vs_material_index];
+	gl_FragColor = max(0.0f, dot(vs_normal, normalize(u_light_position - vs_position))) * u_diffuse_colors[vs_material_index];
+
+	if (u_use_ambient)
+		gl_FragColor = gl_FragColor + u_ambient_color;
 }
 #endif

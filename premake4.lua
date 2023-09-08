@@ -1,7 +1,7 @@
-solution "gKit2light"
+	solution "gKit2light"
     configurations { "debug", "release" }
 
-    includedirs { ".", "src/gKit" }
+    includedirs { ".", "src/gKit", "src/imgui" }
     
     gkit_dir = path.getabsolute(".")
     
@@ -83,6 +83,7 @@ end
     
  -- description des fichiers communs
 gkit_files = { gkit_dir .. "/src/gKit/*.cpp", gkit_dir .. "/src/gKit/*.h" }
+imgui_files = { gkit_dir .. "/src/imgui/*.cpp", gkit_dir .. "/src/imgui/*.h" }
 
 
 -- quand ce premake4.lua est inclus par un autre premake qui definit no_project=true (donc quand gkit2light est utilisé comme une lib),
@@ -313,6 +314,7 @@ project("from_scratch")
 	kind "ConsoleApp"
 	targetdir "bin"
 	files ( gkit_files )
+	files ( imgui_files )
 	files { gkit_dir .. "/TPs/from_scratch/*.cpp" }
 
 os.execute("cp extern/visual/bin/*.dll bin/")
