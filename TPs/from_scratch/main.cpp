@@ -246,6 +246,8 @@ public:
 
 	void update_ambient_uniforms()
 	{
+		glUseProgram(m_custom_shader);
+
 		GLuint use_ambient_location = glGetUniformLocation(m_custom_shader, "u_use_ambient");
 		glUniform1i(use_ambient_location, m_application_settings.use_ambient);
 
@@ -256,17 +258,21 @@ public:
 	void setup_light_position_uniform(const vec3& light_position)
 	{
 		glUseProgram(m_custom_shader);
+
 		GLint light_position_location = glGetUniformLocation(m_custom_shader, "u_light_position");
 		glUniform3f(light_position_location, light_position.x, light_position.y, light_position.z);
 	}
 
 	void setup_diffuse_color_uniform()
 	{
+		glUseProgram(m_custom_shader);
+
 		GLuint diffuse_colors_location = glGetUniformLocation(m_custom_shader, "u_diffuse_colors");
 		std::vector<Color> diffuse_colors_buffer;
 		for (const Material& mat : m_mesh.materials().materials)
 			diffuse_colors_buffer.push_back(mat.diffuse);
 		glUniform4fv(diffuse_colors_location, m_mesh.materials().materials.size(), (GLfloat*)diffuse_colors_buffer.data());
+
 	}
 
 	// creation des objets de l'application

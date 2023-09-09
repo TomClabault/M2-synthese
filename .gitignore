@@ -15,3 +15,5 @@ Makefile
 shader_kit0*.png
 orbiter.txt
 premake5.exe
+
+app_orbiter.txt
