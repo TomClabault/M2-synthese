@@ -15,13 +15,10 @@ public:
 	int get_window_height();
 
 	int prerender() override;
-
 	int postrender() override;
 
 	void update_ambient_uniforms();
-
 	void setup_light_position_uniform(const vec3& light_position);
-
 	void setup_diffuse_color_uniform();
 
 	// creation des objets de l'application
@@ -30,10 +27,9 @@ public:
 	// destruction des objets de l'application
 	int quit();
 
+	void draw_general_settings();
 	void draw_lighting_window();
-
 	void draw_materials_window();
-
 	void draw_imgui();
 
 	// dessiner une nouvelle image
@@ -49,7 +45,7 @@ protected:
 
 
 
-	Mesh m_repere;
+	//Mesh m_repere;
 	Mesh m_mesh;
 
 	GLuint m_cubemap_vao;

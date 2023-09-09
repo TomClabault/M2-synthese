@@ -5,6 +5,8 @@
 
 struct ApplicationSettings
 {
+	bool enable_vsync = true;
+
 	bool use_ambient = true;
 
 	//1 for cubemap, 0 for skysphere

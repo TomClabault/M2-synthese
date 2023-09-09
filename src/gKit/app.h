@@ -41,6 +41,7 @@ protected:
     virtual int postrender( ) { return 0; }
 
     void vsync_off( );
+    void vsync_on();
     
     Window m_window;
     Context m_context;

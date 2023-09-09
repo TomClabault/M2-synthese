@@ -20,50 +20,48 @@
 const vec3 LIGHT_POSITION(2, 0, 11);
 
 // utilitaire. creation d'une grille / repere.
-Mesh make_grid(const int n = 10)
-{
-	Mesh grid = Mesh(GL_LINES);
-
-	// grille
-	grid.color(White());
-	for (int x = 0; x < n; x++)
-	{
-		float px = float(x) - float(n) / 2 + .5f;
-		grid.vertex(Point(px, 0, -float(n) / 2 + .5f));
-		grid.vertex(Point(px, 0, float(n) / 2 - .5f));
-	}
-
-	for (int z = 0; z < n; z++)
-	{
-		float pz = float(z) - float(n) / 2 + .5f;
-		grid.vertex(Point(-float(n) / 2 + .5f, 0, pz));
-		grid.vertex(Point(float(n) / 2 - .5f, 0, pz));
-	}
-
-	// axes XYZ
-	grid.color(Red());
-	grid.vertex(Point(0, .1, 0));
-	grid.vertex(Point(1, .1, 0));
-
-	grid.color(Green());
-	grid.vertex(Point(0, .1, 0));
-	grid.vertex(Point(0, 1, 0));
-
-	grid.color(Blue());
-	grid.vertex(Point(0, .1, 0));
-	grid.vertex(Point(0, .1, 1));
-
-	glLineWidth(2);
-
-	return grid;
-}
+//Mesh make_grid(const int n = 10)
+//{
+//	Mesh grid = Mesh(GL_LINES);
+//
+//	// grille
+//	grid.color(White());
+//	for (int x = 0; x < n; x++)
+//	{
+//		float px = float(x) - float(n) / 2 + .5f;
+//		grid.vertex(Point(px, 0, -float(n) / 2 + .5f));
+//		grid.vertex(Point(px, 0, float(n) / 2 - .5f));
+//	}
+//
+//	for (int z = 0; z < n; z++)
+//	{
+//		float pz = float(z) - float(n) / 2 + .5f;
+//		grid.vertex(Point(-float(n) / 2 + .5f, 0, pz));
+//		grid.vertex(Point(float(n) / 2 - .5f, 0, pz));
+//	}
+//
+//	// axes XYZ
+//	grid.color(Red());
+//	grid.vertex(Point(0, .1, 0));
+//	grid.vertex(Point(1, .1, 0));
+//
+//	grid.color(Green());
+//	grid.vertex(Point(0, .1, 0));
+//	grid.vertex(Point(0, 1, 0));
+//
+//	grid.color(Blue());
+//	grid.vertex(Point(0, .1, 0));
+//	grid.vertex(Point(0, .1, 1));
+//
+//	glLineWidth(2);
+//
+//	return grid;
+//}
 
 // constructeur : donner les dimensions de l'image, et eventuellement la version d'openGL.
 TP::TP() : AppCamera(1280, 720, 3, 3, 16) 
 {
 	m_app_timer = ApplicationTimer(this);
-
-	vsync_off();
 }
 
 int TP::get_window_width() { return window_width(); }
@@ -192,7 +190,7 @@ int TP::init()
 
 
 	//Creating a basic grid
-	m_repere = make_grid(10);
+	//m_repere = make_grid(10);
 
 	//Reading the mesh displayed
 	m_mesh = read_mesh("data/robot.obj");
@@ -320,8 +318,19 @@ int TP::init()
 // destruction des objets de l'application
 int TP::quit()
 {
-	m_repere.release();
+	//m_repere.release();
 	return 0;   // pas d'erreur
+}
+
+void TP::draw_general_settings()
+{
+	if (ImGui::Checkbox("Enable VSync", &m_application_settings.enable_vsync))
+	{
+		if (!m_application_settings.enable_vsync)
+			vsync_off();
+		else
+			vsync_on();
+	}
 }
 
 void TP::draw_lighting_window()
@@ -402,6 +411,10 @@ void TP::draw_imgui()
 
 	ImGui::ShowDemoWindow();
 
+	ImGui::Begin("General settings");
+	draw_general_settings();
+	ImGui::End();
+
 	ImGui::Begin("Lighting");
 	draw_lighting_window();
 	ImGui::End();
@@ -453,6 +466,7 @@ int TP::render()
 
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_CUBE_MAP, m_cubemap);
+
 		//The cubemap is on texture unit 0 so we're using 0 for the value of the uniform
 		glUniform1i(cubemap_uniform_location, 0);
 	}

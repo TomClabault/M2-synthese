@@ -25,7 +25,7 @@ void main()
 uniform mat4 u_inverse_matrix;
 uniform vec3 u_camera_position;
 
-uniform bool u_use_cubemap;
+uniform int u_use_cubemap;
 uniform samplerCube u_cubemap;
 
 uniform sampler2D u_skysphere;
@@ -45,7 +45,7 @@ void main()
 	vec3 direction = normalize(pixel - u_camera_position);
 
 	vec4 color;
-	if (u_use_cubemap)
+	if (u_use_cubemap == 1)
 	{
 		color = texture(u_cubemap, direction);
 	}

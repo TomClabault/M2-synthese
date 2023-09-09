@@ -23,14 +23,24 @@ App::~App( )
         release_window(m_window);
 }
 
-void App::vsync_off( )
+void App::vsync_off()
 {
     // desactive vsync pour les mesures de temps
     SDL_GL_SetSwapInterval(0);
     printf("sync + vsync  OFF...\n");
-    
+
     // desactive aussi la synchro cpu / gpu...
-    sync= false;
+    sync = false;
+}
+
+void App::vsync_on()
+{
+    // desactive vsync pour les mesures de temps
+    SDL_GL_SetSwapInterval(1);
+    printf("sync + vsync  ON...\n");
+
+    // desactive aussi la synchro cpu / gpu...
+    sync = true;
 }
 
 int App::run( )
