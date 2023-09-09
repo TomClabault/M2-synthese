@@ -294,32 +294,34 @@ int TP::init()
 
 	//Reading the faces of the skybox and creating the OpenGL Cubemap
 	std::vector<ImageData> cubemap_data;
-	ImageData skysphere_data;
+	ImageData skysphere_data, irradiance_map_data;
 
 	std::thread load_thread_cubemap = std::thread([&] {cubemap_data = Utils::read_cubemap_data("TPs/from_scratch/data/skybox", ".jpg"); });
 	std::thread load_thread_skypshere = std::thread([&] {skysphere_data = Utils::read_skysphere_data("TPs/from_scratch/data/AllSkyFree_Sky_EpicGloriousPink_Equirect.jpg"); });
+	std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_data = Utils::read_skysphere_data("TPs/from_scratch/data/irradiance_map_pink_384.png"); });
+	//std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_data = Utils::read_skysphere_data("irradiance_map.png"); });
 	load_thread_cubemap.join();
 	load_thread_skypshere.join();
+	load_thread_irradiance_map.join();
 
 
 	m_cubemap = Utils::create_cubemap_from_data(cubemap_data);
-	m_skysphere = Utils::create_skysphere_from_data(skysphere_data);
+	m_skysphere = Utils::create_skysphere_from_data(skysphere_data, 1);
+	m_irradiance_map = Utils::create_skysphere_from_data(irradiance_map_data, 2);
 
 
 
 
-	//Nettoyage (on repositionne les buffers selectionnes sur les valeurs par defaut)
+	//Cleaning (repositionning the buffers that have been selected to their defaul value)
 	glBindVertexArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-	return 0;   // pas d'erreur, sinon renvoyer -1
+	return 0;
 }
 
-// destruction des objets de l'application
 int TP::quit()
 {
-	//m_repere.release();
-	return 0;   // pas d'erreur
+	return 0;//Error code 0 = no error
 }
 
 void TP::draw_general_settings()
@@ -442,6 +444,17 @@ int TP::render()
 	Transform mvpMatrix = camera().projection() * camera().view() * Identity();
 	GLint mvpMatrixLocation = glGetUniformLocation(m_custom_shader, "mvpMatrix");
 	glUniformMatrix4fv(mvpMatrixLocation, 1, GL_TRUE, mvpMatrix.data());
+
+	//Setting the camera position
+	GLint camera_position_uniform_location = glGetUniformLocation(m_custom_shader, "u_camera_position");
+	glUniform3f(camera_position_uniform_location, m_camera.position().x, m_camera.position().y, m_camera.position().z);
+
+	//Setting up the irradiance map
+	GLint irradiance_map_uniform_location = glGetUniformLocation(m_custom_shader, "u_irradiance_map");
+	//The irradiance map is in texture unit 2
+	glActiveTexture(GL_TEXTURE2);
+	glBindTexture(GL_TEXTURE_2D, m_irradiance_map);
+	glUniform1i(irradiance_map_uniform_location, 2);
 
 	//On selectionne le vao du robot
 	glBindVertexArray(m_robot_vao);

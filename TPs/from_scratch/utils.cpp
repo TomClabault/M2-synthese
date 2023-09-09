@@ -1,6 +1,100 @@
+#include "mat.h"
 #include "utils.h"
+#include "vec.h"
 
+#include <iostream>
 #include <string>
+#include <omp.h>
+
+/* The state must be initialized to non-zero */
+uint32_t Utils::xorshift32(struct Utils::xorshift32_state* state)
+{
+	/* Algorithm "xor" from p. 4 of Marsaglia, "Xorshift RNGs" */
+	uint32_t x = state->a;
+	x ^= x << 13;
+	x ^= x >> 17;
+	x ^= x << 5;
+	return state->a = x;
+}
+
+Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path, unsigned int samples)
+{
+	Image skysphere_image = read_image(skysphere_path);
+	std::cout << "Skysphere loaded" << std::endl;
+
+	Image irradiance_map(skysphere_image.width(), skysphere_image.height());
+
+	std::cout << "Precomputing the irradiance map..." << std::endl;
+	float phi_step = (2 * M_PI) / (irradiance_map.width());
+	float theta_step = M_PI / (irradiance_map.height());
+
+	srand(time(NULL));
+	Utils::xorshift32_state state;
+	state.a = rand();
+
+	std::atomic<int> completed_lines = 0;
+#pragma omp parallel for
+	for (int y = 0; y < irradiance_map.height(); y++)
+	{
+		float theta = theta_step * y;
+		for (int x = 0; x < irradiance_map.width(); x++)
+		{
+			float phi = phi_step * x;
+
+			//The main direction we're going to randomly sample the skysphere around
+			Vector main_direction = normalize(Vector(std::cos(phi) * std::sin(theta),
+													 std::sin(phi) * std::sin(theta),
+													 std::cos(theta)));
+
+			Vector arbitrary_vector = Vector(1, 0, 0);
+			//To avoid issues when the main direction is colinear with the arbitrary vector
+			if (1 - std::abs(dot(main_direction, arbitrary_vector)) < 1e-6f)
+				arbitrary_vector = Vector(0, 1, 0);
+
+			//Calculatin the vectors of the basis we're going to use to rotate the randomly generated vector
+			//around our main direction
+			Vector up_vector = main_direction;
+			Vector forward_vector = normalize(cross(arbitrary_vector, up_vector));
+			Vector right_vector = cross(forward_vector, up_vector);
+
+			Transform obn(right_vector, up_vector, forward_vector, Vector(0, 0, 0));
+
+			Color sum = Color(0, 0, 0);
+			for (unsigned int i = 0; i < samples; i++)
+			{
+				Vector random_direction_rotated;
+
+				do
+				{
+					Vector random_direction = normalize(Vector(Utils::xorshift32(&state) / (float)std::numeric_limits<unsigned int>::max() * 2 - 1, 
+													 Utils::xorshift32(&state) / (float)std::numeric_limits<unsigned int>::max() * 2 - 1,
+													 Utils::xorshift32(&state) / (float)std::numeric_limits<unsigned int>::max() * 2 - 1));
+
+					random_direction_rotated = obn(random_direction);
+
+
+					//We're checking that the generated direction is in the upper hemisphere (and not below)
+				} while (dot(random_direction_rotated, up_vector) < 0.0f);
+
+				vec2 uv = vec2(0.5 + std::atan2(random_direction_rotated.z, random_direction_rotated.x) / (2.0f * M_PI), 0.5 + std::asin(random_direction_rotated.y) / M_PI);
+
+				sum = sum + skysphere_image(uv.x * skysphere_image.width(), uv.y * skysphere_image.height());
+			}
+
+			irradiance_map(x, y) = sum / (float)samples;
+		}
+
+		completed_lines++;
+
+		if (omp_get_thread_num() == 0)
+		{
+			if (completed_lines % 40)
+				printf("[%d*%d, %dx] - %.3f%% completed\n", skysphere_image.width(), skysphere_image.height(), samples, completed_lines / (float)skysphere_image.height() * 100);
+		}
+	}
+
+	return irradiance_map;
+}
 
 std::vector<ImageData> Utils::read_cubemap_data(const char* folder_name, const char* face_extension)
 {
@@ -84,12 +178,12 @@ ImageData Utils::read_skysphere_data(const char* filename)
 	return read_image_data(filename);
 }
 
-GLuint Utils::create_skysphere_from_data(ImageData& skysphere_image_data)
+GLuint Utils::create_skysphere_from_data(ImageData& skysphere_image_data, int texture_unit)
 {
 	GLuint skysphere;
 	glGenTextures(1, &skysphere);
-	//Texture 1 because 0 is the cubemap
-	glActiveTexture(GL_TEXTURE1);
+	//Texture 0 is the cubemap so we're incrementing by the texture unit number
+	glActiveTexture(GL_TEXTURE0 + texture_unit);
 	//Selecting the cubemap as active
 	glBindTexture(GL_TEXTURE_2D, skysphere);
 
@@ -111,9 +205,9 @@ GLuint Utils::create_skysphere_from_data(ImageData& skysphere_image_data)
 	return skysphere;
 }
 
-GLuint Utils::create_skysphere_from_path(const char* filename)
+GLuint Utils::create_skysphere_from_path(const char* filename, int texture_unit)
 {
 	ImageData skysphere_image = read_skysphere_data(filename);
 
-	return create_skysphere_from_data(skysphere_image);
+	return create_skysphere_from_data(skysphere_image, texture_unit);
 }

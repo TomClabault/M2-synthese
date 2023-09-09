@@ -64,6 +64,7 @@ if _PREMAKE_VERSION >="5.0" then
         location "build"
         debugdir "."
         
+		openmp "On"
         system "Windows"
         architecture "x64"
         disablewarnings { "4244", "4305" }

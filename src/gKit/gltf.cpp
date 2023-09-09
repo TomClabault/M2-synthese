@@ -696,7 +696,7 @@ std::vector<ImageData> read_gltf_images( const char *filename )
     std::vector<ImageData> images(data->images_count);
     
 #pragma omp parallel for schedule(dynamic, 1)
-    for(unsigned i= 0; i < data->images_count; i++)
+    for(int i= 0; i < data->images_count; i++)
     {
         if(data->images[i].uri)
         {

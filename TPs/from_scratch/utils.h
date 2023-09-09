@@ -10,7 +10,14 @@
 class Utils
 {
 public:
+	struct Utils::xorshift32_state {
+		uint32_t a;
+	};
 
+	static uint32_t xorshift32(struct Utils::xorshift32_state* state);
+
+
+	static Image precompute_irradiance_map_from_skysphere(const char* skysphere_path, unsigned int samples);
 	static std::vector<ImageData> read_cubemap_data(const char* folder_name, const char* face_extension);
 	static GLuint create_cubemap_from_data(std::vector<ImageData>& faces_data);
 	/*
@@ -21,8 +28,8 @@ public:
 	static GLuint create_cubemap_from_path(const char* folder_name, const char* face_extension);
 
 	static ImageData read_skysphere_data(const char* filename);
-	static GLuint create_skysphere_from_data(ImageData& skysphere_image_data);
-	static GLuint create_skysphere_from_path(const char* filename);
+	static GLuint create_skysphere_from_data(ImageData& skysphere_image_data, int texture_unit);
+	static GLuint create_skysphere_from_path(const char* filename, int texture_unit);
 };
 
 #endif

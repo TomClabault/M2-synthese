@@ -55,6 +55,7 @@ protected:
 	GLuint m_cubemap_shader;
 	GLuint m_cubemap;
 	GLuint m_skysphere;
+	GLuint m_irradiance_map;
 
 	ImGuiIO m_imgui_io;
 
