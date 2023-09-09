@@ -1,3 +1,6 @@
+#ifndef APPLICATION_SETTINGS_H
+#define APPLICATION_SETTINGS_H
+
 #include "color.h"
 
 struct ApplicationSettings
@@ -9,3 +12,5 @@ struct ApplicationSettings
 
 	Color ambient_color = Color(0.1, 0.1, 0.1, 0);
 };
+
+#endif
