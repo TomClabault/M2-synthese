@@ -108,7 +108,7 @@ public:
         glClearColor(0.2f, 0.2f, 0.2f, 1.f);        // couleur par defaut de la fenetre
         
         glClearDepth(1.f);                          // profondeur par defaut
-        glDepthFunc(GL_LEQUAL);                       // ztest, conserver l'intersection la plus proche de la camera
+        glDepthFunc(GL_LEQUAL);                     // ztest, conserver l'intersection la plus proche de la camera
         glEnable(GL_DEPTH_TEST);                    // activer le ztest
         
         return 0;   // ras, pas d'erreur

@@ -17,6 +17,68 @@
 
 const vec3 LIGHT_POSITION(2, 0, 11);
 
+/*
+ * @param folder_name The folder containing the faces of the cubemap. The folder path should NOT contain a trailing '/'
+ * @param face_extension ".jpg", ".png", ....
+ * The faces of the cubemap should be named "right", "left", "top", "bottom", "front" and "back"
+ */
+GLuint read_cubemap(const char* folder_name, const char* face_extension)
+{
+	//Creating the cubemap
+	GLuint cubemap = 0;
+	glGenTextures(1, &cubemap);
+	glActiveTexture(GL_TEXTURE0);
+	//Selecting the cubemap as active
+	glBindTexture(GL_TEXTURE_CUBE_MAP, cubemap);
+
+	std::string face_names_std_string[6] = { "right", "left", "top", "bottom", "front", "back" };
+	for (std::string& face_name : face_names_std_string)
+		face_name = folder_name + std::string("/") + face_name + face_extension;
+
+	for (int i = 0; i < 6; i++)
+	{
+		ImageData face = flipY(read_image_data(face_names_std_string[i].c_str()));
+		//ImageData face = flipX(flipY(copy(image, faces[i].x * w, faces[i].y * h, w, h)));
+
+		GLenum data_format;
+		if (face.channels == 3)
+			data_format = GL_RGB;
+		else // Default
+			data_format = GL_RGBA;
+
+		glTexImage2D(/* what texture we're generating. This could be GL_TEXTURE_2D for a regular 2D 
+					 texture but because we're generating a cubemap, we have to precise which face of the 
+					 cubemap we're currently generating. This is done by getting the X+ OpenGL constant 
+					 (the first face of a cubemap is X+) and adding i so that we will cycle through all 
+					 the faces of the cubemap as i goes from 0 to 5 */ GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
+					 /* mipmap levels, 0 is the default */ 0,
+					 /* the format we want the texture to be stored in the GPU as */ GL_RGBA, 
+					 /* width and height of one face */ face.width, face.height,
+					 0,
+					 /* pixel format of the face, RGB or RGBA typically */ data_format, 
+					 /* how the pixels are formatted in the data buffer. unsigned chars here */ GL_UNSIGNED_BYTE, 
+					 /* data of the face */ face.data());
+	}
+
+	// When scaling the texture down (displaying the texture on a small object), we want to linearly interpolate
+	// between mipmaps levels and linearly interpolate the texel within the resulting mipmap level
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	// Linearly interpolating the texel color when displaying the texture on a big object (the texture is stretched)
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	// Clamping method if we use texture coordinates that are out of the [0-1] range
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+	// Generating the MIPMAP levels for the cubemap
+	glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+
+	// Filtering on the boundary between two faces
+	glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
+
+	return cubemap;
+}
+
 // utilitaire. creation d'une grille / repere.
 Mesh make_grid(const int n = 10)
 {
@@ -61,7 +123,71 @@ class TP : public AppCamera
 {
 public:
 	// constructeur : donner les dimensions de l'image, et eventuellement la version d'openGL.
-	TP() : AppCamera(1280, 720) {}
+	TP() : AppCamera(1280, 720, 3, 3, 16) {}
+
+	int prerender() override
+	{
+		// recupere les mouvements de la souris
+		int mx, my;
+		unsigned int mb = SDL_GetRelativeMouseState(&mx, &my);
+		int mousex, mousey;
+		SDL_GetMouseState(&mousex, &mousey);
+
+		// deplace la camera
+		auto& imgui_io = ImGui::GetIO();
+
+		if (!imgui_io.WantCaptureMouse) {
+			if (mb & SDL_BUTTON(1))
+				m_camera.rotation(mx, my);      // tourne autour de l'objet
+			else if (mb & SDL_BUTTON(3))
+				m_camera.translation((float)mx / (float)window_width(), (float)my / (float)window_height()); // deplace le point de rotation
+			else if (mb & SDL_BUTTON(2))
+				m_camera.move(mx);           // approche / eloigne l'objet
+
+			SDL_MouseWheelEvent wheel = wheel_event();
+			if (wheel.y != 0)
+			{
+				clear_wheel_event();
+				m_camera.move(8.f * wheel.y);  // approche / eloigne l'objet
+			}
+
+		}
+
+		const char* orbiter_filename = "app_orbiter.txt";
+		// copy / export / write orbiter
+		if (!imgui_io.WantCaptureKeyboard)
+		{
+			if (key_state('c'))
+			{
+				clear_key_state('c');
+				m_camera.write_orbiter(orbiter_filename);
+
+			}
+			// paste / read orbiter
+			if (key_state('v'))
+			{
+				clear_key_state('v');
+
+				Orbiter tmp;
+				if (tmp.read_orbiter(orbiter_filename) < 0)
+					// ne pas modifer la camera en cas d'erreur de lecture...
+					tmp = m_camera;
+
+				m_camera = tmp;
+			}
+
+			// screenshot
+			if (key_state('f12'))
+			{
+				static int calls = 1;
+				clear_key_state('s');
+				screenshot("app", calls++);
+			}
+		}
+
+		// appelle la fonction update() de la classe derivee
+		return update(global_time(), delta_time());
+	}
 
 	void update_ambient_uniforms()
 	{
@@ -111,26 +237,38 @@ public:
 		glClearColor(0.2f, 0.2f, 0.2f, 1.f);        // couleur par defaut de la fenetre
 		glClearDepth(1.f);                          // profondeur par defaut
 
-		glDepthFunc(GL_LESS);                       // ztest, conserver l'intersection la plus proche de la camera
+		glDepthFunc(GL_LEQUAL);                       // ztest, conserver l'intersection la plus proche de la camera
 		glEnable(GL_DEPTH_TEST);                    // activer le ztest
 
 		//Lecture du shader
-		m_custom_shader = read_program("TPs/from_scratch/shader_custom.glsl");
+		m_custom_shader = read_program("TPs/from_scratch/shaders/shader_custom.glsl");
 		program_print_errors(m_custom_shader);
+		m_cubemap_shader = read_program("TPs/from_scratch/shaders/shader_cubemap.glsl");
+		program_print_errors(m_cubemap_shader);
 		
 		setup_light_position_uniform(vec3(2, 0, 10));
 		setup_diffuse_color_uniform();
-		
 
-		GLuint use_ambient_location = glGetUniformLocation(m_custom_shader, "u_use_ambient");
+		GLint use_ambient_location = glGetUniformLocation(m_custom_shader, "u_use_ambient");
 		glUniform1i(use_ambient_location, m_application_settings.use_ambient);
 
-		GLuint ambient_color_location = glGetUniformLocation(m_custom_shader, "u_ambient_color");
+		GLint ambient_color_location = glGetUniformLocation(m_custom_shader, "u_ambient_color");
 		glUniform4f(ambient_color_location, m_application_settings.ambient_color.r, m_application_settings.ambient_color.g, m_application_settings.ambient_color.b, m_application_settings.ambient_color.a);
 
-		//Creation du VAO
+
+
+
+
+		//Creating an empty VAO that will be used for the cubemap
+		glGenVertexArrays(1, &m_cubemap_vao);
+
+
+
+
+
+		//Creating the VAO for the mesh that will be displayed
 		glGenVertexArrays(1, &m_robot_vao);
-		//Selection du VAO pour le configurer apres
+		//Selecting the VAO that we're going to configure
 		glBindVertexArray(m_robot_vao);
 
 		//Creation du position buffer
@@ -187,6 +325,15 @@ public:
 		GLint material_index_attribute = glGetAttribLocation(m_custom_shader, "material_index");
 		glVertexAttribIPointer(material_index_attribute, 1, GL_UNSIGNED_INT, 0, 0);
 		glEnableVertexAttribArray(material_index_attribute);
+
+
+
+
+
+		//Reading the faces of the skybox and creating the OpenGL Cubemap
+		m_cubemap = read_cubemap("TPs/from_scratch/skybox", ".jpg");
+
+
 
 
 
@@ -296,14 +443,14 @@ public:
 	{
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		draw(m_repere, /* model */ Identity(), camera());
+		//draw(m_repere, /* model */ Identity(), camera());
 		
 		//On selectionne notre shader
 		glUseProgram(m_custom_shader);
 
 		//On update l'uniform mvpMatrix de notre shader
 		Transform mvpMatrix = camera().projection() * camera().view() * Identity();
-		GLuint mvpMatrixLocation = glGetUniformLocation(m_custom_shader, "mvpMatrix");
+		GLint mvpMatrixLocation = glGetUniformLocation(m_custom_shader, "mvpMatrix");
 		glUniformMatrix4fv(mvpMatrixLocation, 1, GL_TRUE, mvpMatrix.data());
 
 		//On selectionne le vao du robot
@@ -311,8 +458,19 @@ public:
 		//On draw le robot
 		glDrawArrays(GL_TRIANGLES, 0, m_mesh.vertex_count());
 
+		//Selecting the empty VAO for the cubemap shader
+		glUseProgram(m_cubemap_shader);
+		GLint camera_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_camera_position");
+		GLint cubemap_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_cubemap");
+		GLint inverse_matrix_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_inverse_matrix");
 
+		glUniform3f(camera_uniform_location, m_camera.position().x, m_camera.position().y, m_camera.position().z);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, m_cubemap);
+		glUniform1i(cubemap_uniform_location, 0);
+		glUniformMatrix4fv(inverse_matrix_uniform_location, 1, GL_TRUE, (m_camera.viewport() * m_camera.projection() * m_camera.view() * Identity()).inverse().data());
 
+		glBindVertexArray(m_cubemap_vao);
+		glDrawArrays(GL_TRIANGLES, 0, 3);
 
 		////////// ImGUI //////////
 		draw_imgui();
@@ -326,8 +484,12 @@ protected:
 	Mesh m_repere;
 	Mesh m_mesh;
 
+	GLuint m_cubemap_vao;
 	GLuint m_robot_vao;
 	GLuint m_custom_shader;
+
+	GLuint m_cubemap;
+	GLuint m_cubemap_shader;
 
 	ImGuiIO m_imgui_io;
 
