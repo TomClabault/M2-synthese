@@ -25,7 +25,12 @@ void main()
 uniform mat4 u_inverse_matrix;
 uniform vec3 u_camera_position;
 
+uniform bool u_use_cubemap;
 uniform samplerCube u_cubemap;
+
+uniform sampler2D u_skysphere;
+
+#define M_PI 3.1415926535897932384626433832795f
 
 void main()
 {
@@ -38,7 +43,20 @@ void main()
 	vec3 pixel = world_position.xyz / world_position.w;
 
 	vec3 direction = normalize(pixel - u_camera_position);
-	gl_FragColor = texture(u_cubemap, direction);
-	//gl_FragColor = vec4(0.5, 0, 0, 1);
+
+	vec4 color;
+	if (u_use_cubemap)
+	{
+		color = texture(u_cubemap, direction);
+	}
+	else
+	{
+		float u = 0.5 + atan(direction.z, direction.x) / (2.0f * M_PI);
+		float v = 0.5 + asin(direction.y) / M_PI;
+
+		color = texture(u_skysphere, vec2(u, v));
+	}
+
+	gl_FragColor = color;
 }
 #endif
