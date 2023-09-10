@@ -16,7 +16,7 @@ public:
 
 	static uint32_t xorshift32(struct Utils::xorshift32_state* state);
 
-
+	static void precompute_irradiance_map_from_skysphere_and_write(const char* skysphere_path, unsigned int samples, const char* output_irradiance_map_path);
 	static Image precompute_irradiance_map_from_skysphere(const char* skysphere_path, unsigned int samples);
 	static std::vector<ImageData> read_cubemap_data(const char* folder_name, const char* face_extension);
 	static GLuint create_cubemap_from_data(std::vector<ImageData>& faces_data);

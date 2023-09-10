@@ -2,6 +2,7 @@
 #include "utils.h"
 #include "vec.h"
 
+#include <chrono>
 #include <iostream>
 #include <string>
 #include <omp.h>
@@ -17,6 +18,17 @@ uint32_t Utils::xorshift32(struct Utils::xorshift32_state* state)
 	return state->a = x;
 }
 
+void Utils::precompute_irradiance_map_from_skysphere_and_write(const char* skysphere_path, unsigned int samples, const char* output_irradiance_map_path)
+{
+	auto start = std::chrono::high_resolution_clock::now();
+	Image irradiance_map = Utils::precompute_irradiance_map_from_skysphere(skysphere_path, samples);
+	auto stop = std::chrono::high_resolution_clock::now();
+
+	write_image(irradiance_map, output_irradiance_map_path);
+
+	std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << "ms --- " << (irradiance_map.width() * irradiance_map.height() * samples) / (float)(std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count()) * 1000 << "samples/s" << std::endl;
+}
+
 Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path, unsigned int samples)
 {
 	Image skysphere_image = read_image(skysphere_path);
@@ -28,68 +40,103 @@ Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path
 	float phi_step = (2 * M_PI) / (irradiance_map.width());
 	float theta_step = M_PI / (irradiance_map.height());
 
-	srand(time(NULL));
 	Utils::xorshift32_state state;
 	state.a = rand();
 
-	std::atomic<int> completed_lines = 0;
-#pragma omp parallel for
-	for (int y = 0; y < irradiance_map.height(); y++)
+	//Generating one random number generator for each thread
+	std::vector<Utils::xorshift32_state> states;
+	for (int i = 0; i < omp_get_max_threads(); i++)
 	{
-		float theta = theta_step * y;
-		for (int x = 0; x < irradiance_map.width(); x++)
+		Utils::xorshift32_state state;
+		state.a = rand();
+
+		states.push_back(state);
+	}
+
+	//Each thread is going to increment this variable after one line of the irradiance map has been computed
+	//Because all thread increment this variable, it is atomic
+	//This variable is then used to print a completion purcentage on stdout
+	std::atomic<int> completed_lines = 0;
+
+#pragma omp parallel
+	{
+		int thread_id = omp_get_thread_num();
+
+#pragma omp for
+		for (int y = 0; y < irradiance_map.height(); y++)
 		{
-			float phi = phi_step * x;
-
-			//The main direction we're going to randomly sample the skysphere around
-			Vector main_direction = normalize(Vector(std::cos(phi) * std::sin(theta),
-													 std::sin(phi) * std::sin(theta),
-													 std::cos(theta)));
-
-			Vector arbitrary_vector = Vector(1, 0, 0);
-			//To avoid issues when the main direction is colinear with the arbitrary vector
-			if (1 - std::abs(dot(main_direction, arbitrary_vector)) < 1e-6f)
-				arbitrary_vector = Vector(0, 1, 0);
-
-			//Calculatin the vectors of the basis we're going to use to rotate the randomly generated vector
-			//around our main direction
-			Vector up_vector = main_direction;
-			Vector forward_vector = normalize(cross(arbitrary_vector, up_vector));
-			Vector right_vector = cross(forward_vector, up_vector);
-
-			Transform obn(right_vector, up_vector, forward_vector, Vector(0, 0, 0));
-
-			Color sum = Color(0, 0, 0);
-			for (unsigned int i = 0; i < samples; i++)
+			float theta = M_PI - y * theta_step;
+			//for (int x = irradiance_map.width() / 2; x < irradiance_map.width(); x++)
+			for (int x = 0; x < irradiance_map.width(); x++)
 			{
-				Vector random_direction_rotated;
+				float phi = x * phi_step;
 
-				do
+				//The main direction we're going to randomly sample the skysphere around
+				/*Vector normal = normalize(Vector(std::cos(phi) * std::sin(theta),
+										  std::cos(theta),
+										  -std::sin(phi) * std::sin(theta)));*/
+				Vector normal = normalize(Vector(std::cos(phi) * std::sin(theta),
+										  std::sin(phi) * std::sin(theta),
+										  std::cos(theta)));
+				//Spherical coordinates follow the convention that +Z is the up vector and +Y is the forward vector
+				//We want +Y as the up vector and -Z as the forward vector
+				normal = RotationX(-90)(normal);
+
+				Vector arbitrary_vector = Vector(1, 0, 0);
+				//To avoid issues when the main direction is colinear with the arbitrary vector
+				if (1 - std::abs(dot(normal, arbitrary_vector)) < 1e-6f)
+					arbitrary_vector = Vector(0, 1, 0);
+
+				//Calculating the vectors of the basis we're going to use to rotate the randomly generated vector
+				//around our main direction
+				Vector tangent = normalize(cross(normal, arbitrary_vector));
+				Vector bitangent = cross(tangent, normal);
+
+				//Transform obn(bitangent, normal, tangent, Vector(0, 0, 0));
+				Transform obn(tangent, bitangent, normal, Vector(0, 0, 0));
+
+				Color sum = Color(0, 0, 0);
+				for (unsigned int i = 0; i < samples; i++)
 				{
-					Vector random_direction = normalize(Vector(Utils::xorshift32(&state) / (float)std::numeric_limits<unsigned int>::max() * 2 - 1, 
-													 Utils::xorshift32(&state) / (float)std::numeric_limits<unsigned int>::max() * 2 - 1,
-													 Utils::xorshift32(&state) / (float)std::numeric_limits<unsigned int>::max() * 2 - 1));
+					float rand1 = Utils::xorshift32(&states.at(thread_id)) / (float)std::numeric_limits<unsigned int>::max();
+					float rand2 = Utils::xorshift32(&states.at(thread_id)) / (float)std::numeric_limits<unsigned int>::max();
 
-					random_direction_rotated = obn(random_direction);
+					float root = std::sqrt(1 - rand1 * rand1);
+					float angle = 2 * M_PI * rand2;
+					Vector random_direction_in_canonical_hemisphere(std::cos(angle) * root,
+																	std::sin(angle) * root,
+																	rand1);
+						
+					Vector random_direction_in_hemisphere_around_normal = obn(random_direction_in_canonical_hemisphere);
+					Vector random_direction_rotated = random_direction_in_hemisphere_around_normal;
 
+					//Vector random_direction_rotated;
+					//do
+					//{
+					//	Vector random_direction = normalize(Vector(Utils::xorshift32(&state) / (float)std::numeric_limits<unsigned int>::max() * 2 - 1, 
+					//									 Utils::xorshift32(&state) / (float)std::numeric_limits<unsigned int>::max() * 2 - 1,
+					//									 Utils::xorshift32(&state) / (float)std::numeric_limits<unsigned int>::max() * 2 - 1));
 
-					//We're checking that the generated direction is in the upper hemisphere (and not below)
-				} while (dot(random_direction_rotated, up_vector) < 0.0f);
+					//	random_direction_rotated = obn(random_direction);
 
-				vec2 uv = vec2(0.5 + std::atan2(random_direction_rotated.z, random_direction_rotated.x) / (2.0f * M_PI), 0.5 + std::asin(random_direction_rotated.y) / M_PI);
+					//	//We're checking that the generated direction is in the upper hemisphere (and not below)
+					//} while (dot(random_direction_rotated, normal) < 0.0f);
 
-				sum = sum + skysphere_image(uv.x * skysphere_image.width(), uv.y * skysphere_image.height());
+					vec2 uv = vec2(0.5 + std::atan2(random_direction_rotated.z, random_direction_rotated.x) / (2.0f * M_PI), 0.5 + std::asin(random_direction_rotated.y) / M_PI);
+
+					sum = sum + skysphere_image(uv.x * skysphere_image.width(), uv.y * skysphere_image.height());
+				}
+
+				irradiance_map(x, y) = sum / (float)samples;
 			}
 
-			irradiance_map(x, y) = sum / (float)samples;
-		}
+			completed_lines++;
 
-		completed_lines++;
-
-		if (omp_get_thread_num() == 0)
-		{
-			if (completed_lines % 40)
-				printf("[%d*%d, %dx] - %.3f%% completed\n", skysphere_image.width(), skysphere_image.height(), samples, completed_lines / (float)skysphere_image.height() * 100);
+			if (thread_id == 0)
+			{
+				if (completed_lines % 40)
+					printf("[%d*%d, %dx] - %.3f%% completed\n", skysphere_image.width(), skysphere_image.height(), samples, completed_lines / (float)skysphere_image.height() * 100);
+			}
 		}
 	}
 

@@ -20,43 +20,43 @@
 const vec3 LIGHT_POSITION(2, 0, 11);
 
 // utilitaire. creation d'une grille / repere.
-//Mesh make_grid(const int n = 10)
-//{
-//	Mesh grid = Mesh(GL_LINES);
-//
-//	// grille
-//	grid.color(White());
-//	for (int x = 0; x < n; x++)
-//	{
-//		float px = float(x) - float(n) / 2 + .5f;
-//		grid.vertex(Point(px, 0, -float(n) / 2 + .5f));
-//		grid.vertex(Point(px, 0, float(n) / 2 - .5f));
-//	}
-//
-//	for (int z = 0; z < n; z++)
-//	{
-//		float pz = float(z) - float(n) / 2 + .5f;
-//		grid.vertex(Point(-float(n) / 2 + .5f, 0, pz));
-//		grid.vertex(Point(float(n) / 2 - .5f, 0, pz));
-//	}
-//
-//	// axes XYZ
-//	grid.color(Red());
-//	grid.vertex(Point(0, .1, 0));
-//	grid.vertex(Point(1, .1, 0));
-//
-//	grid.color(Green());
-//	grid.vertex(Point(0, .1, 0));
-//	grid.vertex(Point(0, 1, 0));
-//
-//	grid.color(Blue());
-//	grid.vertex(Point(0, .1, 0));
-//	grid.vertex(Point(0, .1, 1));
-//
-//	glLineWidth(2);
-//
-//	return grid;
-//}
+Mesh make_grid(const int n = 10)
+{
+	Mesh grid = Mesh(GL_LINES);
+
+	// grille
+	grid.color(White());
+	for (int x = 0; x < n; x++)
+	{
+		float px = float(x) - float(n) / 2 + .5f;
+		grid.vertex(Point(px, 0, -float(n) / 2 + .5f));
+		grid.vertex(Point(px, 0, float(n) / 2 - .5f));
+	}
+
+	for (int z = 0; z < n; z++)
+	{
+		float pz = float(z) - float(n) / 2 + .5f;
+		grid.vertex(Point(-float(n) / 2 + .5f, 0, pz));
+		grid.vertex(Point(float(n) / 2 - .5f, 0, pz));
+	}
+
+	// axes XYZ
+	grid.color(Red());
+	grid.vertex(Point(0, .1, 0));
+	grid.vertex(Point(1, .1, 0));
+
+	grid.color(Green());
+	grid.vertex(Point(0, .1, 0));
+	grid.vertex(Point(0, 1, 0));
+
+	grid.color(Blue());
+	grid.vertex(Point(0, .1, 0));
+	grid.vertex(Point(0, .1, 1));
+
+	glLineWidth(2);
+
+	return grid;
+}
 
 // constructeur : donner les dimensions de l'image, et eventuellement la version d'openGL.
 TP::TP() : AppCamera(1280, 720, 3, 3, 16) 
@@ -186,7 +186,7 @@ int TP::init()
 	ImGui_ImplSdlGL3_Init(m_window);
 
 	//Positioning the camera to a default state
-	m_camera.read_orbiter("TPs/from_scratch/start_camera.txt");
+	m_camera.read_orbiter("TPs/from_scratch/start_camera_minus_z.txt");
 
 
 	//Creating a basic grid
@@ -281,6 +281,7 @@ int TP::init()
 	//On selectionne le normal buffer
 	glBindBuffer(GL_ARRAY_BUFFER, material_index_buffer_id);
 	//On remplit le buffer selectionne (le material index buffer). On divise par 3 parce qu'on a un material par TRIANGLE, pas par vertex
+	//TODO bug ici des fois le vertex_buffer _size() est enorme et donc ca overflow la lecture de .data()
 	glBufferData(GL_ARRAY_BUFFER, m_mesh.vertex_buffer_size(), material_index_buffer.data(), GL_STATIC_DRAW);
 
 	//On recupere l'id de l'attribut normal du vertex shader "in vec3 normal"
@@ -290,7 +291,7 @@ int TP::init()
 
 
 
-
+	//TODO HDR pipeline pour l'irradiance map
 
 	//Reading the faces of the skybox and creating the OpenGL Cubemap
 	std::vector<ImageData> cubemap_data;
@@ -298,8 +299,9 @@ int TP::init()
 
 	std::thread load_thread_cubemap = std::thread([&] {cubemap_data = Utils::read_cubemap_data("TPs/from_scratch/data/skybox", ".jpg"); });
 	std::thread load_thread_skypshere = std::thread([&] {skysphere_data = Utils::read_skysphere_data("TPs/from_scratch/data/AllSkyFree_Sky_EpicGloriousPink_Equirect.jpg"); });
-	std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_data = Utils::read_skysphere_data("TPs/from_scratch/data/irradiance_map_pink_384.png"); });
-	//std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_data = Utils::read_skysphere_data("irradiance_map.png"); });
+	//std::thread load_thread_skypshere = std::thread([&] {skysphere_data = Utils::read_skysphere_data("irradiance_map.png"); });
+	//std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_data = Utils::read_skysphere_data("TPs/from_scratch/data/irradiance_map_pink_384.png"); });
+	std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_data = Utils::read_skysphere_data("irradiance_map_pink_1024.png"); });
 	load_thread_cubemap.join();
 	load_thread_skypshere.join();
 	load_thread_irradiance_map.join();
@@ -460,6 +462,8 @@ int TP::render()
 	glBindVertexArray(m_robot_vao);
 	//On draw le robot
 	glDrawArrays(GL_TRIANGLES, 0, m_mesh.vertex_count());
+
+	//TODO la skysphere/skybox s'affiche seulement quand on click sur un radio button et avant on a rien
 
 	//Selecting the empty VAO for the cubemap shader
 	glUseProgram(m_cubemap_shader);
