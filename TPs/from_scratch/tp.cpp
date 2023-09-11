@@ -435,6 +435,9 @@ void TP::draw_imgui()
 // dessiner une nouvelle image
 int TP::render()
 {
+	//TODO demander au prof cette histoire de rotation quand on calcule l'irradiance map
+
+	//TODO ajouter une fonctionnalite qui compute automatiquement (compute shader?) l'irradiance map si une skysphere qui a pas encore d'irradiance map (regarder dans le dossier si on a un fichier <skysphere_name>_Irradiance qui exsite) a ete choisie
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	//draw(m_repere, /* model */ Identity(), camera());
