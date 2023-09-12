@@ -49,7 +49,7 @@ void main()
 		float u = 0.5 + atan(reflect_direction.z, reflect_direction.x) / (2.0f * M_PI);
 		float v = 0.5 + asin(reflect_direction.y) / M_PI;
 
-		gl_FragColor = u_diffuse_colors[vs_material_index] * texture(u_irradiance_map, vec2(u, v));
+		//gl_FragColor = u_diffuse_colors[vs_material_index] * texture(u_irradiance_map, vec2(u, v));
 		gl_FragColor.a = 1.0f;
 	}
 }

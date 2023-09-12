@@ -2,6 +2,7 @@
 #include "utils.h"
 #include "vec.h"
 
+#include <atomic>
 #include <chrono>
 #include <iostream>
 #include <string>
@@ -56,7 +57,7 @@ Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path
 	//Each thread is going to increment this variable after one line of the irradiance map has been computed
 	//Because all thread increment this variable, it is atomic
 	//This variable is then used to print a completion purcentage on stdout
-	std::atomic<int> completed_lines = 0;
+	std::atomic<int> completed_lines(0);
 
 #pragma omp parallel
 	{
@@ -80,7 +81,15 @@ Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path
 										  std::cos(theta)));
 				//Spherical coordinates follow the convention that +Z is the up vector and +Y is the forward vector
 				//We want +Y as the up vector and -Z as the forward vector
+				
+				
+				
+				
+				
 				normal = RotationX(-90)(normal);
+
+
+
 
 				Vector arbitrary_vector = Vector(1, 0, 0);
 				//To avoid issues when the main direction is colinear with the arbitrary vector
@@ -91,6 +100,22 @@ Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path
 				//around our main direction
 				Vector tangent = normalize(cross(normal, arbitrary_vector));
 				Vector bitangent = cross(tangent, normal);
+
+				/*
+				float tb = dot(tangent, bitangent)
+				float bn = dot(bitangent, normal);
+				float nt = dot(tangent, normal);
+				if (tb != 0 || bn != 0 || nt != 0)
+					std::cout << "Non orthongonaux" << std::endl;
+
+				Vector tXb = cross(tangnt, normal);
+				Vector bXn = cross(bitangent, normal);
+				Vector nXt = cross(normal, tangent);
+
+				if (tXb != normal)
+					std::cout << "tangent != normal" << std::endl;
+				*/
+
 
 				//Transform obn(bitangent, normal, tangent, Vector(0, 0, 0));
 				Transform obn(tangent, bitangent, normal, Vector(0, 0, 0));

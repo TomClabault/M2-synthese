@@ -10,6 +10,10 @@ int main(int argc, char** argv)
 															  //SAMPLES, 
 															  //"test.png"/*"TPs/from_scratch/data/AllSkyFree_Sky_EpicGloriousPink_EquirectIrradiance_testx.png"*/);
 
+	Utils::precompute_irradiance_map_from_skysphere_and_write("TPs/from_scratch/data/SkysphereDebug.jpg", 
+															  SAMPLES, 
+															  "test.png"/*"TPs/from_scratch/data/AllSkyFree_Sky_EpicGloriousPink_EquirectIrradiance_testx.png"*/);
+
 	//return 0;
 
 	TP tp;

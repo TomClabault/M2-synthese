@@ -36,6 +36,7 @@
     configuration { "linux", "debug" }
         buildoptions { "-g"}
         linkoptions { "-g"}
+	linkoptions {"-fopenmp"}
     
     configuration { "linux", "release" }
         buildoptions { "-fopenmp" }

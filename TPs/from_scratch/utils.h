@@ -10,11 +10,11 @@
 class Utils
 {
 public:
-	struct Utils::xorshift32_state {
+	struct xorshift32_state {
 		uint32_t a;
 	};
 
-	static uint32_t xorshift32(struct Utils::xorshift32_state* state);
+	static uint32_t xorshift32(struct xorshift32_state* state);
 
 	static void precompute_irradiance_map_from_skysphere_and_write(const char* skysphere_path, unsigned int samples, const char* output_irradiance_map_path);
 	static Image precompute_irradiance_map_from_skysphere(const char* skysphere_path, unsigned int samples);
