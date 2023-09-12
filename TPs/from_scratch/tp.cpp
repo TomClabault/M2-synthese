@@ -193,7 +193,7 @@ int TP::init()
 	//m_repere = make_grid(10);
 
 	//Reading the mesh displayed
-	m_mesh = read_mesh("data/robot.obj");
+	m_mesh = read_mesh("data/stanford_bunny.obj");
 
 	// etat openGL par defaut
 	glClearColor(0.2f, 0.2f, 0.2f, 1.f);        // couleur par defaut de la fenetre
@@ -207,6 +207,12 @@ int TP::init()
 	program_print_errors(m_custom_shader);
 	m_cubemap_shader = read_program("TPs/from_scratch/shaders/shader_cubemap.glsl");
 	program_print_errors(m_cubemap_shader);
+
+	GLint skysphere_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_skysphere");
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, m_skysphere);
+	//The skysphere is on texture unit 1 so we're using 1 for the value of the uniform
+	glUniform1i(skysphere_uniform_location, 1);
 		
 	setup_light_position_uniform(vec3(2, 0, 10));
 	setup_diffuse_color_uniform();
@@ -301,7 +307,7 @@ int TP::init()
 	std::thread load_thread_skypshere = std::thread([&] {skysphere_data = Utils::read_skysphere_data("TPs/from_scratch/data/AllSkyFree_Sky_EpicGloriousPink_Equirect.jpg"); });
 	//std::thread load_thread_skypshere = std::thread([&] {skysphere_data = Utils::read_skysphere_data("irradiance_map.png"); });
 	//std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_data = Utils::read_skysphere_data("TPs/from_scratch/data/irradiance_map_pink_384.png"); });
-	std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_data = Utils::read_skysphere_data("irradiance_map_pink_1024.png"); });
+	std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_data = Utils::precompute_and_load_associated_irradiance("TPs/from_scratch/data/AllSkyFree_Sky_EpicGloriousPink_Equirect.jpg"); });
 	load_thread_cubemap.join();
 	load_thread_skypshere.join();
 	load_thread_irradiance_map.join();
@@ -469,6 +475,7 @@ int TP::render()
 	//TODO la skysphere/skybox s'affiche seulement quand on click sur un radio button et avant on a rien
 
 	//Selecting the empty VAO for the cubemap shader
+	glBindVertexArray(m_cubemap_vao);
 	glUseProgram(m_cubemap_shader);
 	GLint camera_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_camera_position");
 	GLint use_cubemap_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_use_cubemap");
@@ -483,7 +490,7 @@ int TP::render()
 		//Cubemap
 
 		GLint cubemap_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_cubemap");
-
+		
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_CUBE_MAP, m_cubemap);
 
@@ -503,7 +510,6 @@ int TP::render()
 		glUniform1i(skysphere_uniform_location, 1);
 	}
 
-	glBindVertexArray(m_cubemap_vao);
 	glDrawArrays(GL_TRIANGLES, 0, 3);
 
 	////////// ImGUI //////////

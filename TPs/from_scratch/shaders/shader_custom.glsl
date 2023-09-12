@@ -40,7 +40,7 @@ flat in uint vs_material_index;
 
 void main()
 {
-	gl_FragColor = max(0.0f, dot(vs_normal, normalize(u_light_position - vs_position))) * u_diffuse_colors[vs_material_index];
+	//gl_FragColor = max(0.0f, dot(vs_normal, normalize(u_light_position - vs_position))) * u_diffuse_colors[vs_material_index];
 
 	if (u_use_ambient)
 	{
