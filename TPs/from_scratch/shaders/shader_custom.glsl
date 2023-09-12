@@ -40,7 +40,7 @@ flat in uint vs_material_index;
 
 void main()
 {
-	gl_FragColor = max(0.0f, dot(vs_normal, normalize(u_light_position - vs_position))) * u_diffuse_colors[vs_material_index];
+	//gl_FragColor = max(0.0f, dot(vs_normal, normalize(u_light_position - vs_position))) * u_diffuse_colors[vs_material_index];
 
 	if (u_use_ambient)
 	{
@@ -49,7 +49,7 @@ void main()
 		float u = 0.5 + atan(reflect_direction.z, reflect_direction.x) / (2.0f * M_PI);
 		float v = 0.5 + asin(reflect_direction.y) / M_PI;
 
-		//gl_FragColor = u_diffuse_colors[vs_material_index] * texture(u_irradiance_map, vec2(u, v));
+		gl_FragColor = u_diffuse_colors[vs_material_index] * texture(u_irradiance_map, vec2(u, v));
 		gl_FragColor.a = 1.0f;
 	}
 }

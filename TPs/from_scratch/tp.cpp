@@ -193,7 +193,7 @@ int TP::init()
 	//m_repere = make_grid(10);
 
 	//Reading the mesh displayed
-	m_mesh = read_mesh("data/robot.obj");
+	m_mesh = read_mesh("data/stanford_bunny.obj");
 
 	// etat openGL par defaut
 	glClearColor(0.2f, 0.2f, 0.2f, 1.f);        // couleur par defaut de la fenetre
@@ -307,7 +307,7 @@ int TP::init()
 	std::thread load_thread_skypshere = std::thread([&] {skysphere_data = Utils::read_skysphere_data("TPs/from_scratch/data/AllSkyFree_Sky_EpicGloriousPink_Equirect.jpg"); });
 	//std::thread load_thread_skypshere = std::thread([&] {skysphere_data = Utils::read_skysphere_data("irradiance_map.png"); });
 	//std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_data = Utils::read_skysphere_data("TPs/from_scratch/data/irradiance_map_pink_384.png"); });
-	std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_data = Utils::read_skysphere_data("TPs/from_scratch/data/AllSkyFree_Sky_EpicGloriousPink_Equirect_Irradiance.jpg"); });
+	std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_data = Utils::precompute_and_load_associated_irradiance("TPs/from_scratch/data/AllSkyFree_Sky_EpicGloriousPink_Equirect.jpg"); });
 	load_thread_cubemap.join();
 	load_thread_skypshere.join();
 	load_thread_irradiance_map.join();

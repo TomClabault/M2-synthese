@@ -27,6 +27,7 @@ public:
 	 */
 	static GLuint create_cubemap_from_path(const char* folder_name, const char* face_extension);
 
+	static ImageData precompute_and_load_associated_irradiance(const char* skysphere_file_path, unsigned int samples = 20);
 	static ImageData read_skysphere_data(const char* filename);
 	static GLuint create_skysphere_from_data(ImageData& skysphere_image_data, int texture_unit);
 	static GLuint create_skysphere_from_path(const char* filename, int texture_unit);

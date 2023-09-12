@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <omp.h>
@@ -243,6 +244,29 @@ GLuint Utils::create_cubemap_from_path(const char* folder_name, const char* face
 	std::vector<ImageData> faces_data = read_cubemap_data(folder_name, face_extension);
 
 	return create_cubemap_from_data(faces_data);
+}
+
+ImageData Utils::precompute_and_load_associated_irradiance(const char* skysphere_file_path, unsigned int samples)
+{
+	std::string skysphere_file_string = std::string(skysphere_file_path);
+	//Creating the file name of the irradiance map
+	std::string irradiance_map_name = skysphere_file_string.substr(0, skysphere_file_string.rfind('.')) + ".png";
+	std::cout << "irradiance map name: " << irradiance_map_name << std::endl;
+
+	//Checking whether the irradiance map already exists or not
+	std::ifstream input_irradiance(irradiance_map_name);
+	if (input_irradiance.is_open())
+	{
+		std::cout << "An irradiance map has been found!" << std::endl;
+		//The irradiance map already exists
+		return read_skysphere_data(irradiance_map_name.c_str());
+	}
+	else
+	{
+		//No irradiance map was found, precomputing it
+
+		precompute_irradiance_map_from_skysphere_and_write(skysphere_file_path, samples, irradiance_map_name.c_str());
+	}
 }
 
 ImageData Utils::read_skysphere_data(const char* filename)
