@@ -166,6 +166,8 @@ int run( Window window, int (*draw)() )
 static int event_count= 0;
 int last_event_count( ) { return event_count; }
 
+#include "imgui.h"
+#include "imgui_impl_sdl_gl3.h"
 
 int events( Window window )
 {
@@ -175,6 +177,8 @@ int events( Window window )
     SDL_Event event;
     while(SDL_PollEvent(&event))
     {
+        ImGui_ImplSdlGL3_ProcessEvent(&event);
+
         switch(event.type)
         {
             case SDL_WINDOWEVENT:

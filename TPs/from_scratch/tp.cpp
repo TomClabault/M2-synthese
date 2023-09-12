@@ -98,7 +98,6 @@ int TP::prerender()
 			clear_wheel_event();
 			m_camera.move(8.f * wheel.y);  // approche / eloigne l'objet
 		}
-
 	}
 
 	const char* orbiter_filename = "app_orbiter.txt";
