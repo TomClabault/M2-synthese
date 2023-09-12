@@ -1,9 +1,11 @@
 #include "mat.h"
+#include "tp.h"
 #include "utils.h"
 #include "vec.h"
 
 #include <atomic>
 #include <chrono>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -26,6 +28,7 @@ void Utils::precompute_irradiance_map_from_skysphere_and_write(const char* skysp
 	Image irradiance_map = Utils::precompute_irradiance_map_from_skysphere(skysphere_path, samples);
 	auto stop = std::chrono::high_resolution_clock::now();
 
+	std::cout << "Writing the precomputed irradiance map to disk..." << std::endl;
 	write_image(irradiance_map, output_irradiance_map_path);
 
 	std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << "ms --- " << (irradiance_map.width() * irradiance_map.height() * samples) / (float)(std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count()) * 1000 << "samples/s" << std::endl;
@@ -182,7 +185,7 @@ std::vector<ImageData> Utils::read_cubemap_data(const char* folder_name, const c
 	return faces_data;
 }
 
-GLuint Utils::create_cubemap_from_data(std::vector<ImageData>& faces_data)
+GLuint Utils::create_cubemap_texture_from_data(std::vector<ImageData>& faces_data)
 {
 	//Creating the cubemap
 	GLuint cubemap = 0;
@@ -239,19 +242,22 @@ GLuint Utils::create_cubemap_from_data(std::vector<ImageData>& faces_data)
  * @param face_extension ".jpg", ".png", ....
  * The faces of the cubemap should be named "right", "left", "top", "bottom", "front" and "back"
  */
-GLuint Utils::create_cubemap_from_path(const char* folder_name, const char* face_extension)
+GLuint Utils::create_cubemap_texture_from_path(const char* folder_name, const char* face_extension)
 {
 	std::vector<ImageData> faces_data = read_cubemap_data(folder_name, face_extension);
 
-	return create_cubemap_from_data(faces_data);
+	return create_cubemap_texture_from_data(faces_data);
 }
 
 ImageData Utils::precompute_and_load_associated_irradiance(const char* skysphere_file_path, unsigned int samples)
 {
 	std::string skysphere_file_string = std::string(skysphere_file_path);
-	//Creating the file name of the irradiance map
-	std::string irradiance_map_name = skysphere_file_string.substr(0, skysphere_file_string.rfind('.')) + ".png";
-	std::cout << "irradiance map name: " << irradiance_map_name << std::endl;
+	//Only the name of the jpg (or png, bmp, ...) file without the path in front of it
+	std::string skysphere_image_file_name = skysphere_file_string.substr(skysphere_file_string.rfind('/') + 1);
+
+	//Creating the complete (path + image file name) file name of the irradiance map
+	std::filesystem::create_directory(TP::IRRADIANCE_MAPS_CACHE_FOLDER);
+	std::string irradiance_map_name = skysphere_file_string.substr(0, skysphere_file_string.rfind('/')) + "/irradiance_maps_cache/" + skysphere_image_file_name + "_Irradiance_" + std::to_string(samples) + "x.png";
 
 	//Checking whether the irradiance map already exists or not
 	std::ifstream input_irradiance(irradiance_map_name);
@@ -266,6 +272,7 @@ ImageData Utils::precompute_and_load_associated_irradiance(const char* skysphere
 		//No irradiance map was found, precomputing it
 
 		precompute_irradiance_map_from_skysphere_and_write(skysphere_file_path, samples, irradiance_map_name.c_str());
+		return read_skysphere_data(irradiance_map_name.c_str());
 	}
 }
 
@@ -274,7 +281,7 @@ ImageData Utils::read_skysphere_data(const char* filename)
 	return read_image_data(filename);
 }
 
-GLuint Utils::create_skysphere_from_data(ImageData& skysphere_image_data, int texture_unit)
+GLuint Utils::create_skysphere_texture_from_data(ImageData& skysphere_image_data, int texture_unit)
 {
 	GLuint skysphere;
 	glGenTextures(1, &skysphere);
@@ -295,15 +302,15 @@ GLuint Utils::create_skysphere_from_data(ImageData& skysphere_image_data, int te
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-	// Generating the MIPMAP levels for the cubemap
+	// Generating the MIPMAP levels for the skysphere
 	//glGenerateMipmap(GL_TEXTURE_2D);
 
 	return skysphere;
 }
 
-GLuint Utils::create_skysphere_from_path(const char* filename, int texture_unit)
+GLuint Utils::create_skysphere_texture_from_path(const char* filename, int texture_unit)
 {
 	ImageData skysphere_image = read_skysphere_data(filename);
 
-	return create_skysphere_from_data(skysphere_image, texture_unit);
+	return create_skysphere_texture_from_data(skysphere_image, texture_unit);
 }

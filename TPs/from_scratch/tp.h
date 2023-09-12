@@ -1,9 +1,13 @@
 #include "app_camera.h"
 #include "application_settings.h"
+#include "application_state.h"
 #include "application_timer.h"
+#include "image_io.h"
 #include "imgui.h"
 #include "imgui_impl_sdl_gl3.h"
 #include "mesh.h"
+
+#include <string>
 
 class TP : public AppCamera
 {
@@ -27,6 +31,8 @@ public:
 	// destruction des objets de l'application
 	int quit();
 
+	void update_recomputed_irradiance_map();
+
 	void draw_general_settings();
 	void draw_lighting_window();
 	void draw_materials_window();
@@ -34,6 +40,9 @@ public:
 
 	// dessiner une nouvelle image
 	int render();
+
+	inline static const Vector LIGHT_POSITION = Vector(2, 0, 11);
+	inline static const std::string IRRADIANCE_MAPS_CACHE_FOLDER = "TPs/from_scratch/data/irradiance_maps_cache";
 
 protected:
 	ApplicationTimer m_app_timer;
@@ -57,7 +66,17 @@ protected:
 	GLuint m_skysphere;
 	GLuint m_irradiance_map;
 
+	//This contains the data of an irradiance map that has just been recomputed
+	//We need to use this data to update the OpenGl texture used by the shader
+	ImageData m_recomputed_irradiance_map_data;
+
 	ImGuiIO m_imgui_io;
 
+	//The settings of the application. Those are parameters that can be modified using the
+	//ImGui UI
 	ApplicationSettings m_application_settings;
+
+	//This structure contains variables relative to the current state of the application
+	//such as whether or not we're currently recomputing an irradiance map
+	ApplicationState m_application_state;
 };

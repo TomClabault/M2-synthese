@@ -15,9 +15,8 @@
 #include "tp.h"
 #include "utils.h"
 
+#include <filesystem>
 #include <thread>
-
-const vec3 LIGHT_POSITION(2, 0, 11);
 
 // utilitaire. creation d'une grille / repere.
 Mesh make_grid(const int n = 10)
@@ -149,9 +148,10 @@ void TP::update_ambient_uniforms()
 {
 	glUseProgram(m_custom_shader);
 
-	GLuint use_ambient_location = glGetUniformLocation(m_custom_shader, "u_use_ambient");
-	glUniform1i(use_ambient_location, m_application_settings.use_ambient);
+	GLuint use_irradiance_map_location = glGetUniformLocation(m_custom_shader, "u_use_irradiance_map");
+	glUniform1i(use_irradiance_map_location, m_application_settings.use_ambient);
 
+	//TODO supprimer ambient color parce qu'on utilise que l'irradiance map, pas de ambient color a deux balles
 	GLuint ambient_color_location = glGetUniformLocation(m_custom_shader, "u_ambient_color");
 	glUniform4f(ambient_color_location, m_application_settings.ambient_color.r, m_application_settings.ambient_color.g, m_application_settings.ambient_color.b, m_application_settings.ambient_color.a);
 }
@@ -193,7 +193,13 @@ int TP::init()
 	//m_repere = make_grid(10);
 
 	//Reading the mesh displayed
-	m_mesh = read_mesh("data/stanford_bunny.obj");
+	m_mesh = read_mesh("data/robot.obj");
+	if (m_mesh.positions().size() == 0)
+	{
+		std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
+
+		exit(-1);
+	}
 
 	// etat openGL par defaut
 	glClearColor(0.2f, 0.2f, 0.2f, 1.f);        // couleur par defaut de la fenetre
@@ -217,8 +223,8 @@ int TP::init()
 	setup_light_position_uniform(vec3(2, 0, 10));
 	setup_diffuse_color_uniform();
 
-	GLint use_ambient_location = glGetUniformLocation(m_custom_shader, "u_use_ambient");
-	glUniform1i(use_ambient_location, m_application_settings.use_ambient);
+	GLint use_irradiance_map_location = glGetUniformLocation(m_custom_shader, "u_use_irradiance_map");
+	glUniform1i(use_irradiance_map_location, m_application_settings.use_ambient);
 
 	GLint ambient_color_location = glGetUniformLocation(m_custom_shader, "u_ambient_color");
 	glUniform4f(ambient_color_location, m_application_settings.ambient_color.r, m_application_settings.ambient_color.g, m_application_settings.ambient_color.b, m_application_settings.ambient_color.a);
@@ -304,23 +310,21 @@ int TP::init()
 	ImageData skysphere_data, irradiance_map_data;
 
 	std::thread load_thread_cubemap = std::thread([&] {cubemap_data = Utils::read_cubemap_data("TPs/from_scratch/data/skybox", ".jpg"); });
-	std::thread load_thread_skypshere = std::thread([&] {skysphere_data = Utils::read_skysphere_data("TPs/from_scratch/data/AllSkyFree_Sky_EpicGloriousPink_Equirect.jpg"); });
-	//std::thread load_thread_skypshere = std::thread([&] {skysphere_data = Utils::read_skysphere_data("irradiance_map.png"); });
-	//std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_data = Utils::read_skysphere_data("TPs/from_scratch/data/irradiance_map_pink_384.png"); });
-	std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_data = Utils::precompute_and_load_associated_irradiance("TPs/from_scratch/data/AllSkyFree_Sky_EpicGloriousPink_Equirect.jpg"); });
+	std::thread load_thread_skypshere = std::thread([&] {skysphere_data = Utils::read_skysphere_data(m_application_settings.irradiance_map_file_path.c_str()); });
+	std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_data = Utils::precompute_and_load_associated_irradiance(m_application_settings.irradiance_map_file_path.c_str(), m_application_settings.irradiance_map_precomputation_samples); });
 	load_thread_cubemap.join();
 	load_thread_skypshere.join();
 	load_thread_irradiance_map.join();
 
 
-	m_cubemap = Utils::create_cubemap_from_data(cubemap_data);
-	m_skysphere = Utils::create_skysphere_from_data(skysphere_data, 1);
-	m_irradiance_map = Utils::create_skysphere_from_data(irradiance_map_data, 2);
+	m_cubemap = Utils::create_cubemap_texture_from_data(cubemap_data);
+	m_skysphere = Utils::create_skysphere_texture_from_data(skysphere_data, 1);
+	m_irradiance_map = Utils::create_skysphere_texture_from_data(irradiance_map_data, 2);
 
 
 
 
-	//Cleaning (repositionning the buffers that have been selected to their defaul value)
+	//Cleaning (repositionning the buffers that have been selected to their default value)
 	glBindVertexArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
@@ -343,18 +347,65 @@ void TP::draw_general_settings()
 	}
 }
 
+void TP::update_recomputed_irradiance_map()
+{
+	if (m_application_state.irradiance_map_freshly_recomputed)
+	{
+		//An irradiance has just been recomputed, we're going to update the texture used by the shader
+		GLuint new_irradiance_map_texture = Utils::create_skysphere_texture_from_data(m_recomputed_irradiance_map_data, 2);
+
+		//Deleting the old texture
+		glDeleteTextures(1, &m_irradiance_map);
+		m_irradiance_map = new_irradiance_map_texture;
+
+		m_application_state.irradiance_map_freshly_recomputed = false;
+	}
+}
+
 void TP::draw_lighting_window()
 {
-	if(ImGui::Checkbox("Use ambient", &m_application_settings.use_ambient))
+	/*if(ImGui::Checkbox("Use ambient", &m_application_settings.use_ambient))
 		update_ambient_uniforms();
 
 	if (m_application_settings.use_ambient)
 		if(ImGui::ColorPicker4("Ambient color", (float*)(&m_application_settings.ambient_color)))
-			update_ambient_uniforms();
+			update_ambient_uniforms();*/
 
 	ImGui::Separator();
+	ImGui::Text("Sky & Irradiance");
+	if(ImGui::Checkbox("Use Irradiance Map", &m_application_settings.use_ambient))
+		update_ambient_uniforms();
 	ImGui::RadioButton("Use Skybox", &m_application_settings.cubemap_or_skysphere, 1); ImGui::SameLine();
 	ImGui::RadioButton("Use Skysphere", &m_application_settings.cubemap_or_skysphere, 0);
+	ImGui::Separator();
+	ImGui::Text("Irradiance map");
+	ImGui::DragInt("Irradiance Map Precomputation Samples", &m_application_settings.irradiance_map_precomputation_samples, 1.0f, 1, 2048);
+	if (ImGui::Button("Recompute"))
+	{
+		//If we are not already recomputing an irradiance map
+		if (!m_application_state.currently_recomputing_irradiance)
+		{
+			m_application_state.currently_recomputing_irradiance = true;
+
+			//Recomputing the irradiance map in a thread to avoid freezing the application
+			std::thread recompute_thread([&] {
+				m_recomputed_irradiance_map_data = Utils::precompute_and_load_associated_irradiance(m_application_settings.irradiance_map_file_path.c_str(), m_application_settings.irradiance_map_precomputation_samples);
+
+				m_application_state.currently_recomputing_irradiance = false;
+				m_application_state.irradiance_map_freshly_recomputed = true;
+			});
+
+			recompute_thread.detach();
+		}
+	}
+	update_recomputed_irradiance_map();
+
+	if (ImGui::Button("Clear Irradiance Maps Cache"))
+	{
+		//Removing all the files from the 
+		for (const auto& entry : std::filesystem::directory_iterator(TP::IRRADIANCE_MAPS_CACHE_FOLDER))
+			std::filesystem::remove_all(entry.path());
+	}
 }
 
 void TP::draw_materials_window()

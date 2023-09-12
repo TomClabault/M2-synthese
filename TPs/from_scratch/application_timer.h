@@ -9,6 +9,7 @@
 
 #include "glcore.h"
 
+//TODO remove ?
 class TP;
 
 class ApplicationTimer

@@ -12,6 +12,10 @@ struct ApplicationSettings
 	//1 for cubemap, 0 for skysphere
 	int cubemap_or_skysphere = 0;
 
+	bool currently_recomputing_irradiance = false;
+	int irradiance_map_precomputation_samples = 20;
+	std::string irradiance_map_file_path = "TPs/from_scratch/data/AllSkyFree_Sky_EpicGloriousPink_Equirect.jpg";
+
 	Color ambient_color = Color(0.1, 0.1, 0.1, 0);
 };
 

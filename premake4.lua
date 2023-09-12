@@ -10,9 +10,9 @@
         defines { "DEBUG" }
         if _PREMAKE_VERSION >="5.0" then
             symbols "on"
-            cppdialect "c++11"
+            cppdialect "c++17"
         else
-            buildoptions { "-std=c++11" }
+            buildoptions { "-std=c++17" }
             flags { "Symbols" }
         end
     
@@ -22,9 +22,9 @@
 --~ 		defines { "GK_RELEASE" }
         if _PREMAKE_VERSION >="5.0" then
             optimize "full"
-            cppdialect "c++11"
+            cppdialect "c++17"
         else
-            buildoptions { "-std=c++11" }
+            buildoptions { "-std=c++17" }
             flags { "OptimizeSpeed" }
         end
         
