@@ -390,6 +390,7 @@ void TP::draw_lighting_window()
 	ImGui::Separator();
 	ImGui::Text("Irradiance map");
 	ImGui::DragInt("Irradiance Map Precomputation Samples", &m_application_settings.irradiance_map_precomputation_samples, 1.0f, 1, 2048);
+	ImGui::DragInt("Irradiance Map Downscale Factor", &m_application_settings.irradiance_map_precomputation_downscale_factor, 1.0f, 1, 8);
 	if (ImGui::Button("Recompute"))
 	{
 		//If we are not already recomputing an irradiance map
@@ -399,7 +400,9 @@ void TP::draw_lighting_window()
 
 			//Recomputing the irradiance map in a thread to avoid freezing the application
 			std::thread recompute_thread([&] {
-				m_recomputed_irradiance_map_data = Utils::precompute_and_load_associated_irradiance(m_application_settings.irradiance_map_file_path.c_str(), m_application_settings.irradiance_map_precomputation_samples);
+				m_recomputed_irradiance_map_data = Utils::precompute_and_load_associated_irradiance(m_application_settings.irradiance_map_file_path.c_str(), 
+																									m_application_settings.irradiance_map_precomputation_samples, 
+																									m_application_settings.irradiance_map_precomputation_downscale_factor);
 
 				m_application_state.currently_recomputing_irradiance = false;
 				m_application_state.irradiance_map_freshly_recomputed = true;

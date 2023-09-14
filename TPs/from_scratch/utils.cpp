@@ -22,10 +22,10 @@ uint32_t Utils::xorshift32(struct Utils::xorshift32_state* state)
 	return state->a = x;
 }
 
-void Utils::precompute_irradiance_map_from_skysphere_and_write(const char* skysphere_path, unsigned int samples, const char* output_irradiance_map_path)
+void Utils::precompute_irradiance_map_from_skysphere_and_write(const char* skysphere_path, unsigned int samples, unsigned int downscale_factor, const char* output_irradiance_map_path)
 {
 	auto start = std::chrono::high_resolution_clock::now();
-	Image irradiance_map = Utils::precompute_irradiance_map_from_skysphere(skysphere_path, samples);
+	Image irradiance_map = Utils::precompute_irradiance_map_from_skysphere(skysphere_path, samples, downscale_factor);
 	auto stop = std::chrono::high_resolution_clock::now();
 
 	std::cout << "Writing the precomputed irradiance map to disk..." << std::endl;
@@ -34,9 +34,55 @@ void Utils::precompute_irradiance_map_from_skysphere_and_write(const char* skysp
 	std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << "ms --- " << (irradiance_map.width() * irradiance_map.height() * samples) / (float)(std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count()) * 1000 << "samples/s" << std::endl;
 }
 
-Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path, unsigned int samples)
+void Utils::downscale_image(const Image& input_image, Image& downscaled_output, const int factor)
+{
+	if (input_image.width() % factor != 0)
+	{
+		std::cerr << "Image width isn't divisible by the factor";
+
+		return;
+	}
+
+	if (input_image.height() % factor != 0)
+	{
+		std::cerr << "Image height isn't divisible by the factor";
+
+		return;
+	}
+
+
+	int downscaled_width = input_image.width() / factor;
+	int downscaled_height = input_image.height() / factor;
+	downscaled_output = Image(downscaled_width, downscaled_height);
+
+#pragma omp parallel for
+	for (int y = 0; y < downscaled_height; y++)
+	{
+		for (int x = 0; x < downscaled_width; x++)
+		{
+			Color average;
+
+			for (int i = 0; i < factor; i++)
+				for (int j = 0; j < factor; j++)
+					average = average + input_image(x * factor + j, y * factor + i);
+
+			average = average / (factor * factor);
+
+			downscaled_output(x, y) = average;
+		}
+	}
+}
+
+Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path, unsigned int samples, unsigned int downscale_factor)
 {
 	Image skysphere_image = read_image(skysphere_path);
+	if (downscale_factor > 1)
+	{
+		Image skysphere_image_downscaled;
+
+		downscale_image(skysphere_image, skysphere_image_downscaled, downscale_factor);
+		skysphere_image = skysphere_image_downscaled;
+	}
 	std::cout << "Skysphere loaded" << std::endl;
 
 	Image irradiance_map(skysphere_image.width(), skysphere_image.height());
@@ -249,7 +295,7 @@ GLuint Utils::create_cubemap_texture_from_path(const char* folder_name, const ch
 	return create_cubemap_texture_from_data(faces_data);
 }
 
-ImageData Utils::precompute_and_load_associated_irradiance(const char* skysphere_file_path, unsigned int samples)
+ImageData Utils::precompute_and_load_associated_irradiance(const char* skysphere_file_path, unsigned int samples, unsigned int downscale_factor)
 {
 	std::string skysphere_file_string = std::string(skysphere_file_path);
 	//Only the name of the jpg (or png, bmp, ...) file without the path in front of it
@@ -271,7 +317,7 @@ ImageData Utils::precompute_and_load_associated_irradiance(const char* skysphere
 	{
 		//No irradiance map was found, precomputing it
 
-		precompute_irradiance_map_from_skysphere_and_write(skysphere_file_path, samples, irradiance_map_name.c_str());
+		precompute_irradiance_map_from_skysphere_and_write(skysphere_file_path, samples, downscale_factor, irradiance_map_name.c_str());
 		return read_skysphere_data(irradiance_map_name.c_str());
 	}
 }
