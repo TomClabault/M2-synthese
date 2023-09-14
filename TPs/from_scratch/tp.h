@@ -24,6 +24,7 @@ public:
 	void update_ambient_uniforms();
 	void setup_light_position_uniform(const vec3& light_position);
 	void setup_diffuse_color_uniform();
+	void setup_roughness_uniform(const float roughness);
 
 	// creation des objets de l'application
 	int init();
@@ -41,7 +42,7 @@ public:
 	// dessiner une nouvelle image
 	int render();
 
-	inline static const Vector LIGHT_POSITION = Vector(2, 0, 11);
+	inline static const Vector LIGHT_POSITION = Vector(2, 0, -10);
 	inline static const std::string IRRADIANCE_MAPS_CACHE_FOLDER = "TPs/from_scratch/data/irradiance_maps_cache";
 
 protected:

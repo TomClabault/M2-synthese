@@ -28,6 +28,8 @@ void main()
 
 uniform vec3 u_camera_position;
 uniform vec3 u_light_position;
+
+uniform float u_roughness;
 uniform vec4 u_diffuse_colors[16];
 uniform bool u_use_irradiance_map;
 uniform vec4 u_ambient_color;
@@ -54,7 +56,34 @@ void main()
 	{
 		//The diffuse part if not using the irradiance map is the Lambertian approximation:
 		//dot(normal, light_position)
-		gl_FragColor = max(0.0f, dot(vs_normal, normalize(u_light_position - vs_position))) * u_diffuse_colors[vs_material_index];
+		//gl_FragColor = max(0.0f, dot(vs_normal, normalize(u_light_position - vs_position))) * u_diffuse_colors[vs_material_index];
+
+
+		////////// Cook Torrance BRDF //////////
+		float kD = 1.0f;//TODO depend de la metalness
+		vec3 diffuse_part = kD * u_diffuse_colors[vs_material_index].rgb / M_PI;
+
+		vec3 view_direction = normalize(u_camera_position - vs_position);
+		vec3 light_direction = normalize(u_light_position - vs_position);
+		vec3 halfway_vector = normalize(view_direction + light_direction);
+		float NoV = max(0.0f, dot(vs_normal, view_direction));
+		float NoL = max(0.0f, dot(vs_normal, light_direction));
+		float NoH = max(0.0f, dot(vs_normal, halfway_vector));
+
+		float F = 1, D = 1, G = 1;
+
+		//Fresnel
+		float F0 = 0.16f;//TODO ajuster en fonction de la metalness
+		F = F0 + (1 - F0) * pow((1 - NoV), 5);
+
+		//GGX Distribution function
+		D = u_roughness / (1 + NoH * NoH * (u_roughness * u_roughness - 1));
+		D = D * D / M_PI;
+
+		float specular_part = (F * D * G) / (4 * NoV * NoL);
+
+		//gl_FragColor = vec4(diffuse_part + specular_part, 1)
+		gl_FragColor = vec4(D, D, D, 1);
 	}
 }
 #endif

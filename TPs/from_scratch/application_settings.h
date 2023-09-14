@@ -16,6 +16,7 @@ struct ApplicationSettings
 	int irradiance_map_precomputation_samples = 20;
 	std::string irradiance_map_file_path = "TPs/from_scratch/data/AllSkyFree_Sky_EpicGloriousPink_Equirect.jpg";
 
+	float mesh_roughness = 0.5f;
 	Color ambient_color = Color(0.1, 0.1, 0.1, 0);
 };
 

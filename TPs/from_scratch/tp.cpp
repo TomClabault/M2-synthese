@@ -124,7 +124,7 @@ int TP::prerender()
 		}
 
 		// screenshot
-		if (key_state('f12'))
+		if (key_state('s'))
 		{
 			static int calls = 1;
 			clear_key_state('s');
@@ -172,7 +172,14 @@ void TP::setup_diffuse_color_uniform()
 	for (const Material& mat : m_mesh.materials().materials)
 		diffuse_colors_buffer.push_back(mat.diffuse);
 	glUniform4fv(diffuse_colors_location, m_mesh.materials().materials.size(), (GLfloat*)diffuse_colors_buffer.data());
+}
 
+void TP::setup_roughness_uniform(const float roughness)
+{
+	glUseProgram(m_custom_shader);
+
+	GLint roughness_uniform_location = glGetUniformLocation(m_custom_shader, "u_roughness");
+	glUniform1f(roughness_uniform_location, roughness);
 }
 
 // creation des objets de l'application
@@ -192,7 +199,7 @@ int TP::init()
 	//m_repere = make_grid(10);
 
 	//Reading the mesh displayed
-	m_mesh = read_mesh("data/robot.obj");
+	m_mesh = read_mesh("data/sphere_high.obj");
 	if (m_mesh.positions().size() == 0)
 	{
 		std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -219,8 +226,9 @@ int TP::init()
 	//The skysphere is on texture unit 1 so we're using 1 for the value of the uniform
 	glUniform1i(skysphere_uniform_location, 1);
 		
-	setup_light_position_uniform(vec3(2, 0, 10));
+	setup_light_position_uniform(TP::LIGHT_POSITION);
 	setup_diffuse_color_uniform();
+	setup_roughness_uniform(m_application_settings.mesh_roughness);
 
 	GLint use_irradiance_map_location = glGetUniformLocation(m_custom_shader, "u_use_irradiance_map");
 	glUniform1i(use_irradiance_map_location, m_application_settings.use_ambient);
@@ -376,6 +384,9 @@ void TP::draw_lighting_window()
 		update_ambient_uniforms();
 	ImGui::RadioButton("Use Skybox", &m_application_settings.cubemap_or_skysphere, 1); ImGui::SameLine();
 	ImGui::RadioButton("Use Skysphere", &m_application_settings.cubemap_or_skysphere, 0);
+	ImGui::Separator();
+	if(ImGui::SliderFloat("Roughness", &m_application_settings.mesh_roughness, 0.0f, 1.0f))
+		setup_roughness_uniform(m_application_settings.mesh_roughness);
 	ImGui::Separator();
 	ImGui::Text("Irradiance map");
 	ImGui::DragInt("Irradiance Map Precomputation Samples", &m_application_settings.irradiance_map_precomputation_samples, 1.0f, 1, 2048);
