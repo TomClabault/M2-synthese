@@ -10,6 +10,9 @@
 // If you are new to ImGui, see examples/README.txt and documentation at the top of imgui.cpp.
 // https://github.com/ocornut/imgui
 
+#ifndef IMGUI_IMPL_SDL_GL3_H
+#define IMGUI_IMPL_SDL_GL3_H
+
 struct SDL_Window;
 typedef union SDL_Event SDL_Event;
 
@@ -22,3 +25,5 @@ IMGUI_API bool        ImGui_ImplSdlGL3_ProcessEvent(SDL_Event* event);
 // Use if you want to reset your rendering device without losing ImGui state.
 IMGUI_API void        ImGui_ImplSdlGL3_InvalidateDeviceObjects();
 IMGUI_API bool        ImGui_ImplSdlGL3_CreateDeviceObjects();
+
+#endif

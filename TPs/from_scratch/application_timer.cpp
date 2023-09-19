@@ -1,21 +1,41 @@
 #include "application_timer.h"
 
 #include "tp.h"
+#include "tp2.h"
 
-ApplicationTimer::ApplicationTimer(TP* main_app) : m_main_app(main_app)
+ApplicationTimer::ApplicationTimer(TP* main_app) : m_tp1(main_app)
 {
-	m_frame = 0;
-	glGenQueries(MAX_FRAMES, m_time_query);
+    m_frame = 0;
+    glGenQueries(MAX_FRAMES, m_time_query);
 
-	// initialise les queries, plus simple pour demarrer 
-	for (int i = 0; i < MAX_FRAMES; i++)
-	{
-		glBeginQuery(GL_TIME_ELAPSED, m_time_query[i]);
-		glEndQuery(GL_TIME_ELAPSED);
-	}
+    // initialise les queries, plus simple pour demarrer
+    for (int i = 0; i < MAX_FRAMES; i++)
+    {
+        glBeginQuery(GL_TIME_ELAPSED, m_time_query[i]);
+        glEndQuery(GL_TIME_ELAPSED);
+    }
 
-	// affichage du temps  dans la fenetre
-	m_console = create_text();
+    // affichage du temps  dans la fenetre
+    m_console = create_text();
+}
+
+ApplicationTimer::ApplicationTimer(TP2* main_app)
+{
+    m_tp1 = nullptr;
+    m_tp2 = main_app;
+
+    m_frame = 0;
+    glGenQueries(MAX_FRAMES, m_time_query);
+
+    // initialise les queries, plus simple pour demarrer
+    for (int i = 0; i < MAX_FRAMES; i++)
+    {
+        glBeginQuery(GL_TIME_ELAPSED, m_time_query[i]);
+        glEndQuery(GL_TIME_ELAPSED);
+    }
+
+    // affichage du temps  dans la fenetre
+    m_console = create_text();
 }
 
 void ApplicationTimer::prerender()
@@ -62,5 +82,8 @@ void ApplicationTimer::postrender()
 	//~ printf("cpu  %02dms %03dus    ", cpu_time / 1000, cpu_time % 1000);
 	//~ printf("gpu  %02dms %03dus\n", int(m_frame_time/ 1000000), int((m_frame_time / 1000) % 1000));
 
-	draw(m_console, m_main_app->get_window_width(), m_main_app->get_window_height());
+    if(m_tp1)
+        draw(m_console, m_tp1->get_window_width(), m_tp1->get_window_height());
+    else
+        draw(m_console, m_tp2->get_window_width(), m_tp2->get_window_height());
 }

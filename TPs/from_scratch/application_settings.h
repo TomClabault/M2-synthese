@@ -15,7 +15,7 @@ struct ApplicationSettings
 	bool currently_recomputing_irradiance = false;
 	int irradiance_map_precomputation_samples = 20;
 	int irradiance_map_precomputation_downscale_factor = 1;
-	std::string irradiance_map_file_path = "TPs/from_scratch/data/AllSkyFree_Sky_EpicGloriousPink_Equirect.jpg";
+    std::string irradiance_map_file_path = "data/TPs/AllSkyFree_Sky_EpicGloriousPink_Equirect.jpg";
 
 	float mesh_roughness = 0.5f;
 	Color ambient_color = Color(0.1, 0.1, 0.1, 0);
