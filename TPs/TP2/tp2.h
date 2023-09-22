@@ -12,7 +12,7 @@
 class TP2 : public AppCamera
 {
 public:
-    TP2();
+        TP2();
 
 	int get_window_width();
 	int get_window_height();
@@ -25,8 +25,6 @@ public:
 	void setup_diffuse_color_uniform();
 	void setup_roughness_uniform(const float roughness);
 
-    void load_mesh_textures_thread_function(const Materials& materials);
-
 	// creation des objets de l'application
 	int init();
 
@@ -36,14 +34,14 @@ public:
 	void update_recomputed_irradiance_map();
 
 	void draw_general_settings();
-    void draw_lighting_window();
+	void draw_lighting_window();
+	void draw_materials_window();
 	void draw_imgui();
 
 	// dessiner une nouvelle image
-    int render();
+        int render();
 
-    inline static const Vector LIGHT_POSITION = Vector(2, 0, -10);
-    inline static const std::string IRRADIANCE_MAPS_CACHE_FOLDER = "TPs/from_scratch/data/irradiance_maps_cache";
+        inline static const Vector LIGHT_POSITION = Vector(2, 0, -10);
 
 protected:
 	ApplicationTimer m_app_timer;
@@ -57,12 +55,10 @@ protected:
 
 	//Mesh m_repere;
 	Mesh m_mesh;
-    std::vector<TriangleGroup> m_mesh_triangles_group;
-    std::vector<GLuint> m_mesh_textures;
 
 	GLuint m_cubemap_vao;
-    GLuint m_mesh_vao;
-    GLuint m_diffuse_texture_shader;
+	GLuint m_robot_vao;
+	GLuint m_custom_shader;
 
 	GLuint m_cubemap_shader;
 	GLuint m_cubemap;

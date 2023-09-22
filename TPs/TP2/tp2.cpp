@@ -106,55 +106,22 @@ int TP2::postrender()
 
 void TP2::update_ambient_uniforms()
 {
-    glUseProgram(m_diffuse_texture_shader);
+	glUseProgram(m_custom_shader);
 
-    GLuint use_irradiance_map_location = glGetUniformLocation(m_diffuse_texture_shader, "u_use_irradiance_map");
+	GLuint use_irradiance_map_location = glGetUniformLocation(m_custom_shader, "u_use_irradiance_map");
 	glUniform1i(use_irradiance_map_location, m_application_settings.use_ambient);
 
 	//TODO supprimer ambient color parce qu'on utilise que l'irradiance map, pas de ambient color a deux balles
-    GLuint ambient_color_location = glGetUniformLocation(m_diffuse_texture_shader, "u_ambient_color");
+	GLuint ambient_color_location = glGetUniformLocation(m_custom_shader, "u_ambient_color");
 	glUniform4f(ambient_color_location, m_application_settings.ambient_color.r, m_application_settings.ambient_color.g, m_application_settings.ambient_color.b, m_application_settings.ambient_color.a);
 }
 
 void TP2::setup_light_position_uniform(const vec3& light_position)
 {
-    glUseProgram(m_diffuse_texture_shader);
+	glUseProgram(m_custom_shader);
 
-    GLint light_position_location = glGetUniformLocation(m_diffuse_texture_shader, "u_light_position");
+	GLint light_position_location = glGetUniformLocation(m_custom_shader, "u_light_position");
 	glUniform3f(light_position_location, light_position.x, light_position.y, light_position.z);
-}
-
-void TP2::load_mesh_textures_thread_function(const Materials& materials)
-{
-    m_mesh_textures.resize(materials.count());
-    for (const Material& mat : materials.materials)
-    {
-        int diffuse_texture_index = mat.diffuse_texture;
-        if (diffuse_texture_index != -1)
-        {
-            std::string texture_file_path = materials.texture_filenames[diffuse_texture_index];
-
-            std::string texture_file_path_full = texture_file_path;
-            ImageData texture_data = read_image_data(texture_file_path_full.c_str());
-
-            GLuint texture_id;
-            glGenTextures(1, &texture_id);
-            glBindTexture(GL_TEXTURE_2D, texture_id);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-                         texture_data.width, texture_data.height, 0,
-                         texture_data.channels == 3 ? GL_RGB : GL_RGBA, GL_UNSIGNED_BYTE,
-                         texture_data.data());
-
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_BORDER);
-
-            glGenerateMipmap(GL_TEXTURE_2D);
-
-            m_mesh_textures[diffuse_texture_index] = texture_id;
-        }
-    }
 }
 
 // creation des objets de l'application
@@ -182,8 +149,6 @@ int TP2::init()
 		exit(-1);
 	}
 
-
-
 	// etat openGL par defaut
 	glClearColor(0.2f, 0.2f, 0.2f, 1.f);        // couleur par defaut de la fenetre
 	glClearDepth(1.f);                          // profondeur par defaut
@@ -191,11 +156,10 @@ int TP2::init()
 	glDepthFunc(GL_LEQUAL);                       // ztest, conserver l'intersection la plus proche de la camera
 	glEnable(GL_DEPTH_TEST);                    // activer le ztest
 
-
 	//Lecture du shader
-    m_diffuse_texture_shader = read_program("data/TPs/shaders/shader_diffuse_texture.glsl");
-    program_print_errors(m_diffuse_texture_shader);
-    m_cubemap_shader = read_program("data/TPs/shaders/shader_cubemap.glsl");
+    m_custom_shader = read_program("TPs/TP2/shaders/shader_custom.glsl");
+	program_print_errors(m_custom_shader);
+    m_cubemap_shader = read_program("TPs/TP2/shaders/shader_cubemap.glsl");
 	program_print_errors(m_cubemap_shader);
 
 	GLint skysphere_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_skysphere");
@@ -205,14 +169,13 @@ int TP2::init()
 	glUniform1i(skysphere_uniform_location, 1);
 		
     setup_light_position_uniform(TP2::LIGHT_POSITION);
+	setup_diffuse_color_uniform();
+	setup_roughness_uniform(m_application_settings.mesh_roughness);
 
-    GLint use_irradiance_map_location = glGetUniformLocation(m_diffuse_texture_shader, "u_use_irradiance_map");
+	GLint use_irradiance_map_location = glGetUniformLocation(m_custom_shader, "u_use_irradiance_map");
 	glUniform1i(use_irradiance_map_location, m_application_settings.use_ambient);
 
-    GLint diffuse_texture_uniform_location = glGetUniformLocation(m_diffuse_texture_shader, "u_mesh_texture");
-    glUniform1i(diffuse_texture_uniform_location, 3);//The mesh texture is on unit 3
-
-    GLint ambient_color_location = glGetUniformLocation(m_diffuse_texture_shader, "u_ambient_color");
+	GLint ambient_color_location = glGetUniformLocation(m_custom_shader, "u_ambient_color");
 	glUniform4f(ambient_color_location, m_application_settings.ambient_color.r, m_application_settings.ambient_color.g, m_application_settings.ambient_color.b, m_application_settings.ambient_color.a);
 
 
@@ -227,81 +190,67 @@ int TP2::init()
 
 
 	//Creating the VAO for the mesh that will be displayed
-    glGenVertexArrays(1, &m_mesh_vao);
+	glGenVertexArrays(1, &m_robot_vao);
 	//Selecting the VAO that we're going to configure
-    glBindVertexArray(m_mesh_vao);
+	glBindVertexArray(m_robot_vao);
 
 	//Creation du position buffer
-    GLuint mesh_buffer;
-    glGenBuffers(1, &mesh_buffer);
-    //On selectionne le position buffer
-    glBindBuffer(GL_ARRAY_BUFFER, mesh_buffer);
-    size_t total_size = m_mesh.normal_buffer_size() + m_mesh.positions().size() * sizeof(vec3) + m_mesh.texcoord_buffer_size();
-    //On definit la taille du buffer selectionne (le position buffer)
-    glBufferData(GL_ARRAY_BUFFER, total_size, nullptr, GL_STATIC_DRAW);
+	GLuint position_buffer;
+	glGenBuffers(1, &position_buffer);
+	//On selectionne le position buffer
+	glBindBuffer(GL_ARRAY_BUFFER, position_buffer);
+	//On remplit le buffer selectionne (le position buffer)
+	glBufferData(GL_ARRAY_BUFFER, m_mesh.vertex_buffer_size(), m_mesh.vertex_buffer(), GL_STATIC_DRAW);
 
-    //Envoie des positions
-    glBufferSubData(GL_ARRAY_BUFFER, 0, m_mesh.positions().size() * sizeof(vec3), m_mesh.positions().data());
-    size_t position_size = m_mesh.positions().size() * sizeof(vec3);
-
-    //Envoie des normales
-    glBufferSubData(GL_ARRAY_BUFFER, position_size, m_mesh.normal_buffer_size(), m_mesh.normal_buffer());
-    size_t normal_size = m_mesh.normal_buffer_size();
-
-    //Envoie des texcoords
-    glBufferSubData(GL_ARRAY_BUFFER, position_size + normal_size, m_mesh.texcoord_buffer_size(), m_mesh.texcoord_buffer());
+	//On recupere l'id de l'attribut position du vertex shader "in vec3 position"
+	GLint position_attribute = glGetAttribLocation(m_custom_shader, "position");
+	glVertexAttribPointer(position_attribute, 3, GL_FLOAT, GL_FALSE, 0, 0);
+	glEnableVertexAttribArray(position_attribute);
 
 
-    glUseProgram(m_diffuse_texture_shader);
-    //Setting the id of the attributes (set using layout in the shader)
-    GLint position_attribute = 0;//glGetAttribLocation(m_diffuse_texture_shader, "position");
-    GLint normal_attribute = 1;//glGetAttribLocation(m_diffuse_texture_shader, "normal");
-    GLint texcoord_attribute = 2;//glGetAttribLocation(m_diffuse_texture_shader, "texcoords");
 
-    glVertexAttribPointer(position_attribute, /* size */ 3, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ 0);
-    glEnableVertexAttribArray(position_attribute);
-    glVertexAttribPointer(normal_attribute, /* size */ 3, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ (GLvoid*) position_size);
-    glEnableVertexAttribArray(normal_attribute);
-    glVertexAttribPointer(texcoord_attribute, /* size */ 2, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ (GLvoid*) (position_size + normal_size));
-    glEnableVertexAttribArray(texcoord_attribute);
 
-    //Loading the textures on another thread
-    //std::thread texture_thread(&TP2::load_mesh_textures_thread_function, this, std::ref(m_mesh.materials()));
 
-    Materials& materials = m_mesh.materials();
-    m_mesh_textures.resize(materials.count());
-    for (const Material& mat : materials.materials)
-    {
-        int diffuse_texture_index = mat.diffuse_texture;
-        if (diffuse_texture_index != -1)
-        {
-            std::string texture_file_path = materials.texture_filenames[diffuse_texture_index];
+	//Creation du normal buffer
+	GLuint normal_buffer;
+	glGenBuffers(1, &normal_buffer);
+	//On selectionne le normal buffer
+	glBindBuffer(GL_ARRAY_BUFFER, normal_buffer);
+	//On remplit le buffer selectionne (le normal buffer)
+	glBufferData(GL_ARRAY_BUFFER, m_mesh.normal_buffer_size(), m_mesh.normal_buffer(), GL_STATIC_DRAW);
 
-            std::string texture_file_path_full = texture_file_path;
-            ImageData texture_data = read_image_data(texture_file_path_full.c_str());
+	//On recupere l'id de l'attribut normal du vertex shader "in vec3 normal"
+	GLint normal_attribute = glGetAttribLocation(m_custom_shader, "normal");
+	glVertexAttribPointer(normal_attribute, 3, GL_FLOAT, GL_FALSE, 0, 0);
+	glEnableVertexAttribArray(normal_attribute);
 
-            GLuint texture_id;
-            glGenTextures(1, &texture_id);
-            glBindTexture(GL_TEXTURE_2D, texture_id);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-                         texture_data.width, texture_data.height, 0,
-                         texture_data.channels == 3 ? GL_RGB : GL_RGBA, GL_UNSIGNED_BYTE,
-                         texture_data.data());
 
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_BORDER);
 
-            glGenerateMipmap(GL_TEXTURE_2D);
 
-            m_mesh_textures[diffuse_texture_index] = texture_id;
-        }
-    }
 
-    //Calculating the groups on the main thread at the same time
-    m_mesh_triangles_group = m_mesh.groups();
-    //texture_thread.join();
+	std::vector<unsigned int> material_index_buffer;
+	for (unsigned int index : m_mesh.material_indices())
+	{
+		material_index_buffer.push_back(index);
+		material_index_buffer.push_back(index);
+		material_index_buffer.push_back(index);
+	}
+
+	//Creation du buffer des materiaux
+	GLuint material_index_buffer_id;
+	glGenBuffers(1, &material_index_buffer_id);
+	//On selectionne le normal buffer
+	glBindBuffer(GL_ARRAY_BUFFER, material_index_buffer_id);
+	//On remplit le buffer selectionne (le material index buffer). On divise par 3 parce qu'on a un material par TRIANGLE, pas par vertex
+	//TODO bug ici des fois le vertex_buffer _size() est enorme et donc ca overflow la lecture de .data()
+	glBufferData(GL_ARRAY_BUFFER, m_mesh.vertex_buffer_size(), material_index_buffer.data(), GL_STATIC_DRAW);
+
+	//On recupere l'id de l'attribut normal du vertex shader "in vec3 normal"
+	GLint material_index_attribute = glGetAttribLocation(m_custom_shader, "material_index");
+	glVertexAttribIPointer(material_index_attribute, 1, GL_UNSIGNED_INT, 0, 0);
+	glEnableVertexAttribArray(material_index_attribute);
+
+
 
 	//TODO HDR pipeline pour l'irradiance map
 
@@ -309,7 +258,7 @@ int TP2::init()
 	std::vector<ImageData> cubemap_data;
 	ImageData skysphere_data, irradiance_map_data;
 
-    std::thread load_thread_cubemap = std::thread([&] {cubemap_data = Utils::read_cubemap_data("data/TPs/skybox", ".jpg"); });
+	std::thread load_thread_cubemap = std::thread([&] {cubemap_data = Utils::read_cubemap_data("TPs/from_scratch/data/skybox", ".jpg"); });
 	std::thread load_thread_skypshere = std::thread([&] {skysphere_data = Utils::read_skysphere_data(m_application_settings.irradiance_map_file_path.c_str()); });
 	std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_data = Utils::precompute_and_load_associated_irradiance(m_application_settings.irradiance_map_file_path.c_str(), m_application_settings.irradiance_map_precomputation_samples); });
 	load_thread_cubemap.join();
@@ -319,15 +268,14 @@ int TP2::init()
 
 	m_cubemap = Utils::create_cubemap_texture_from_data(cubemap_data);
 	m_skysphere = Utils::create_skysphere_texture_from_data(skysphere_data, 1);
-    m_irradiance_map = Utils::create_skysphere_texture_from_data(irradiance_map_data, 2);
+	m_irradiance_map = Utils::create_skysphere_texture_from_data(irradiance_map_data, 2);
+
+
+
 
 	//Cleaning (repositionning the buffers that have been selected to their default value)
 	glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    Point p_min, p_max;
-    m_mesh.bounds(p_min, p_max);
-    m_camera.lookat(p_min, p_max);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
 	return 0;
 }
@@ -378,7 +326,9 @@ void TP2::draw_lighting_window()
 		update_ambient_uniforms();
 	ImGui::RadioButton("Use Skybox", &m_application_settings.cubemap_or_skysphere, 1); ImGui::SameLine();
 	ImGui::RadioButton("Use Skysphere", &m_application_settings.cubemap_or_skysphere, 0);
-    ImGui::Separator();
+	ImGui::Separator();
+	if(ImGui::SliderFloat("Roughness", &m_application_settings.mesh_roughness, 0.0f, 1.0f))
+		setup_roughness_uniform(m_application_settings.mesh_roughness);
 	ImGui::Separator();
 	ImGui::Text("Irradiance map");
 	ImGui::DragInt("Irradiance Map Precomputation Samples", &m_application_settings.irradiance_map_precomputation_samples, 1.0f, 1, 2048);
@@ -413,6 +363,64 @@ void TP2::draw_lighting_window()
 	}
 }
 
+void TP2::draw_materials_window()
+{
+	static ImGuiTableFlags materials_table_flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg
+		| ImGuiTableFlags_BordersH | ImGuiTableFlags_BordersOuterH | ImGuiTableFlags_BordersInnerH
+		| ImGuiTableFlags_BordersV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersInnerV
+		| ImGuiTableFlags_BordersOuter
+		| ImGuiTableFlags_BordersInner;
+
+	if (ImGui::BeginTable("MaterialsTable", /* columns */ 2, materials_table_flags))
+	{
+		//Headers of the table
+		ImGui::TableSetupColumn("Name");
+		ImGui::TableSetupColumn("Diffuse color");
+		ImGui::TableHeadersRow();
+
+		for (int i = 0; i < m_mesh.materials().materials.size(); i++)
+		{
+			const Material& mat = m_mesh.materials().materials.at(i);
+			std::string& material_name = m_mesh.materials().names.at(i);
+
+			ImGui::TableNextRow();
+			for (int column = 0; column < 2; column++)
+			{
+				ImGui::TableSetColumnIndex(column);
+
+				if (column == 0)
+					//Name of the material
+					ImGui::TextUnformatted(material_name.c_str());
+				else if (column == 1)
+				{
+					//Diffuse color
+
+					//We're using color button here instead of ColorEdit only to be able to change the size of the color "square"
+					//Because we still want to retain the color picker feature of the ColorEdit, we're opening a popup if the ColorButton
+					//is clicked
+					if (ImGui::ColorButton(std::string("DiffuseColor#" + material_name).c_str(), ImVec4(mat.diffuse.r, mat.diffuse.g, mat.diffuse.b, mat.diffuse.a), 0, ImVec2(32, 32)))
+						ImGui::OpenPopup(std::string("DiffuseColor#" + material_name + " picker").c_str());
+
+					if (ImGui::BeginPopup(std::string("DiffuseColor#" + material_name + " picker").c_str()))
+					{
+						//Adding a color picker to the popup
+
+						if (ImGui::ColorPicker4("##picker", (float*)&mat.diffuse, ImGuiColorEditFlags_None, NULL))
+						{
+							//If the user interacted with the color of the material
+							//We're updating the uniform of the shader
+							setup_diffuse_color_uniform();
+						}
+						ImGui::EndPopup();
+					}
+				}
+			}
+		}
+
+		ImGui::EndTable();
+	}
+}
+
 void TP2::draw_imgui()
 {
 	ImGui_ImplSdlGL3_NewFrame(m_window);
@@ -427,9 +435,9 @@ void TP2::draw_imgui()
 	draw_lighting_window();
 	ImGui::End();
 
-    //ImGui::Begin("Materials");
-    //draw_materials_window();
-    //ImGui::End();
+	ImGui::Begin("Materials");
+	draw_materials_window();
+	ImGui::End();
 
 
 	ImGui::Render();
@@ -447,36 +455,28 @@ int TP2::render()
 	//draw(m_repere, /* model */ Identity(), camera());
 		
 	//On selectionne notre shader
-    glUseProgram(m_diffuse_texture_shader);
+	glUseProgram(m_custom_shader);
 
 	//On update l'uniform mvpMatrix de notre shader
-    Transform mvpMatrix = camera().projection() * camera().view() * Identity();
-    GLint mvpMatrixLocation = glGetUniformLocation(m_diffuse_texture_shader, "mvpMatrix");
+	Transform mvpMatrix = camera().projection() * camera().view() * Identity();
+	GLint mvpMatrixLocation = glGetUniformLocation(m_custom_shader, "mvpMatrix");
 	glUniformMatrix4fv(mvpMatrixLocation, 1, GL_TRUE, mvpMatrix.data());
 
 	//Setting the camera position
-    GLint camera_position_uniform_location = glGetUniformLocation(m_diffuse_texture_shader, "u_camera_position");
+	GLint camera_position_uniform_location = glGetUniformLocation(m_custom_shader, "u_camera_position");
 	glUniform3f(camera_position_uniform_location, m_camera.position().x, m_camera.position().y, m_camera.position().z);
 
 	//Setting up the irradiance map
-    GLint irradiance_map_uniform_location = glGetUniformLocation(m_diffuse_texture_shader, "u_irradiance_map");
+	GLint irradiance_map_uniform_location = glGetUniformLocation(m_custom_shader, "u_irradiance_map");
 	//The irradiance map is in texture unit 2
 	glActiveTexture(GL_TEXTURE2);
 	glBindTexture(GL_TEXTURE_2D, m_irradiance_map);
 	glUniform1i(irradiance_map_uniform_location, 2);
 
-    //Selecting the VAO of the mesh
-    glBindVertexArray(m_mesh_vao);
-
-    //Drawing the mesh group by group
-    for (TriangleGroup& group : m_mesh_triangles_group)
-    {
-        GLuint group_texture_id = m_mesh_textures[group.index];
-        glActiveTexture(GL_TEXTURE3); //The textures of the mesh are on unit 3
-        glBindTexture(GL_TEXTURE_2D, m_mesh_textures[group_texture_id]);
-
-        glDrawArrays(GL_TRIANGLES, group.first, group.n);
-    }
+	//On selectionne le vao du robot
+	glBindVertexArray(m_robot_vao);
+	//On draw le robot
+	glDrawArrays(GL_TRIANGLES, 0, m_mesh.vertex_count());
 
 	//TODO la skysphere/skybox s'affiche seulement quand on click sur un radio button et avant on a rien
 
