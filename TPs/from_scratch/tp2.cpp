@@ -157,6 +157,97 @@ void TP2::load_mesh_textures_thread_function(const Materials& materials)
     }
 }
 
+void TP2::compute_bounding_boxes_of_groups(std::vector<TriangleGroup>& groups)
+{
+	vec3 init_min_bbox = vec3(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
+	vec3 init_max_bbox = vec3(std::numeric_limits<float>::min(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min());
+
+	m_mesh_groups_bounding_boxes.resize(groups.size());
+
+#pragma omp parallel for schedule(dynamic)
+	for (int group_index = 0; group_index < groups.size(); group_index++)
+	{
+		TriangleGroup& group = groups.at(group_index);
+
+		BoundingBox bbox {init_min_bbox, init_max_bbox};
+
+		for (int pos = group.first; pos < group.first + group.n; pos += 3)
+		{
+			vec3 a, b, c;
+			a = m_mesh.positions()[pos + 0];
+			b = m_mesh.positions()[pos + 1];
+			c = m_mesh.positions()[pos + 2];
+
+			bbox.pMin = min(bbox.pMin, a);
+			bbox.pMin = min(bbox.pMin, b);
+			bbox.pMin = min(bbox.pMin, c);
+
+			bbox.pMax = max(bbox.pMax, a);
+			bbox.pMax = max(bbox.pMax, b);
+			bbox.pMax = max(bbox.pMax, c);
+		}
+
+		m_mesh_groups_bounding_boxes[group_index] = bbox;
+	}
+}
+
+bool is_point_in_view_frustum(vec4 point, const Transform& projMat)
+{
+	vec4 transformed_point = projMat(point);
+
+	return (transformed_point.x >= -transformed_point.w && transformed_point.x <= transformed_point.w)
+		&& (transformed_point.y >= -transformed_point.w && transformed_point.y <= transformed_point.w)
+		&& (transformed_point.z >= -transformed_point.w && transformed_point.z <= transformed_point.w);
+}
+
+bool TP2::is_group_visible_frustum_culling(int group_index, const Transform& mvpMatrix)
+{
+	BoundingBox group_bbox = m_mesh_groups_bounding_boxes[group_index];
+
+	/*
+	* 
+	*    6--------7
+		/|       /|
+	   / |      / |
+	  2--------3  |
+	  |  |     |  |
+	  |  4-----|--5
+	  |  /     | /
+	  | /      |/
+	  0--------1
+	*/
+
+	vec4 pBBox_0 = vec4(group_bbox.pMin, 1);
+	vec4 pBBox_1 = vec4(group_bbox.pMax.x, group_bbox.pMin.y, group_bbox.pMin.z, 1);
+	vec4 pBBox_2 = vec4(group_bbox.pMin.x, group_bbox.pMax.y, group_bbox.pMin.z, 1);
+	vec4 pBBox_3 = vec4(group_bbox.pMax.x, group_bbox.pMax.y, group_bbox.pMin.z, 1);
+	vec4 pBBox_4 = vec4(group_bbox.pMin.x, group_bbox.pMin.y, group_bbox.pMax.z, 1);
+	vec4 pBBox_5 = vec4(group_bbox.pMax.x, group_bbox.pMin.y, group_bbox.pMax.z, 1);
+	vec4 pBBox_6 = vec4(group_bbox.pMin.x, group_bbox.pMax.y, group_bbox.pMax.z, 1);
+	vec4 pBBox_7 = vec4(group_bbox.pMax, 1);
+
+	//TODO clip aussi si le Z < 0 ?
+	if (is_point_in_view_frustum(pBBox_0, mvpMatrix)
+		|| is_point_in_view_frustum(pBBox_1, mvpMatrix)
+		|| is_point_in_view_frustum(pBBox_2, mvpMatrix)
+		|| is_point_in_view_frustum(pBBox_3, mvpMatrix)
+		|| is_point_in_view_frustum(pBBox_4, mvpMatrix)
+		|| is_point_in_view_frustum(pBBox_5, mvpMatrix)
+		|| is_point_in_view_frustum(pBBox_6, mvpMatrix)
+		|| is_point_in_view_frustum(pBBox_7, mvpMatrix))
+	{
+		std::cout << "1 ";
+		return true;
+	}
+	else
+	{
+
+		std::cout << "0 ";
+
+		return false;
+	}
+}
+
 // creation des objets de l'application
 int TP2::init()
 {
@@ -174,7 +265,9 @@ int TP2::init()
 	//m_repere = make_grid(10);
 
 	//Reading the mesh displayed
-    m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
+	//m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
+	//m_mesh = read_mesh("data/TPs/test_cubes.obj");
+	m_mesh = read_mesh("data/cube.obj");
 	if (m_mesh.positions().size() == 0)
 	{
 		std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -199,8 +292,6 @@ int TP2::init()
 	program_print_errors(m_cubemap_shader);
 
 	GLint skysphere_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_skysphere");
-	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, m_skysphere);
 	//The skysphere is on texture unit 1 so we're using 1 for the value of the uniform
 	glUniform1i(skysphere_uniform_location, 1);
 		
@@ -268,6 +359,8 @@ int TP2::init()
     //Loading the textures on another thread
     //std::thread texture_thread(&TP2::load_mesh_textures_thread_function, this, std::ref(m_mesh.materials()));
 
+	/*m_mesh_triangles_group = m_mesh.groups();
+
     Materials& materials = m_mesh.materials();
     m_mesh_textures.resize(materials.count());
     for (const Material& mat : materials.materials)
@@ -297,11 +390,40 @@ int TP2::init()
 
             m_mesh_textures[diffuse_texture_index] = texture_id;
         }
-    }
+    }*/
 
-    //Calculating the groups on the main thread at the same time
-    m_mesh_triangles_group = m_mesh.groups();
-    //texture_thread.join();
+	//TODO sur un thread
+	m_mesh_triangles_group = m_mesh.groups();
+	m_mesh_textures.resize(m_mesh.materials().filename_count());
+	for (Material& mat : m_mesh.materials().materials)
+	{
+		int diffuse_texture_index = mat.diffuse_texture;
+		if (diffuse_texture_index != -1)
+		{
+			std::string texture_file_path = m_mesh.materials().texture_filenames[diffuse_texture_index];
+			ImageData texture_data = read_image_data(texture_file_path.c_str());
+
+			GLuint texture_id;
+			glGenTextures(1, &texture_id);
+			glBindTexture(GL_TEXTURE_2D, texture_id);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+						 texture_data.width, texture_data.height, 0,
+						 texture_data.channels == 3 ? GL_RGB : GL_RGBA, GL_UNSIGNED_BYTE,
+						 texture_data.data());
+
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_REPEAT);
+
+			glGenerateMipmap(GL_TEXTURE_2D);
+
+			m_mesh_textures[diffuse_texture_index] = texture_id;
+		}
+	}
+
+	//TODO sur un thread
+	compute_bounding_boxes_of_groups(m_mesh_triangles_group);
 
 	//TODO HDR pipeline pour l'irradiance map
 
@@ -439,18 +561,14 @@ void TP2::draw_imgui()
 // dessiner une nouvelle image
 int TP2::render()
 {
-	//TODO demander au prof cette histoire de rotation quand on calcule l'irradiance map
-
-	//TODO ajouter une fonctionnalite qui compute automatiquement (compute shader?) l'irradiance map si une skysphere qui a pas encore d'irradiance map (regarder dans le dossier si on a un fichier <skysphere_name>_Irradiance qui exsite) a ete choisie
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-	//draw(m_repere, /* model */ Identity(), camera());
 		
+
 	//On selectionne notre shader
     glUseProgram(m_diffuse_texture_shader);
 
 	//On update l'uniform mvpMatrix de notre shader
-    Transform mvpMatrix = camera().projection() * camera().view() * Identity();
+    Transform mvpMatrix = m_camera.projection() * m_camera.view() * Identity();
     GLint mvpMatrixLocation = glGetUniformLocation(m_diffuse_texture_shader, "mvpMatrix");
 	glUniformMatrix4fv(mvpMatrixLocation, 1, GL_TRUE, mvpMatrix.data());
 
@@ -469,13 +587,24 @@ int TP2::render()
     glBindVertexArray(m_mesh_vao);
 
     //Drawing the mesh group by group
-    for (TriangleGroup& group : m_mesh_triangles_group)
-    {
-        GLuint group_texture_id = m_mesh_textures[group.index];
-        glActiveTexture(GL_TEXTURE3); //The textures of the mesh are on unit 3
-        glBindTexture(GL_TEXTURE_2D, m_mesh_textures[group_texture_id]);
+	for (TriangleGroup& group : m_mesh_triangles_group)
+	{
+		if (is_group_visible_frustum_culling(group.index, mvpMatrix))
+		{
+			int diffuse_texture_index = m_mesh.materials()(group.index).diffuse_texture;
 
-        glDrawArrays(GL_TRIANGLES, group.first, group.n);
+			if (diffuse_texture_index != -1)
+			{
+				GLuint group_texture_id = m_mesh_textures[diffuse_texture_index];
+				glActiveTexture(GL_TEXTURE3); //The textures of the mesh are on unit 3
+				glBindTexture(GL_TEXTURE_2D, group_texture_id);
+			}
+			else
+				//TODO afficher le material plutot que la texture --> changer de shader
+				;
+
+			glDrawArrays(GL_TRIANGLES, group.first, group.n);
+		}
     }
 
 	//TODO la skysphere/skybox s'affiche seulement quand on click sur un radio button et avant on a rien

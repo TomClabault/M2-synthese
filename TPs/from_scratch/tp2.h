@@ -9,6 +9,12 @@
 
 #include <string>
 
+struct BoundingBox
+{
+	Point pMin;
+	Point pMax;
+};
+
 class TP2 : public AppCamera
 {
 public:
@@ -26,6 +32,9 @@ public:
 	void setup_roughness_uniform(const float roughness);
 
     void load_mesh_textures_thread_function(const Materials& materials);
+
+	void compute_bounding_boxes_of_groups(std::vector<TriangleGroup>& groups);
+	bool is_group_visible_frustum_culling(int group_index, const Transform& mvpMatrix);
 
 	// creation des objets de l'application
 	int init();
@@ -57,8 +66,9 @@ protected:
 
 	//Mesh m_repere;
 	Mesh m_mesh;
+	std::vector<BoundingBox> m_mesh_groups_bounding_boxes;
     std::vector<TriangleGroup> m_mesh_triangles_group;
-    std::vector<GLuint> m_mesh_textures;
+	std::vector<GLuint> m_mesh_textures;
 
 	GLuint m_cubemap_vao;
     GLuint m_mesh_vao;
