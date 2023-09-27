@@ -465,7 +465,8 @@ int TP2::init()
     Point p_min, p_max;
     //TODO ça recalcule tout les bounds alors qu'on les a deja calculés
     m_mesh.bounds(p_min, p_max);
-    m_camera.lookat(p_min, p_max);
+    //m_camera.lookat(Point(-25, -25, -25), Point(25, 25, 25));
+    m_camera.lookat(p_min * 2, p_max * 2);
 
 	return 0;
 }
@@ -603,14 +604,15 @@ int TP2::render()
     glBindVertexArray(m_mesh_vao);
 
     //Drawing the mesh group by group
+    int groups_sent_to_gpu = 0;
 	for (TriangleGroup& group : m_mesh_triangles_group)
 	{
         if (!rejection_test_bbox_frustum_culling(m_mesh_groups_bounding_boxes[group.index], mvpMatrix))
 		{
-            if (true) //!rejection_test_bbox_frustum_culling_scene(m_mesh_groups_bounding_boxes[group.index], mvpMatrix.inverse()))
+            if (!rejection_test_bbox_frustum_culling_scene(m_mesh_groups_bounding_boxes[group.index], mvpMatrix.inverse()))
             {
-                std::cout << "1 ";
-                fflush(stdout);
+                //std::cout << "1 ";
+                //fflush(stdout);
 
                 int diffuse_texture_index = m_mesh.materials()(group.index).diffuse_texture;
 
@@ -625,16 +627,18 @@ int TP2::render()
                     ;
 
                 glDrawArrays(GL_TRIANGLES, group.first, group.n);
+
+                groups_sent_to_gpu++;
             }
 		}
         else
         {
-            std::cout << "0 ";
-            fflush(stdout);
+            //std::cout << "0 ";
+            //fflush(stdout);
         }
     }
 
-	//TODO la skysphere/skybox s'affiche seulement quand on click sur un radio button et avant on a rien
+    std::cout << "Groups drawn: " << groups_sent_to_gpu << " / " << m_mesh_triangles_group.size() << std::endl;
 
 	//Selecting the empty VAO for the cubemap shader
 	glBindVertexArray(m_cubemap_vao);
