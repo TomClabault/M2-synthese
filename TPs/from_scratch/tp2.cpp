@@ -15,6 +15,7 @@
 #include "tp2.h"
 #include "utils.h"
 
+#include <array>
 #include <filesystem>
 #include <thread>
 
@@ -216,34 +217,30 @@ bool TP2::rejection_test_bbox_frustum_culling(const BoundingBox& bbox, const Tra
     bbox_points_projective[6] = mvpMatrix(vec4(bbox.pMin.x, bbox.pMax.y, bbox.pMax.z, 1));
     bbox_points_projective[7] = mvpMatrix(vec4(bbox.pMax, 1));
 
-    for (int coord_index = 0; coord_index < 6; coord_index++)
-    {
-        bool at_least_one_point_inside = false;
+	for (int coord_index = 0; coord_index < 6; coord_index++)
+	{
+		bool all_points_outside = true;
 
-        for (int i = 0; i < 8; i++)
-        {
-            vec4& bbox_point = bbox_points_projective[i];
+		for (int i = 0; i < 8; i++)
+		{
+			vec4& bbox_point = bbox_points_projective[i];
 
-            int test_against_negative_plane = coord_index & 1;
+			bool test_negative_plane = coord_index & 1;
 
-            bool is_inside = false;
-            if (test_against_negative_plane)
-                is_inside = bbox_point(coord_index / 2) > -bbox_point.w;
-            else
-                is_inside = bbox_point(coord_index / 2) < bbox_point.w;
+			if (test_negative_plane)
+				all_points_outside &= bbox_point(coord_index / 2) < -bbox_point.w;
+			else
+				all_points_outside &= bbox_point(coord_index / 2) > bbox_point.w;
 
-            if (is_inside)
-            {
-                at_least_one_point_inside = true;
-                break;
-            }
-        }
+			if (!all_points_outside)
+				break;
+		}
 
-        if (at_least_one_point_inside)
-            return false;
-    }
+		if (all_points_outside)
+			return true;
+	}
 
-    return true;
+	return false;
 }
 
 bool TP2::rejection_test_bbox_frustum_culling_scene(const BoundingBox& bbox, const Transform& inverse_mvp_matrix)
@@ -277,36 +274,29 @@ bool TP2::rejection_test_bbox_frustum_culling_scene(const BoundingBox& bbox, con
     for (int i = 0; i < 8; i++)
         frustum_points_in_scene[i] = inverse_mvp_matrix(frustum_points_projective_space[i]);
 
-    for (int coord_index = 0; coord_index < 6; coord_index++)
-    {
-        bool at_least_one_point_inside = false;
+	for (int coord_index = 0; coord_index < 6; coord_index++)
+	{
+		bool all_points_outside = true;
+		for (int i = 0; i < 6; i++)
+		{
+			Vector& frustum_point = frustum_points_in_scene[i];
 
-        for (int i = 0; i < 8; i++)
-        {
-            Vector& frustum_point_scene = frustum_points_in_scene[i];
+			bool test_negative = coord_index & 1;
 
-            int test_negative = coord_index & 1;
+			if (test_negative)
+				all_points_outside &= frustum_point(coord_index / 2) < bbox.pMin(coord_index / 2);
+			else
+				all_points_outside &= frustum_point(coord_index / 2) > bbox.pMax(coord_index / 2);
 
-            bool point_is_inside = false;
-            if (test_negative)
-                point_is_inside = (frustum_point_scene(coord_index / 2) > bbox.pMin(coord_index / 2));
-            else
-                point_is_inside = (frustum_point_scene(coord_index / 2) < bbox.pMax(coord_index / 2));
+			if (!all_points_outside)
+				break;
+		}
 
-            if (point_is_inside)
-            {
-                at_least_one_point_inside = true;
-                break;
-            }
-        }
+		if (all_points_outside)
+			return true;
+	}
 
-        if (at_least_one_point_inside)
-        {
-            return false;
-        }
-    }
-
-    return true;
+	return false;
 }
 
 // creation des objets de l'application
@@ -617,7 +607,7 @@ int TP2::render()
 	{
         if (!rejection_test_bbox_frustum_culling(m_mesh_groups_bounding_boxes[group.index], mvpMatrix))
 		{
-            if (!rejection_test_bbox_frustum_culling_scene(m_mesh_groups_bounding_boxes[group.index], mvpMatrix.inverse()))
+            if (true) //!rejection_test_bbox_frustum_culling_scene(m_mesh_groups_bounding_boxes[group.index], mvpMatrix.inverse()))
             {
                 std::cout << "1 ";
                 fflush(stdout);

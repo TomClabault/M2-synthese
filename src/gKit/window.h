@@ -2,6 +2,10 @@
 #ifndef _WINDOW_H
 #define _WINDOW_H
 
+#ifdef USE_IMGUI
+#define IMGUI_PROCESS_EVENTS
+#endif
+
 #include <string>
 #include <vector>
 

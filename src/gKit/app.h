@@ -2,6 +2,7 @@
 #ifndef _APP_H
 #define _APP_H
 
+#define USE_IMGUI
 #include "window.h"
 
 

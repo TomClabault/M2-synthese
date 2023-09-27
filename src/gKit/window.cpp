@@ -177,7 +177,9 @@ int events( Window window )
     SDL_Event event;
     while(SDL_PollEvent(&event))
     {
+#ifdef IMGUI_PROCESS_EVENTS
         ImGui_ImplSdlGL3_ProcessEvent(&event);
+#endif
 
         switch(event.type)
         {

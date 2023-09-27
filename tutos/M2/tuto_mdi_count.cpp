@@ -58,8 +58,8 @@ public:
         m_camera.lookat(pmin - Vector(200, 200,  0), pmax + Vector(200, 200, 0));
         
         // genere les parametres des draws et les transformations
-        for(int y= -15; y <= 15; y++)
-        for(int x= -15; x <= 15; x++)
+        for(int y= -150; y <= 150; y++)
+        for(int x= -150; x <= 150; x++)
         {
             m_multi_model.push_back( Translation(x *20, y *20, 0) );
             
