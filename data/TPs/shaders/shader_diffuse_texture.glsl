@@ -52,7 +52,11 @@ void main()
     //		gl_FragColor.a = 1.0f;
     //	}
 
-    gl_FragColor = texture(u_mesh_texture, vs_texcoords);
+    vec4 texture_color = texture(u_mesh_texture, vs_texcoords);
+    if (texture_color.a == 0)
+        discard;
+    else
+        gl_FragColor = texture_color;
     //gl_FragColor = vec4((vs_normal + 1) * 0.5, 1);
 }
 #endif

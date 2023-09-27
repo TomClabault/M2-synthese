@@ -191,61 +191,122 @@ void TP2::compute_bounding_boxes_of_groups(std::vector<TriangleGroup>& groups)
 	}
 }
 
-bool is_point_in_view_frustum(vec4 point, const Transform& projMat)
+bool TP2::rejection_test_bbox_frustum_culling(const BoundingBox& bbox, const Transform& mvpMatrix)
 {
-	vec4 transformed_point = projMat(point);
-
-	return (transformed_point.x >= -transformed_point.w && transformed_point.x <= transformed_point.w)
-		&& (transformed_point.y >= -transformed_point.w && transformed_point.y <= transformed_point.w)
-		&& (transformed_point.z >= -transformed_point.w && transformed_point.z <= transformed_point.w);
-}
-
-bool TP2::is_group_visible_frustum_culling(int group_index, const Transform& mvpMatrix)
-{
-	BoundingBox group_bbox = m_mesh_groups_bounding_boxes[group_index];
-
 	/*
 	* 
-	*    6--------7
-		/|       /|
-	   / |      / |
-	  2--------3  |
-	  |  |     |  |
-	  |  4-----|--5
-	  |  /     | /
-	  | /      |/
-	  0--------1
+    *     6--------7
+         /|       /|
+        / |      / |
+       2--------3  |
+       |  |     |  |
+       |  4-----|--5
+       |  /     | /
+       | /      |/
+       0--------1
 	*/
 
-	vec4 pBBox_0 = vec4(group_bbox.pMin, 1);
-	vec4 pBBox_1 = vec4(group_bbox.pMax.x, group_bbox.pMin.y, group_bbox.pMin.z, 1);
-	vec4 pBBox_2 = vec4(group_bbox.pMin.x, group_bbox.pMax.y, group_bbox.pMin.z, 1);
-	vec4 pBBox_3 = vec4(group_bbox.pMax.x, group_bbox.pMax.y, group_bbox.pMin.z, 1);
-	vec4 pBBox_4 = vec4(group_bbox.pMin.x, group_bbox.pMin.y, group_bbox.pMax.z, 1);
-	vec4 pBBox_5 = vec4(group_bbox.pMax.x, group_bbox.pMin.y, group_bbox.pMax.z, 1);
-	vec4 pBBox_6 = vec4(group_bbox.pMin.x, group_bbox.pMax.y, group_bbox.pMax.z, 1);
-	vec4 pBBox_7 = vec4(group_bbox.pMax, 1);
+    std::vector<vec4> bbox_points_projective(8);
+    bbox_points_projective[0] = mvpMatrix(vec4(bbox.pMin, 1));
+    bbox_points_projective[1] = mvpMatrix(vec4(bbox.pMax.x, bbox.pMin.y, bbox.pMin.z, 1));
+    bbox_points_projective[2] = mvpMatrix(vec4(bbox.pMin.x, bbox.pMax.y, bbox.pMin.z, 1));
+    bbox_points_projective[3] = mvpMatrix(vec4(bbox.pMax.x, bbox.pMax.y, bbox.pMin.z, 1));
+    bbox_points_projective[4] = mvpMatrix(vec4(bbox.pMin.x, bbox.pMin.y, bbox.pMax.z, 1));
+    bbox_points_projective[5] = mvpMatrix(vec4(bbox.pMax.x, bbox.pMin.y, bbox.pMax.z, 1));
+    bbox_points_projective[6] = mvpMatrix(vec4(bbox.pMin.x, bbox.pMax.y, bbox.pMax.z, 1));
+    bbox_points_projective[7] = mvpMatrix(vec4(bbox.pMax, 1));
 
-	//TODO clip aussi si le Z < 0 ?
-	if (is_point_in_view_frustum(pBBox_0, mvpMatrix)
-		|| is_point_in_view_frustum(pBBox_1, mvpMatrix)
-		|| is_point_in_view_frustum(pBBox_2, mvpMatrix)
-		|| is_point_in_view_frustum(pBBox_3, mvpMatrix)
-		|| is_point_in_view_frustum(pBBox_4, mvpMatrix)
-		|| is_point_in_view_frustum(pBBox_5, mvpMatrix)
-		|| is_point_in_view_frustum(pBBox_6, mvpMatrix)
-		|| is_point_in_view_frustum(pBBox_7, mvpMatrix))
-	{
-		std::cout << "1 ";
-		return true;
-	}
-	else
-	{
+    for (int coord_index = 0; coord_index < 6; coord_index++)
+    {
+        bool at_least_one_point_inside = false;
 
-		std::cout << "0 ";
+        for (int i = 0; i < 8; i++)
+        {
+            vec4& bbox_point = bbox_points_projective[i];
 
-		return false;
-	}
+            int test_against_negative_plane = coord_index & 1;
+
+            bool is_inside = false;
+            if (test_against_negative_plane)
+                is_inside = bbox_point(coord_index / 2) > -bbox_point.w;
+            else
+                is_inside = bbox_point(coord_index / 2) < bbox_point.w;
+
+            if (is_inside)
+            {
+                at_least_one_point_inside = true;
+                break;
+            }
+        }
+
+        if (at_least_one_point_inside)
+            return false;
+    }
+
+    return true;
+}
+
+bool TP2::rejection_test_bbox_frustum_culling_scene(const BoundingBox& bbox, const Transform& inverse_mvp_matrix)
+{
+    /*
+    *
+    *     6--------7
+         /|       /|
+        / |      / |
+       2--------3  |
+       |  |     |  |
+       |  4-----|--5
+       |  /     | /
+       | /      |/
+       0--------1
+    */
+
+    std::array<Vector, 8> frustum_points_projective_space
+    {
+        Vector(-1, -1, -1),
+        Vector(1, -1, -1),
+        Vector(-1, 1, -1),
+        Vector(1, 1, -1),
+        Vector(-1, -1, 1),
+        Vector(1, -1, 1),
+        Vector(-1, 1, 1),
+        Vector(1, 1, 1)
+    };
+
+    std::vector<Vector> frustum_points_in_scene(8);
+    for (int i = 0; i < 8; i++)
+        frustum_points_in_scene[i] = inverse_mvp_matrix(frustum_points_projective_space[i]);
+
+    for (int coord_index = 0; coord_index < 6; coord_index++)
+    {
+        bool at_least_one_point_inside = false;
+
+        for (int i = 0; i < 8; i++)
+        {
+            Vector& frustum_point_scene = frustum_points_in_scene[i];
+
+            int test_negative = coord_index & 1;
+
+            bool point_is_inside = false;
+            if (test_negative)
+                point_is_inside = (frustum_point_scene(coord_index / 2) > bbox.pMin(coord_index / 2));
+            else
+                point_is_inside = (frustum_point_scene(coord_index / 2) < bbox.pMax(coord_index / 2));
+
+            if (point_is_inside)
+            {
+                at_least_one_point_inside = true;
+                break;
+            }
+        }
+
+        if (at_least_one_point_inside)
+        {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 // creation des objets de l'application
@@ -265,9 +326,10 @@ int TP2::init()
 	//m_repere = make_grid(10);
 
 	//Reading the mesh displayed
-	//m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
+    //m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
 	//m_mesh = read_mesh("data/TPs/test_cubes.obj");
-	m_mesh = read_mesh("data/cube.obj");
+    m_mesh = read_mesh("data/cube.obj");
+    //m_mesh = read_mesh("data/E-45-Aircraft/E 45 Aircraft_obj.obj");
 	if (m_mesh.positions().size() == 0)
 	{
 		std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -310,19 +372,45 @@ int TP2::init()
 
 
 
-	//Creating an empty VAO that will be used for the cubemap
-	glGenVertexArrays(1, &m_cubemap_vao);
+    //Loading the textures on another thread
+    //std::thread texture_thread(&TP2::load_mesh_textures_thread_function, this, std::ref(m_mesh.materials()));
 
+	//TODO sur un thread
+	m_mesh_triangles_group = m_mesh.groups();
+	m_mesh_textures.resize(m_mesh.materials().filename_count());
+	for (Material& mat : m_mesh.materials().materials)
+	{
+		int diffuse_texture_index = mat.diffuse_texture;
+		if (diffuse_texture_index != -1)
+		{
+			std::string texture_file_path = m_mesh.materials().texture_filenames[diffuse_texture_index];
+			ImageData texture_data = read_image_data(texture_file_path.c_str());
 
+			GLuint texture_id;
+			glGenTextures(1, &texture_id);
+			glBindTexture(GL_TEXTURE_2D, texture_id);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+						 texture_data.width, texture_data.height, 0,
+						 texture_data.channels == 3 ? GL_RGB : GL_RGBA, GL_UNSIGNED_BYTE,
+						 texture_data.data());
 
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_REPEAT);
 
+			glGenerateMipmap(GL_TEXTURE_2D);
 
-	//Creating the VAO for the mesh that will be displayed
+			m_mesh_textures[diffuse_texture_index] = texture_id;
+		}
+	}
+
+    //Creating the VAO for the mesh that will be displayed
     glGenVertexArrays(1, &m_mesh_vao);
-	//Selecting the VAO that we're going to configure
+    //Selecting the VAO that we're going to configure
     glBindVertexArray(m_mesh_vao);
 
-	//Creation du position buffer
+    //Creation du position buffer
     GLuint mesh_buffer;
     glGenBuffers(1, &mesh_buffer);
     //On selectionne le position buffer
@@ -356,71 +444,8 @@ int TP2::init()
     glVertexAttribPointer(texcoord_attribute, /* size */ 2, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ (GLvoid*) (position_size + normal_size));
     glEnableVertexAttribArray(texcoord_attribute);
 
-    //Loading the textures on another thread
-    //std::thread texture_thread(&TP2::load_mesh_textures_thread_function, this, std::ref(m_mesh.materials()));
-
-	/*m_mesh_triangles_group = m_mesh.groups();
-
-    Materials& materials = m_mesh.materials();
-    m_mesh_textures.resize(materials.count());
-    for (const Material& mat : materials.materials)
-    {
-        int diffuse_texture_index = mat.diffuse_texture;
-        if (diffuse_texture_index != -1)
-        {
-            std::string texture_file_path = materials.texture_filenames[diffuse_texture_index];
-
-            std::string texture_file_path_full = texture_file_path;
-            ImageData texture_data = read_image_data(texture_file_path_full.c_str());
-
-            GLuint texture_id;
-            glGenTextures(1, &texture_id);
-            glBindTexture(GL_TEXTURE_2D, texture_id);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-                         texture_data.width, texture_data.height, 0,
-                         texture_data.channels == 3 ? GL_RGB : GL_RGBA, GL_UNSIGNED_BYTE,
-                         texture_data.data());
-
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_BORDER);
-
-            glGenerateMipmap(GL_TEXTURE_2D);
-
-            m_mesh_textures[diffuse_texture_index] = texture_id;
-        }
-    }*/
-
-	//TODO sur un thread
-	m_mesh_triangles_group = m_mesh.groups();
-	m_mesh_textures.resize(m_mesh.materials().filename_count());
-	for (Material& mat : m_mesh.materials().materials)
-	{
-		int diffuse_texture_index = mat.diffuse_texture;
-		if (diffuse_texture_index != -1)
-		{
-			std::string texture_file_path = m_mesh.materials().texture_filenames[diffuse_texture_index];
-			ImageData texture_data = read_image_data(texture_file_path.c_str());
-
-			GLuint texture_id;
-			glGenTextures(1, &texture_id);
-			glBindTexture(GL_TEXTURE_2D, texture_id);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-						 texture_data.width, texture_data.height, 0,
-						 texture_data.channels == 3 ? GL_RGB : GL_RGBA, GL_UNSIGNED_BYTE,
-						 texture_data.data());
-
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_REPEAT);
-
-			glGenerateMipmap(GL_TEXTURE_2D);
-
-			m_mesh_textures[diffuse_texture_index] = texture_id;
-		}
-	}
+    //Creating an empty VAO that will be used for the cubemap
+    glGenVertexArrays(1, &m_cubemap_vao);
 
 	//TODO sur un thread
 	compute_bounding_boxes_of_groups(m_mesh_triangles_group);
@@ -448,6 +473,7 @@ int TP2::init()
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     Point p_min, p_max;
+    //TODO ça recalcule tout les bounds alors qu'on les a deja calculés
     m_mesh.bounds(p_min, p_max);
     m_camera.lookat(p_min, p_max);
 
@@ -589,22 +615,33 @@ int TP2::render()
     //Drawing the mesh group by group
 	for (TriangleGroup& group : m_mesh_triangles_group)
 	{
-		if (is_group_visible_frustum_culling(group.index, mvpMatrix))
+        if (!rejection_test_bbox_frustum_culling(m_mesh_groups_bounding_boxes[group.index], mvpMatrix))
 		{
-			int diffuse_texture_index = m_mesh.materials()(group.index).diffuse_texture;
+            if (!rejection_test_bbox_frustum_culling_scene(m_mesh_groups_bounding_boxes[group.index], mvpMatrix.inverse()))
+            {
+                std::cout << "1 ";
+                fflush(stdout);
 
-			if (diffuse_texture_index != -1)
-			{
-				GLuint group_texture_id = m_mesh_textures[diffuse_texture_index];
-				glActiveTexture(GL_TEXTURE3); //The textures of the mesh are on unit 3
-				glBindTexture(GL_TEXTURE_2D, group_texture_id);
-			}
-			else
-				//TODO afficher le material plutot que la texture --> changer de shader
-				;
+                int diffuse_texture_index = m_mesh.materials()(group.index).diffuse_texture;
 
-			glDrawArrays(GL_TRIANGLES, group.first, group.n);
+                if (diffuse_texture_index != -1)
+                {
+                    GLuint group_texture_id = m_mesh_textures[diffuse_texture_index];
+                    glActiveTexture(GL_TEXTURE3); //The textures of the mesh are on unit 3
+                    glBindTexture(GL_TEXTURE_2D, group_texture_id);
+                }
+                else
+                    //TODO afficher le material plutot que la texture --> changer de shader
+                    ;
+
+                glDrawArrays(GL_TRIANGLES, group.first, group.n);
+            }
 		}
+        else
+        {
+            std::cout << "0 ";
+            fflush(stdout);
+        }
     }
 
 	//TODO la skysphere/skybox s'affiche seulement quand on click sur un radio button et avant on a rien

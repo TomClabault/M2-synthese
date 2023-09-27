@@ -34,7 +34,8 @@ public:
     void load_mesh_textures_thread_function(const Materials& materials);
 
 	void compute_bounding_boxes_of_groups(std::vector<TriangleGroup>& groups);
-	bool is_group_visible_frustum_culling(int group_index, const Transform& mvpMatrix);
+    bool rejection_test_bbox_frustum_culling(const BoundingBox& bbox, const Transform& mvpMatrix);
+    bool rejection_test_bbox_frustum_culling_scene(const BoundingBox& bbox, const Transform& inverse_mvp_matrix);
 
 	// creation des objets de l'application
 	int init();
