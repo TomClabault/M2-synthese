@@ -151,22 +151,6 @@ Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path
 				Vector tangent = normalize(cross(normal, arbitrary_vector));
 				Vector bitangent = cross(tangent, normal);
 
-				/*
-				float tb = dot(tangent, bitangent)
-				float bn = dot(bitangent, normal);
-				float nt = dot(tangent, normal);
-				if (tb != 0 || bn != 0 || nt != 0)
-					std::cout << "Non orthongonaux" << std::endl;
-
-				Vector tXb = cross(tangnt, normal);
-				Vector bXn = cross(bitangent, normal);
-				Vector nXt = cross(normal, tangent);
-
-				if (tXb != normal)
-					std::cout << "tangent != normal" << std::endl;
-				*/
-
-
 				//Transform obn(bitangent, normal, tangent, Vector(0, 0, 0));
 				Transform obn(tangent, bitangent, normal, Vector(0, 0, 0));
 
@@ -185,18 +169,6 @@ Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path
 					Vector random_direction_in_hemisphere_around_normal = obn(random_direction_in_canonical_hemisphere);
 					Vector random_direction_rotated = random_direction_in_hemisphere_around_normal;
 
-					//Vector random_direction_rotated;
-					//do
-					//{
-					//	Vector random_direction = normalize(Vector(Utils::xorshift32(&state) / (float)std::numeric_limits<unsigned int>::max() * 2 - 1, 
-					//									 Utils::xorshift32(&state) / (float)std::numeric_limits<unsigned int>::max() * 2 - 1,
-					//									 Utils::xorshift32(&state) / (float)std::numeric_limits<unsigned int>::max() * 2 - 1));
-
-					//	random_direction_rotated = obn(random_direction);
-
-					//	//We're checking that the generated direction is in the upper hemisphere (and not below)
-					//} while (dot(random_direction_rotated, normal) < 0.0f);
-
 					vec2 uv = vec2(0.5 + std::atan2(random_direction_rotated.z, random_direction_rotated.x) / (2.0f * M_PI), 0.5 + std::asin(random_direction_rotated.y) / M_PI);
 
 					sum = sum + skysphere_image(uv.x * skysphere_image.width(), uv.y * skysphere_image.height());
@@ -210,7 +182,10 @@ Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path
 			if (thread_id == 0)
 			{
 				if (completed_lines % 40)
-					printf("[%d*%d, %dx] - %.3f%% completed\n", skysphere_image.width(), skysphere_image.height(), samples, completed_lines / (float)skysphere_image.height() * 100);
+                {
+                    printf("[%d*%d, %dx] - %.3f%% completed", skysphere_image.width(), skysphere_image.height(), samples, completed_lines / (float)skysphere_image.height() * 100);
+                    std::cout << std::endl;
+                }
 			}
 		}
 	}

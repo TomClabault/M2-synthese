@@ -316,9 +316,9 @@ int TP2::init()
 	//m_repere = make_grid(10);
 
 	//Reading the mesh displayed
-    //m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
+    m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
 	//m_mesh = read_mesh("data/TPs/test_cubes.obj");
-    m_mesh = read_mesh("data/cube.obj");
+    //m_mesh = read_mesh("data/cube.obj");
     //m_mesh = read_mesh("data/E-45-Aircraft/E 45 Aircraft_obj.obj");
 	if (m_mesh.positions().size() == 0)
 	{
