@@ -258,26 +258,30 @@ bool TP2::rejection_test_bbox_frustum_culling_scene(const BoundingBox& bbox, con
        0--------1
     */
 
-    std::array<Vector, 8> frustum_points_projective_space
+    std::array<vec4, 8> frustum_points_projective_space
     {
-        Vector(-1, -1, -1),
-        Vector(1, -1, -1),
-        Vector(-1, 1, -1),
-        Vector(1, 1, -1),
-        Vector(-1, -1, 1),
-        Vector(1, -1, 1),
-        Vector(-1, 1, 1),
-        Vector(1, 1, 1)
+        vec4(-1, -1, -1, 1),
+        vec4(1, -1, -1, 1),
+        vec4(-1, 1, -1, 1),
+        vec4(1, 1, -1, 1),
+        vec4(-1, -1, 1, 1),
+        vec4(1, -1, 1, 1),
+        vec4(-1, 1, 1, 1),
+        vec4(1, 1, 1, 1)
     };
 
     std::vector<Vector> frustum_points_in_scene(8);
-    for (int i = 0; i < 8; i++)
-        frustum_points_in_scene[i] = inverse_mvp_matrix(frustum_points_projective_space[i]);
+	for (int i = 0; i < 8; i++)
+	{
+		vec4 world_space = inverse_mvp_matrix(frustum_points_projective_space[i]);
+		if (world_space.w != 0)
+			frustum_points_in_scene[i] = Vector(world_space) / world_space.w;
+	}
 
 	for (int coord_index = 0; coord_index < 6; coord_index++)
 	{
 		bool all_points_outside = true;
-		for (int i = 0; i < 6; i++)
+		for (int i = 0; i < 8; i++)
 		{
 			Vector& frustum_point = frustum_points_in_scene[i];
 
@@ -311,15 +315,10 @@ int TP2::init()
 	//Positioning the camera to a default state
     m_camera.read_orbiter("TPs/TP2/start_camera.txt");
 
-
-	//Creating a basic grid
-	//m_repere = make_grid(10);
-
 	//Reading the mesh displayed
-    m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
+    //m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
 	//m_mesh = read_mesh("data/TPs/test_cubes.obj");
-    //m_mesh = read_mesh("data/cube.obj");
-    //m_mesh = read_mesh("data/E-45-Aircraft/E 45 Aircraft_obj.obj");
+    m_mesh = read_mesh("data/cube.obj");
 	if (m_mesh.positions().size() == 0)
 	{
 		std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -337,9 +336,14 @@ int TP2::init()
 	glEnable(GL_DEPTH_TEST);                    // activer le ztest
 
 
+	m_wholescreen_texture_shader = read_program("data/TPs/shaders/shader_wholescreen_texture.glsl");
+	program_print_errors(m_wholescreen_texture_shader);
+
 	//Lecture du shader
     m_diffuse_texture_shader = read_program("data/TPs/shaders/shader_diffuse_texture.glsl");
     program_print_errors(m_diffuse_texture_shader);
+	m_shadow_map_program = read_program("data/TPs/shaders/shader_shadow_map.glsl");
+	program_print_errors(m_shadow_map_program);
     m_cubemap_shader = read_program("data/TPs/shaders/shader_cubemap.glsl");
 	program_print_errors(m_cubemap_shader);
 
@@ -434,6 +438,11 @@ int TP2::init()
     glVertexAttribPointer(texcoord_attribute, /* size */ 2, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ (GLvoid*) (position_size + normal_size));
     glEnableVertexAttribArray(texcoord_attribute);
 
+	//Settings the vertices positions for the shadow map program
+	glUseProgram(m_shadow_map_program);
+	glVertexAttribPointer(position_attribute, /* size */ 3, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ 0);
+	glEnableVertexAttribArray(position_attribute);
+
     //Creating an empty VAO that will be used for the cubemap
     glGenVertexArrays(1, &m_cubemap_vao);
 
@@ -465,8 +474,46 @@ int TP2::init()
     Point p_min, p_max;
     //TODO ça recalcule tout les bounds alors qu'on les a deja calculés
     m_mesh.bounds(p_min, p_max);
-    //m_camera.lookat(Point(-25, -25, -25), Point(25, 25, 25));
-    m_camera.lookat(p_min * 2, p_max * 2);
+    m_camera.lookat(p_min * 1.5, p_max * 1.5);
+
+	Orbiter light_camera = m_camera;
+	light_camera.rotation(90, 45);
+
+	//m_mlp_light_transform = Ortho(p_min.x, p_max.x, p_min.y, p_max.y, p_min.z, p_max.z) * light_camera.view();
+	//m_mlp_light_transform = light_camera.projection()* light_camera.view();
+	//m_mlp_light_transform = Ortho(-50, 50, -50, 50, -50, 50) * light_camera.view();
+	m_mlp_light_transform = m_camera.projection() * m_camera.view();
+
+	glGenTextures(1, &m_shadow_map);
+	//glActiveTexture(GL_TEXTURE0 + TP2::SHADOW_MAP_UNIT);
+	glBindTexture(GL_TEXTURE_2D, m_shadow_map);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+
+	glTexImage2D(GL_TEXTURE_2D, 0,
+				 GL_DEPTH_COMPONENT, TP2::SHADOW_MAP_RESOLUTION, TP2::SHADOW_MAP_RESOLUTION, 0,
+				 GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+
+	glGenerateMipmap(GL_TEXTURE_2D);
+
+	glGenFramebuffers(1, &m_shadow_map_framebuffer);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_shadow_map_framebuffer);
+	glFramebufferTexture(GL_DRAW_FRAMEBUFFER, /* attachment */ GL_DEPTH_ATTACHMENT, m_shadow_map, /* mipmap */ 0);
+	glDrawBuffer(GL_NONE);
+	glReadBuffer(GL_NONE);
+
+	if (glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+		return -1;
+
+	//Cleaning
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+
+	draw_shadow_map();
 
 	return 0;
 }
@@ -474,6 +521,68 @@ int TP2::init()
 int TP2::quit()
 {
 	return 0;//Error code 0 = no error
+}
+
+void TP2::draw_shadow_map()
+{
+	glClear(GL_DEPTH_BUFFER_BIT);
+	glViewport(0, 0, TP2::SHADOW_MAP_RESOLUTION, TP2::SHADOW_MAP_RESOLUTION);
+	glBindFramebuffer(GL_FRAMEBUFFER, m_shadow_map_framebuffer);
+
+	glUseProgram(m_shadow_map_program);
+
+	GLint mlp_matrix_uniform_location = glGetUniformLocation(m_shadow_map_program, "mlp_matrix");
+	//glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, m_mlp_light_transform.data());
+	glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, (m_camera.projection() * m_camera.view()).data());
+
+	glBindVertexArray(m_mesh_vao);
+	glDrawArrays(GL_TRIANGLES, 0, m_mesh.triangle_count() * 3);
+
+	//Cleaning
+	glViewport(0, 0, window_width(), window_height());
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glBindVertexArray(0);
+}
+
+void TP2::draw_skysphere()
+{
+	//Selecting the empty VAO for the cubemap shader
+	glBindVertexArray(m_cubemap_vao);
+	glUseProgram(m_cubemap_shader);
+	GLint camera_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_camera_position");
+	GLint use_cubemap_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_use_cubemap");
+	GLint inverse_matrix_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_inverse_matrix");
+
+	glUniform3f(camera_uniform_location, m_camera.position().x, m_camera.position().y, m_camera.position().z);
+	glUniformMatrix4fv(inverse_matrix_uniform_location, 1, GL_TRUE, (m_camera.viewport() * m_camera.projection() * m_camera.view() * Identity()).inverse().data());
+	glUniform1i(use_cubemap_uniform_location, m_application_settings.cubemap_or_skysphere);
+
+	if (m_application_settings.cubemap_or_skysphere)
+	{
+		//Cubemap
+
+		GLint cubemap_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_cubemap");
+
+		glActiveTexture(GL_TEXTURE0 + TP2::SKYBOX_UNIT);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, m_cubemap);
+
+		//The cubemap is on texture unit 0 so we're using 0 for the value of the uniform
+		glUniform1i(cubemap_uniform_location, 0);
+	}
+	else
+	{
+		//Skysphere
+
+		GLint skysphere_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_skysphere");
+
+		glActiveTexture(GL_TEXTURE0 + TP2::SKYSPHERE_UNIT);
+		glBindTexture(GL_TEXTURE_2D, m_skysphere);
+
+		//The skysphere is on texture unit 1 so we're using 1 for the value of the uniform
+		glUniform1i(skysphere_uniform_location, 1);
+	}
+
+	glDrawArrays(GL_TRIANGLES, 0, 3);
 }
 
 void TP2::draw_general_settings()
@@ -578,6 +687,21 @@ void TP2::draw_imgui()
 // dessiner une nouvelle image
 int TP2::render()
 {
+	draw_shadow_map();
+
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	glUseProgram(m_wholescreen_texture_shader);
+	GLint texture_sampler_location = glGetUniformLocation(m_wholescreen_texture_shader, "u_texture");
+	glActiveTexture(GL_TEXTURE0 + TP2::SHADOW_MAP_UNIT);
+	glBindTexture(GL_TEXTURE_2D, m_shadow_map);
+	glUniform1i(texture_sampler_location, SHADOW_MAP_UNIT);
+
+	glBindVertexArray(m_cubemap_vao);
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+
+	return 1;
+
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		
 
@@ -585,7 +709,8 @@ int TP2::render()
     glUseProgram(m_diffuse_texture_shader);
 
 	//On update l'uniform mvpMatrix de notre shader
-    Transform mvpMatrix = m_camera.projection() * m_camera.view() * Identity();
+	Transform mvpMatrix = m_camera.projection() * m_camera.view() * Identity();
+	Transform mvpMatrixInverse = mvpMatrix.inverse();
     GLint mvpMatrixLocation = glGetUniformLocation(m_diffuse_texture_shader, "mvpMatrix");
 	glUniformMatrix4fv(mvpMatrixLocation, 1, GL_TRUE, mvpMatrix.data());
 
@@ -596,7 +721,7 @@ int TP2::render()
 	//Setting up the irradiance map
     GLint irradiance_map_uniform_location = glGetUniformLocation(m_diffuse_texture_shader, "u_irradiance_map");
 	//The irradiance map is in texture unit 2
-	glActiveTexture(GL_TEXTURE2);
+	glActiveTexture(GL_TEXTURE0 + TP2::DIFFUSE_IRRADIANCE_MAP_UNIT);
 	glBindTexture(GL_TEXTURE_2D, m_irradiance_map);
 	glUniform1i(irradiance_map_uniform_location, 2);
 
@@ -609,7 +734,7 @@ int TP2::render()
 	{
         if (!rejection_test_bbox_frustum_culling(m_mesh_groups_bounding_boxes[group.index], mvpMatrix))
 		{
-            if (!rejection_test_bbox_frustum_culling_scene(m_mesh_groups_bounding_boxes[group.index], mvpMatrix.inverse()))
+            if (!rejection_test_bbox_frustum_culling_scene(m_mesh_groups_bounding_boxes[group.index], mvpMatrixInverse))
             {
                 //std::cout << "1 ";
                 //fflush(stdout);
@@ -619,7 +744,7 @@ int TP2::render()
                 if (diffuse_texture_index != -1)
                 {
                     GLuint group_texture_id = m_mesh_textures[diffuse_texture_index];
-                    glActiveTexture(GL_TEXTURE3); //The textures of the mesh are on unit 3
+                    glActiveTexture(GL_TEXTURE0 + TP2::TRIANGLE_GROUP_TEXTURE_UNIT); //The textures of the mesh are on unit 3
                     glBindTexture(GL_TEXTURE_2D, group_texture_id);
                 }
                 else
@@ -640,43 +765,7 @@ int TP2::render()
 
     std::cout << "Groups drawn: " << groups_sent_to_gpu << " / " << m_mesh_triangles_group.size() << std::endl;
 
-	//Selecting the empty VAO for the cubemap shader
-	glBindVertexArray(m_cubemap_vao);
-	glUseProgram(m_cubemap_shader);
-	GLint camera_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_camera_position");
-	GLint use_cubemap_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_use_cubemap");
-	GLint inverse_matrix_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_inverse_matrix");
-
-	glUniform3f(camera_uniform_location, m_camera.position().x, m_camera.position().y, m_camera.position().z);
-	glUniformMatrix4fv(inverse_matrix_uniform_location, 1, GL_TRUE, (m_camera.viewport() * m_camera.projection() * m_camera.view() * Identity()).inverse().data());
-	glUniform1i(use_cubemap_uniform_location, m_application_settings.cubemap_or_skysphere);
-
-	if (m_application_settings.cubemap_or_skysphere)
-	{
-		//Cubemap
-
-		GLint cubemap_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_cubemap");
-		
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_CUBE_MAP, m_cubemap);
-
-		//The cubemap is on texture unit 0 so we're using 0 for the value of the uniform
-		glUniform1i(cubemap_uniform_location, 0);
-	}
-	else
-	{
-		//Skysphere
-
-		GLint skysphere_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_skysphere");
-
-		glActiveTexture(GL_TEXTURE1);
-		glBindTexture(GL_TEXTURE_2D, m_skysphere);
-
-		//The skysphere is on texture unit 1 so we're using 1 for the value of the uniform
-		glUniform1i(skysphere_uniform_location, 1);
-	}
-
-	glDrawArrays(GL_TRIANGLES, 0, 3);
+	draw_skysphere();
 
 	////////// ImGUI //////////
 	draw_imgui();

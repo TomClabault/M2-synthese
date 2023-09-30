@@ -13,7 +13,7 @@ struct ApplicationSettings
 	int cubemap_or_skysphere = 0;
 
 	bool currently_recomputing_irradiance = false;
-    int irradiance_map_precomputation_samples = 512;
+    int irradiance_map_precomputation_samples = 8192;
 	int irradiance_map_precomputation_downscale_factor = 1;
     std::string irradiance_map_file_path = "data/TPs/AllSkyFree_Sky_EpicGloriousPink_Equirect.jpg";
 
