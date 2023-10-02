@@ -8,7 +8,7 @@ uniform mat4 mlp_matrix;
 
 void main()
 {
-	gl_Position = mlp_matrix* vec4(position, 1);
+	gl_Position = mlp_matrix * vec4(position, 1);
 }
 #endif
 
@@ -16,6 +16,6 @@ void main()
 
 void main()
 {
-	gl_FragDepth = 5;
+	//gl_FragDepth = 5;
 }
 #endif

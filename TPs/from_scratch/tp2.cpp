@@ -20,7 +20,7 @@
 #include <thread>
 
 // constructeur : donner les dimensions de l'image, et eventuellement la version d'openGL.
-TP2::TP2() : AppCamera(1280, 720, 3, 3, 16)
+TP2::TP2() : AppCamera(1280, 720, 3, 3, 8)
 {
 	m_app_timer = ApplicationTimer(this);
 }
@@ -316,9 +316,9 @@ int TP2::init()
     m_camera.read_orbiter("TPs/TP2/start_camera.txt");
 
 	//Reading the mesh displayed
-    //m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
+    m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
 	//m_mesh = read_mesh("data/TPs/test_cubes.obj");
-    m_mesh = read_mesh("data/cube.obj");
+    //m_mesh = read_mesh("data/cube.obj");
 	if (m_mesh.positions().size() == 0)
 	{
 		std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -438,11 +438,6 @@ int TP2::init()
     glVertexAttribPointer(texcoord_attribute, /* size */ 2, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ (GLvoid*) (position_size + normal_size));
     glEnableVertexAttribArray(texcoord_attribute);
 
-	//Settings the vertices positions for the shadow map program
-	glUseProgram(m_shadow_map_program);
-	glVertexAttribPointer(position_attribute, /* size */ 3, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ 0);
-	glEnableVertexAttribArray(position_attribute);
-
     //Creating an empty VAO that will be used for the cubemap
     glGenVertexArrays(1, &m_cubemap_vao);
 
@@ -472,7 +467,7 @@ int TP2::init()
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     Point p_min, p_max;
-    //TODO ça recalcule tout les bounds alors qu'on les a deja calculés
+    //TODO ça recalcule tout les bounds alors qu'on les a deja calculees
     m_mesh.bounds(p_min, p_max);
     m_camera.lookat(p_min * 1.5, p_max * 1.5);
 
@@ -485,8 +480,11 @@ int TP2::init()
 	m_mlp_light_transform = m_camera.projection() * m_camera.view();
 
 	glGenTextures(1, &m_shadow_map);
-	//glActiveTexture(GL_TEXTURE0 + TP2::SHADOW_MAP_UNIT);
 	glBindTexture(GL_TEXTURE_2D, m_shadow_map);
+
+	glTexImage2D(GL_TEXTURE_2D, 0,
+				 GL_DEPTH_COMPONENT32F, TP2::SHADOW_MAP_RESOLUTION, TP2::SHADOW_MAP_RESOLUTION, 0,
+				 GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -494,10 +492,6 @@ int TP2::init()
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-
-	glTexImage2D(GL_TEXTURE_2D, 0,
-				 GL_DEPTH_COMPONENT, TP2::SHADOW_MAP_RESOLUTION, TP2::SHADOW_MAP_RESOLUTION, 0,
-				 GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
 
 	glGenerateMipmap(GL_TEXTURE_2D);
 
@@ -513,7 +507,7 @@ int TP2::init()
 	//Cleaning
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 
-	draw_shadow_map();
+	//draw_shadow_map();
 
 	return 0;
 }
@@ -525,12 +519,11 @@ int TP2::quit()
 
 void TP2::draw_shadow_map()
 {
-	glClear(GL_DEPTH_BUFFER_BIT);
 	glViewport(0, 0, TP2::SHADOW_MAP_RESOLUTION, TP2::SHADOW_MAP_RESOLUTION);
-	glBindFramebuffer(GL_FRAMEBUFFER, m_shadow_map_framebuffer);
+	glClear(GL_DEPTH_BUFFER_BIT);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_shadow_map_framebuffer);
 
 	glUseProgram(m_shadow_map_program);
-
 	GLint mlp_matrix_uniform_location = glGetUniformLocation(m_shadow_map_program, "mlp_matrix");
 	//glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, m_mlp_light_transform.data());
 	glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, (m_camera.projection() * m_camera.view()).data());
@@ -540,7 +533,7 @@ void TP2::draw_shadow_map()
 
 	//Cleaning
 	glViewport(0, 0, window_width(), window_height());
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 	glBindVertexArray(0);
 }
 
@@ -689,7 +682,7 @@ int TP2::render()
 {
 	draw_shadow_map();
 
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	glUseProgram(m_wholescreen_texture_shader);
 	GLint texture_sampler_location = glGetUniformLocation(m_wholescreen_texture_shader, "u_texture");
