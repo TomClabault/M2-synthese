@@ -3,7 +3,7 @@ bin/*.exe
 bin/*.pdb
 bin/
 obj/
-build
+build*/
 *.make
 *.cbp
 extern/

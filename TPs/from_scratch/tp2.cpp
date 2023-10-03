@@ -448,7 +448,7 @@ int TP2::init()
 
     std::thread load_thread_cubemap = std::thread([&] {cubemap_data = Utils::read_cubemap_data("data/TPs/skybox", ".jpg"); });
 	std::thread load_thread_skypshere = std::thread([&] {skysphere_data = Utils::read_skysphere_data(m_application_settings.irradiance_map_file_path.c_str()); });
-	std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_data = Utils::precompute_and_load_associated_irradiance(m_application_settings.irradiance_map_file_path.c_str(), m_application_settings.irradiance_map_precomputation_samples); });
+    std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_data = Utils::precompute_and_load_associated_irradiance(m_application_settings.irradiance_map_file_path.c_str(), m_application_settings.irradiance_map_precomputation_samples, m_application_settings.irradiance_map_precomputation_downscale_factor); });
 	load_thread_cubemap.join();
 	load_thread_skypshere.join();
 	load_thread_irradiance_map.join();
