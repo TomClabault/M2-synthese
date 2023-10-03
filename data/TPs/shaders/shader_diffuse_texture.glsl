@@ -56,7 +56,10 @@ void main()
     if (texture_color.a == 0)
         discard;
     else
+    {
         gl_FragColor = texture_color;
+
+    }
     //gl_FragColor = vec4((vs_normal + 1) * 0.5, 1);
 }
 #endif

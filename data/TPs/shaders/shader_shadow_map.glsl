@@ -11,11 +11,3 @@ void main()
 	gl_Position = mlp_matrix * vec4(position, 1);
 }
 #endif
-
-#ifdef FRAGMENT_SHADER
-
-void main()
-{
-	//gl_FragDepth = 5;
-}
-#endif

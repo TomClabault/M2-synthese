@@ -316,9 +316,9 @@ int TP2::init()
     m_camera.read_orbiter("TPs/TP2/start_camera.txt");
 
 	//Reading the mesh displayed
-    m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
+    //m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
 	//m_mesh = read_mesh("data/TPs/test_cubes.obj");
-    //m_mesh = read_mesh("data/cube.obj");
+    m_mesh = read_mesh("data/cube.obj");
 	if (m_mesh.positions().size() == 0)
 	{
 		std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -484,12 +484,12 @@ int TP2::init()
 
 	glTexImage2D(GL_TEXTURE_2D, 0,
 				 GL_DEPTH_COMPONENT32F, TP2::SHADOW_MAP_RESOLUTION, TP2::SHADOW_MAP_RESOLUTION, 0,
-				 GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+                 GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
 
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
 
@@ -507,7 +507,7 @@ int TP2::init()
 	//Cleaning
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 
-	//draw_shadow_map();
+    draw_shadow_map();
 
 	return 0;
 }
@@ -519,9 +519,9 @@ int TP2::quit()
 
 void TP2::draw_shadow_map()
 {
-	glViewport(0, 0, TP2::SHADOW_MAP_RESOLUTION, TP2::SHADOW_MAP_RESOLUTION);
-	glClear(GL_DEPTH_BUFFER_BIT);
-	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_shadow_map_framebuffer);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_shadow_map_framebuffer);
+    glViewport(0, 0, TP2::SHADOW_MAP_RESOLUTION, TP2::SHADOW_MAP_RESOLUTION);
+    glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
 	glUseProgram(m_shadow_map_program);
 	GLint mlp_matrix_uniform_location = glGetUniformLocation(m_shadow_map_program, "mlp_matrix");
@@ -532,8 +532,8 @@ void TP2::draw_shadow_map()
 	glDrawArrays(GL_TRIANGLES, 0, m_mesh.triangle_count() * 3);
 
 	//Cleaning
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 	glViewport(0, 0, window_width(), window_height());
-	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 	glBindVertexArray(0);
 }
 
@@ -680,18 +680,18 @@ void TP2::draw_imgui()
 // dessiner une nouvelle image
 int TP2::render()
 {
-	draw_shadow_map();
+    //draw_shadow_map();
 
-	//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	glUseProgram(m_wholescreen_texture_shader);
-	GLint texture_sampler_location = glGetUniformLocation(m_wholescreen_texture_shader, "u_texture");
-	glActiveTexture(GL_TEXTURE0 + TP2::SHADOW_MAP_UNIT);
-	glBindTexture(GL_TEXTURE_2D, m_shadow_map);
-	glUniform1i(texture_sampler_location, SHADOW_MAP_UNIT);
+    glUseProgram(m_wholescreen_texture_shader);
+    GLint texture_sampler_location = glGetUniformLocation(m_wholescreen_texture_shader, "u_texture");
+    glActiveTexture(GL_TEXTURE0 + TP2::SHADOW_MAP_UNIT);
+    glBindTexture(GL_TEXTURE_2D, m_shadow_map);
+    glUniform1i(texture_sampler_location, SHADOW_MAP_UNIT);
 
-	glBindVertexArray(m_cubemap_vao);
-	glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(m_cubemap_vao);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
 
 	return 1;
 

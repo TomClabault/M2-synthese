@@ -12,7 +12,7 @@ void main()
 	//Because we expect gl_Position to be a vec4, we're adding z=0 and w=1.
 	//w=1 is the classical homogenous coordinate and z=0 is the near plane so that
 	//we render the texture in front of everything
-	gl_Position = vec4(triangle_vertices[gl_VertexID], 1, 1);
+        gl_Position = vec4(triangle_vertices[gl_VertexID], 1, 1);
 	vs_tex_coords = triangle_tex_coords[gl_VertexID];
 }
 #endif
