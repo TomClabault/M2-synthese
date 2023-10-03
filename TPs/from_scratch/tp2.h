@@ -45,6 +45,9 @@ public:
 
 	void update_recomputed_irradiance_map();
 
+	void draw_shadow_map();
+	void draw_skysphere();
+
 	void draw_general_settings();
     void draw_lighting_window();
 	void draw_imgui();
@@ -54,12 +57,16 @@ public:
 
     inline static const Vector LIGHT_POSITION = Vector(2, 0, -10);
     inline static const std::string IRRADIANCE_MAPS_CACHE_FOLDER = "TPs/from_scratch/data/irradiance_maps_cache";
+	inline static const int SKYBOX_UNIT = 0;
+	inline static const int SKYSPHERE_UNIT = 1;
+	inline static const int DIFFUSE_IRRADIANCE_MAP_UNIT = 2;
+	inline static const int TRIANGLE_GROUP_TEXTURE_UNIT = 3;
+	inline static const int SHADOW_MAP_UNIT = 4;
+
+	inline static const int SHADOW_MAP_RESOLUTION = 2048;
 
 protected:
 	ApplicationTimer m_app_timer;
-
-
-
 
 
 
@@ -79,6 +86,12 @@ protected:
 	GLuint m_cubemap;
 	GLuint m_skysphere;
 	GLuint m_irradiance_map;
+
+	GLuint m_wholescreen_texture_shader;//Debug shadow map shader
+	GLuint m_shadow_map_program;
+	GLuint m_shadow_map_framebuffer;
+	GLuint m_shadow_map;
+	Transform m_mlp_light_transform;
 
 	//This contains the data of an irradiance map that has just been recomputed
 	//We need to use this data to update the OpenGl texture used by the shader
