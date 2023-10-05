@@ -306,14 +306,16 @@ int TP2::init()
 
 	//Positioning the camera to a default state
     m_camera.read_orbiter("data/TPs/start_camera.txt");
-    m_light_camera.read_orbiter("data/TPs/start_camera.txt");
-    m_mlp_light_transform = m_light_camera.projection() * m_light_camera.view();
+    m_light_camera.read_orbiter("data/TPs/app_orbiter.txt");
+    m_mlp_light_transform = TP2::LIGHT_CAMERA_ORTHO_PROJ_BISTRO * m_light_camera.view();
+
+    m_debug_current_projection = TP2::LIGHT_CAMERA_ORTHO_PROJ_BISTRO;
 
 	//Reading the mesh displayed
-    //m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
+    m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
 	//m_mesh = read_mesh("data/TPs/test_cubes.obj");
     //m_mesh = read_mesh("data/cube.obj");
-    m_mesh = read_mesh("data/cube_plane_touching.obj");
+    //m_mesh = read_mesh("data/cube_plane_touching.obj");
 	if (m_mesh.positions().size() == 0)
 	{
 		std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -494,6 +496,8 @@ int TP2::init()
 	//Cleaning
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 
+    m_mlp_light_transform = Ortho(p_min.x, p_max.x, p_min.y, p_max.y, 0.1, 100) * m_light_camera.view();
+
     draw_shadow_map();
 
 	return 0;
@@ -645,6 +649,13 @@ void TP2::draw_lighting_window()
         for (const auto& entry : std::filesystem::directory_iterator(TP2::IRRADIANCE_MAPS_CACHE_FOLDER))
 			std::filesystem::remove_all(entry.path());
 	}
+
+    ImGui::InputFloat("min x", &m_debug_min_x);
+    ImGui::InputFloat("max x", &m_debug_max_x);
+    ImGui::InputFloat("min y", &m_debug_min_y);
+    ImGui::InputFloat("max y", &m_debug_max_y);
+    ImGui::InputFloat("min z", &m_debug_min_z);
+    ImGui::InputFloat("max z", &m_debug_max_z);
 }
 
 void TP2::draw_imgui()
@@ -733,6 +744,8 @@ int TP2::render()
 
         return 1;
     }
+
+    m_mlp_light_transform = Ortho(m_debug_min_x, m_debug_max_x, m_debug_min_y, m_debug_max_y, m_debug_min_z, m_debug_max_z) * m_light_camera.view();
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 

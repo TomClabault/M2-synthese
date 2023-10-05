@@ -62,7 +62,8 @@ public:
 	inline static const int TRIANGLE_GROUP_TEXTURE_UNIT = 3;
 	inline static const int SHADOW_MAP_UNIT = 4;
 
-	inline static const int SHADOW_MAP_RESOLUTION = 2048;
+    inline static const Transform LIGHT_CAMERA_ORTHO_PROJ_BISTRO = Ortho(-90, 110, -35, 50, 0.1, 160);
+    inline static const int SHADOW_MAP_RESOLUTION = 1600;
 
 protected:
 	ApplicationTimer m_app_timer;
@@ -93,6 +94,9 @@ protected:
 
     Orbiter m_light_camera;
 	Transform m_mlp_light_transform;
+
+    Transform m_debug_current_projection;
+    float m_debug_min_x = -90, m_debug_max_x = 110, m_debug_min_y = -35, m_debug_max_y = 50, m_debug_min_z = 0.1, m_debug_max_z = 160;
 
 	//This contains the data of an irradiance map that has just been recomputed
 	//We need to use this data to update the OpenGl texture used by the shader

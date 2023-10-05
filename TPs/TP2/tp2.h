@@ -12,7 +12,7 @@
 class TP2 : public AppCamera
 {
 public:
-        TP2();
+    TP2();
 
 	int get_window_width();
 	int get_window_height();

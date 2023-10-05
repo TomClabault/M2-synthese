@@ -79,8 +79,7 @@ void main()
         discard;
     else
     {
-        gl_FragColor = vec4(1.0f);
-
+        gl_FragColor = texture_color;
         gl_FragColor = gl_FragColor * compute_shadow(vs_position_light_space, normalize(vs_normal), normalize(u_light_position - vs_position));
     }
 }
