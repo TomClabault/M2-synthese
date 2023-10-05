@@ -44,6 +44,7 @@ public:
 
 	void update_recomputed_irradiance_map();
 
+    void create_shadow_map_texture();
 	void draw_shadow_map();
 	void draw_skysphere();
 
@@ -62,8 +63,8 @@ public:
 	inline static const int TRIANGLE_GROUP_TEXTURE_UNIT = 3;
 	inline static const int SHADOW_MAP_UNIT = 4;
 
-    inline static const Transform LIGHT_CAMERA_ORTHO_PROJ_BISTRO = Ortho(-90, 110, -35, 50, 0.1, 160);
-    inline static const int SHADOW_MAP_RESOLUTION = 1600;
+    inline static const Transform LIGHT_CAMERA_ORTHO_PROJ_BISTRO = Ortho(-60, 90, -80, 110, 50, 190);
+    inline static const int SHADOW_MAP_RESOLUTION = 16384;
 
 protected:
 	ApplicationTimer m_app_timer;
@@ -90,7 +91,7 @@ protected:
 	GLuint m_wholescreen_texture_shader;//Debug shadow map shader
 	GLuint m_shadow_map_program;
 	GLuint m_shadow_map_framebuffer;
-	GLuint m_shadow_map;
+    GLuint m_shadow_map = 0;
 
     Orbiter m_light_camera;
 	Transform m_mlp_light_transform;

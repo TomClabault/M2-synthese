@@ -305,11 +305,9 @@ int TP2::init()
 	ImGui_ImplSdlGL3_Init(m_window);
 
 	//Positioning the camera to a default state
-    m_camera.read_orbiter("data/TPs/start_camera.txt");
-    m_light_camera.read_orbiter("data/TPs/app_orbiter.txt");
+    m_camera.read_orbiter("data/TPs/app_orbiter.txt");
+    m_light_camera.read_orbiter("data/TPs/light_camera_bistro.txt");
     m_mlp_light_transform = TP2::LIGHT_CAMERA_ORTHO_PROJ_BISTRO * m_light_camera.view();
-
-    m_debug_current_projection = TP2::LIGHT_CAMERA_ORTHO_PROJ_BISTRO;
 
 	//Reading the mesh displayed
     m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
@@ -464,13 +462,13 @@ int TP2::init()
     Point p_min, p_max;
     //TODO ça recalcule tous les bounds alors qu'on les a deja calculees
     m_mesh.bounds(p_min, p_max);
-    m_camera.lookat(p_min, p_max);
+    //m_camera.lookat(p_min, p_max);
 
-	glGenTextures(1, &m_shadow_map);
-	glBindTexture(GL_TEXTURE_2D, m_shadow_map);
+    glGenTextures(1, &m_shadow_map);
+    glBindTexture(GL_TEXTURE_2D, m_shadow_map);
 
-	glTexImage2D(GL_TEXTURE_2D, 0,
-				 GL_DEPTH_COMPONENT32F, TP2::SHADOW_MAP_RESOLUTION, TP2::SHADOW_MAP_RESOLUTION, 0,
+    glTexImage2D(GL_TEXTURE_2D, 0,
+                 GL_DEPTH_COMPONENT32F, TP2::SHADOW_MAP_RESOLUTION, TP2::SHADOW_MAP_RESOLUTION, 0,
                  GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
 
     float border_color[] = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -480,23 +478,21 @@ int TP2::init()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
 
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
 
-	glGenerateMipmap(GL_TEXTURE_2D);
+    glGenerateMipmap(GL_TEXTURE_2D);
 
-	glGenFramebuffers(1, &m_shadow_map_framebuffer);
-	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_shadow_map_framebuffer);
-	glFramebufferTexture(GL_DRAW_FRAMEBUFFER, /* attachment */ GL_DEPTH_ATTACHMENT, m_shadow_map, /* mipmap */ 0);
-	glDrawBuffer(GL_NONE);
-	glReadBuffer(GL_NONE);
+    glGenFramebuffers(1, &m_shadow_map_framebuffer);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_shadow_map_framebuffer);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    glFramebufferTexture(GL_DRAW_FRAMEBUFFER, /* attachment */ GL_DEPTH_ATTACHMENT, m_shadow_map, /* mipmap */ 0);
 
-	if (glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    if (glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
 		return -1;
 
 	//Cleaning
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-
-    m_mlp_light_transform = Ortho(p_min.x, p_max.x, p_min.y, p_max.y, 0.1, 100) * m_light_camera.view();
 
     draw_shadow_map();
 
@@ -506,6 +502,30 @@ int TP2::init()
 int TP2::quit()
 {
 	return 0;//Error code 0 = no error
+}
+
+void TP2::create_shadow_map_texture()
+{
+    if (m_shadow_map != 0)
+        glDeleteTextures(1, &m_shadow_map);
+
+    glGenTextures(1, &m_shadow_map);
+    glBindTexture(GL_TEXTURE_2D, m_shadow_map);
+
+    glTexImage2D(GL_TEXTURE_2D, 0,
+                 GL_DEPTH_COMPONENT32F, m_application_settings.shadow_map_width_resolution, m_application_settings.shadow_map_height_resolution, 0,
+                 GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+
+    float border_color[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border_color);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+
+    glGenerateMipmap(GL_TEXTURE_2D);
 }
 
 void TP2::draw_shadow_map()
@@ -650,12 +670,13 @@ void TP2::draw_lighting_window()
 			std::filesystem::remove_all(entry.path());
 	}
 
-    ImGui::InputFloat("min x", &m_debug_min_x);
-    ImGui::InputFloat("max x", &m_debug_max_x);
-    ImGui::InputFloat("min y", &m_debug_min_y);
-    ImGui::InputFloat("max y", &m_debug_max_y);
-    ImGui::InputFloat("min z", &m_debug_min_z);
-    ImGui::InputFloat("max z", &m_debug_max_z);
+    //Debug light camera position
+//    ImGui::InputFloat("min x", &m_debug_min_x);
+//    ImGui::InputFloat("max x", &m_debug_max_x);
+//    ImGui::InputFloat("min y", &m_debug_min_y);
+//    ImGui::InputFloat("max y", &m_debug_max_y);
+//    ImGui::InputFloat("min z", &m_debug_min_z);
+//    ImGui::InputFloat("max z", &m_debug_max_z);
 }
 
 void TP2::draw_imgui()
@@ -744,8 +765,6 @@ int TP2::render()
 
         return 1;
     }
-
-    m_mlp_light_transform = Ortho(m_debug_min_x, m_debug_max_x, m_debug_min_y, m_debug_max_y, m_debug_min_z, m_debug_max_z) * m_light_camera.view();
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 

@@ -44,21 +44,50 @@ in vec3 vs_normal;
 in vec3 vs_position;
 in vec2 vs_texcoords;
 
+float percentage_closer_filtering(sampler2D shadow_map, vec2 texcoords, float scene_depth, float bias)
+{
+    ivec2 texture_size = textureSize(shadow_map, 0);
+    vec2 texel_size = 1.0f / texture_size;
+
+    float shadow_sum = 0.0f;
+//    for (int i = -2; i <= 2; i++)
+//    {
+//        for (int j = -2; j <= 2; j++)
+//        {
+//            float shadow_map_depth = texture(shadow_map, texcoords + vec2(i, j) * texel_size).r;
+//            shadow_sum += scene_depth - bias > shadow_map_depth ? 0.4f : 1.0f;
+//        }
+//    }
+
+//    return shadow_sum / 25.0f;
+
+    for (int i = -1; i <= 1; i++)
+    {
+        for (int j = -1; j <= 1; j++)
+        {
+            float shadow_map_depth = texture(shadow_map, texcoords + vec2(i, j) * texel_size).r;
+            shadow_sum += scene_depth - bias > shadow_map_depth ? 0.4f : 1.0f;
+        }
+    }
+
+    return shadow_sum / 9.0f;
+}
+
 float compute_shadow(vec4 light_space_fragment_position, vec3 normal, vec3 light_direction)
 {
 
     vec3 projected_point = light_space_fragment_position.xyz / light_space_fragment_position.w;
     projected_point = projected_point * 0.5 + 0.5;
 
-    float shadow_map_depth = texture(u_shadow_map, projected_point.xy).r;
     float scene_projected_depth = projected_point.z;
     if(scene_projected_depth > 1)
         return 1.0f;
 
     //Bias with a minimum of 0.005 for perpendicular angles. 0.05 for grazing angles
     float bias = max((1.0f - dot(normal, light_direction)) * 0.005, 0.001);
+    float shadow_map_depth = percentage_closer_filtering(u_shadow_map, projected_point.xy, scene_projected_depth, bias);
 
-    return scene_projected_depth - bias > shadow_map_depth ? 0.0f : 1.0f;
+    return shadow_map_depth;
 }
 
 void main()

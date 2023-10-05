@@ -11,6 +11,9 @@ struct ApplicationSettings
 
 	//1 for cubemap, 0 for skysphere
 	int cubemap_or_skysphere = 0;
+
+    int shadow_map_width_resolution = 2048;
+    int shadow_map_height_resolution = 2048;
     bool draw_shadow_map = false;
     bool bind_light_camera_to_camera = false;
 
