@@ -6,18 +6,21 @@ layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
 layout(location = 2) in vec2 texcoords;
 
-uniform mat4 mvpMatrix;
+uniform mat4 u_mvp_matrix;
+uniform mat4 u_mlp_matrix;
 
+out vec4 vs_position_light_space;
 out vec3 vs_position;
 out vec3 vs_normal;
 out vec2 vs_texcoords;
 
 void main()
 {
-    gl_Position = mvpMatrix * vec4(position, 1);
+    gl_Position = u_mvp_matrix * vec4(position, 1);
 
     vs_normal = normal;
-    vs_position = position;
+    vs_position = position;//Model transformation omitted
+    vs_position_light_space = u_mlp_matrix * vec4(position, 1);
     vs_texcoords = texcoords;
 }
 #endif
@@ -34,10 +37,29 @@ uniform vec4 u_ambient_color;
 
 uniform sampler2D u_irradiance_map;
 uniform sampler2D u_mesh_texture;
+uniform sampler2D u_shadow_map;
 
+in vec4 vs_position_light_space;
 in vec3 vs_normal;
 in vec3 vs_position;
 in vec2 vs_texcoords;
+
+float compute_shadow(vec4 light_space_fragment_position, vec3 normal, vec3 light_direction)
+{
+
+    vec3 projected_point = light_space_fragment_position.xyz / light_space_fragment_position.w;
+    projected_point = projected_point * 0.5 + 0.5;
+
+    float shadow_map_depth = texture(u_shadow_map, projected_point.xy).r;
+    float scene_projected_depth = projected_point.z;
+    if(scene_projected_depth > 1)
+        return 1.0f;
+
+    //Bias with a minimum of 0.005 for perpendicular angles. 0.05 for grazing angles
+    float bias = max((1.0f - dot(normal, light_direction)) * 0.005, 0.001);
+
+    return scene_projected_depth - bias > shadow_map_depth ? 0.0f : 1.0f;
+}
 
 void main()
 {
@@ -57,9 +79,9 @@ void main()
         discard;
     else
     {
-        gl_FragColor = texture_color;
+        gl_FragColor = vec4(1.0f);
 
+        gl_FragColor = gl_FragColor * compute_shadow(vs_position_light_space, normalize(vs_normal), normalize(u_light_position - vs_position));
     }
-    //gl_FragColor = vec4((vs_normal + 1) * 0.5, 1);
 }
 #endif

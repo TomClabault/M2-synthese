@@ -27,7 +27,6 @@ public:
 	int postrender() override;
 
 	void update_ambient_uniforms();
-	void setup_light_position_uniform(const vec3& light_position);
 	void setup_diffuse_color_uniform();
 	void setup_roughness_uniform(const float roughness);
 
@@ -55,8 +54,8 @@ public:
 	// dessiner une nouvelle image
     int render();
 
-    inline static const Vector LIGHT_POSITION = Vector(2, 0, -10);
     inline static const std::string IRRADIANCE_MAPS_CACHE_FOLDER = "TPs/from_scratch/data/irradiance_maps_cache";
+
 	inline static const int SKYBOX_UNIT = 0;
 	inline static const int SKYSPHERE_UNIT = 1;
 	inline static const int DIFFUSE_IRRADIANCE_MAP_UNIT = 2;
@@ -91,6 +90,8 @@ protected:
 	GLuint m_shadow_map_program;
 	GLuint m_shadow_map_framebuffer;
 	GLuint m_shadow_map;
+
+    Orbiter m_light_camera;
 	Transform m_mlp_light_transform;
 
 	//This contains the data of an irradiance map that has just been recomputed

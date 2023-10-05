@@ -117,14 +117,6 @@ void TP2::update_ambient_uniforms()
 	glUniform4f(ambient_color_location, m_application_settings.ambient_color.r, m_application_settings.ambient_color.g, m_application_settings.ambient_color.b, m_application_settings.ambient_color.a);
 }
 
-void TP2::setup_light_position_uniform(const vec3& light_position)
-{
-    glUseProgram(m_diffuse_texture_shader);
-
-    GLint light_position_location = glGetUniformLocation(m_diffuse_texture_shader, "u_light_position");
-	glUniform3f(light_position_location, light_position.x, light_position.y, light_position.z);
-}
-
 void TP2::load_mesh_textures_thread_function(const Materials& materials)
 {
     m_mesh_textures.resize(materials.count());
@@ -313,12 +305,15 @@ int TP2::init()
 	ImGui_ImplSdlGL3_Init(m_window);
 
 	//Positioning the camera to a default state
-    m_camera.read_orbiter("TPs/TP2/start_camera.txt");
+    m_camera.read_orbiter("data/TPs/start_camera.txt");
+    m_light_camera.read_orbiter("data/TPs/start_camera.txt");
+    m_mlp_light_transform = m_light_camera.projection() * m_light_camera.view();
 
 	//Reading the mesh displayed
     //m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
 	//m_mesh = read_mesh("data/TPs/test_cubes.obj");
-    m_mesh = read_mesh("data/cube.obj");
+    //m_mesh = read_mesh("data/cube.obj");
+    m_mesh = read_mesh("data/cube_plane_touching.obj");
 	if (m_mesh.positions().size() == 0)
 	{
 		std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -339,9 +334,18 @@ int TP2::init()
 	m_wholescreen_texture_shader = read_program("data/TPs/shaders/shader_wholescreen_texture.glsl");
 	program_print_errors(m_wholescreen_texture_shader);
 
-	//Lecture du shader
     m_diffuse_texture_shader = read_program("data/TPs/shaders/shader_diffuse_texture.glsl");
     program_print_errors(m_diffuse_texture_shader);
+
+    GLint use_irradiance_map_location = glGetUniformLocation(m_diffuse_texture_shader, "u_use_irradiance_map");
+    glUniform1i(use_irradiance_map_location, m_application_settings.use_ambient);
+
+    GLint diffuse_texture_uniform_location = glGetUniformLocation(m_diffuse_texture_shader, "u_mesh_texture");
+    glUniform1i(diffuse_texture_uniform_location, 3);//The mesh texture is on unit 3
+
+    GLint ambient_color_location = glGetUniformLocation(m_diffuse_texture_shader, "u_ambient_color");
+    glUniform4f(ambient_color_location, m_application_settings.ambient_color.r, m_application_settings.ambient_color.g, m_application_settings.ambient_color.b, m_application_settings.ambient_color.a);
+
 	m_shadow_map_program = read_program("data/TPs/shaders/shader_shadow_map.glsl");
 	program_print_errors(m_shadow_map_program);
     m_cubemap_shader = read_program("data/TPs/shaders/shader_cubemap.glsl");
@@ -349,18 +353,7 @@ int TP2::init()
 
 	GLint skysphere_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_skysphere");
 	//The skysphere is on texture unit 1 so we're using 1 for the value of the uniform
-	glUniform1i(skysphere_uniform_location, 1);
-		
-    setup_light_position_uniform(TP2::LIGHT_POSITION);
-
-    GLint use_irradiance_map_location = glGetUniformLocation(m_diffuse_texture_shader, "u_use_irradiance_map");
-	glUniform1i(use_irradiance_map_location, m_application_settings.use_ambient);
-
-    GLint diffuse_texture_uniform_location = glGetUniformLocation(m_diffuse_texture_shader, "u_mesh_texture");
-    glUniform1i(diffuse_texture_uniform_location, 3);//The mesh texture is on unit 3
-
-    GLint ambient_color_location = glGetUniformLocation(m_diffuse_texture_shader, "u_ambient_color");
-	glUniform4f(ambient_color_location, m_application_settings.ambient_color.r, m_application_settings.ambient_color.g, m_application_settings.ambient_color.b, m_application_settings.ambient_color.a);
+    glUniform1i(skysphere_uniform_location, 1);
 
 
 
@@ -370,7 +363,7 @@ int TP2::init()
     //std::thread texture_thread(&TP2::load_mesh_textures_thread_function, this, std::ref(m_mesh.materials()));
 
 	//TODO sur un thread
-	m_mesh_triangles_group = m_mesh.groups();
+    m_mesh_triangles_group = m_mesh.groups();
 	m_mesh_textures.resize(m_mesh.materials().filename_count());
 	for (Material& mat : m_mesh.materials().materials)
 	{
@@ -467,17 +460,9 @@ int TP2::init()
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     Point p_min, p_max;
-    //TODO ça recalcule tout les bounds alors qu'on les a deja calculees
+    //TODO ça recalcule tous les bounds alors qu'on les a deja calculees
     m_mesh.bounds(p_min, p_max);
-    m_camera.lookat(p_min * 1.5, p_max * 1.5);
-
-	Orbiter light_camera = m_camera;
-	light_camera.rotation(90, 45);
-
-	//m_mlp_light_transform = Ortho(p_min.x, p_max.x, p_min.y, p_max.y, p_min.z, p_max.z) * light_camera.view();
-	//m_mlp_light_transform = light_camera.projection()* light_camera.view();
-	//m_mlp_light_transform = Ortho(-50, 50, -50, 50, -50, 50) * light_camera.view();
-	m_mlp_light_transform = m_camera.projection() * m_camera.view();
+    m_camera.lookat(p_min, p_max);
 
 	glGenTextures(1, &m_shadow_map);
 	glBindTexture(GL_TEXTURE_2D, m_shadow_map);
@@ -486,6 +471,8 @@ int TP2::init()
 				 GL_DEPTH_COMPONENT32F, TP2::SHADOW_MAP_RESOLUTION, TP2::SHADOW_MAP_RESOLUTION, 0,
                  GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
 
+    float border_color[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border_color);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
@@ -522,11 +509,14 @@ void TP2::draw_shadow_map()
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_shadow_map_framebuffer);
     glViewport(0, 0, TP2::SHADOW_MAP_RESOLUTION, TP2::SHADOW_MAP_RESOLUTION);
     glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+    glCullFace(GL_FRONT);
 
 	glUseProgram(m_shadow_map_program);
 	GLint mlp_matrix_uniform_location = glGetUniformLocation(m_shadow_map_program, "mlp_matrix");
-	//glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, m_mlp_light_transform.data());
-	glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, (m_camera.projection() * m_camera.view()).data());
+    if (m_application_settings.bind_light_camera_to_camera)
+        glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, (m_camera.projection() * m_camera.view()).data());
+    else
+        glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, m_mlp_light_transform.data());
 
 	glBindVertexArray(m_mesh_vao);
 	glDrawArrays(GL_TRIANGLES, 0, m_mesh.triangle_count() * 3);
@@ -535,6 +525,7 @@ void TP2::draw_shadow_map()
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 	glViewport(0, 0, window_width(), window_height());
 	glBindVertexArray(0);
+    glCullFace(GL_BACK);
 }
 
 void TP2::draw_skysphere()
@@ -620,7 +611,9 @@ void TP2::draw_lighting_window()
 	ImGui::RadioButton("Use Skybox", &m_application_settings.cubemap_or_skysphere, 1); ImGui::SameLine();
 	ImGui::RadioButton("Use Skysphere", &m_application_settings.cubemap_or_skysphere, 0);
     ImGui::Separator();
-	ImGui::Separator();
+    ImGui::Checkbox("Draw Shadow Map", &m_application_settings.draw_shadow_map);
+    ImGui::Checkbox("Bind Light Camera to Camera", &m_application_settings.bind_light_camera_to_camera);
+    ImGui::Separator();
 	ImGui::Text("Irradiance map");
 	ImGui::DragInt("Irradiance Map Precomputation Samples", &m_application_settings.irradiance_map_precomputation_samples, 1.0f, 1, 2048);
 	ImGui::DragInt("Irradiance Map Downscale Factor", &m_application_settings.irradiance_map_precomputation_downscale_factor, 1.0f, 1, 8);
@@ -677,26 +670,71 @@ void TP2::draw_imgui()
 	ImGui_ImplSdlGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
+Mesh make_frustum( )
+{
+    glLineWidth(2);
+    Mesh camera= Mesh(GL_LINES);
+
+    camera.color(Yellow());
+    // face avant
+    camera.vertex(-1, -1, -1);
+    camera.vertex(-1, 1, -1);
+    camera.vertex(-1, 1, -1);
+    camera.vertex(1, 1, -1);
+    camera.vertex(1, 1, -1);
+    camera.vertex(1, -1, -1);
+    camera.vertex(1, -1, -1);
+    camera.vertex(-1, -1, -1);
+
+    // face arriere
+    camera.vertex(-1, -1, 1);
+    camera.vertex(-1, 1, 1);
+    camera.vertex(-1, 1, 1);
+    camera.vertex(1, 1, 1);
+    camera.vertex(1, 1, 1);
+    camera.vertex(1, -1, 1);
+    camera.vertex(1, -1, 1);
+    camera.vertex(-1, -1, 1);
+
+    // aretes
+    camera.vertex(-1, -1, -1);
+    camera.vertex(-1, -1, 1);
+    camera.vertex(-1, 1, -1);
+    camera.vertex(-1, 1, 1);
+    camera.vertex(1, 1, -1);
+    camera.vertex(1, 1, 1);
+    camera.vertex(1, -1, -1);
+    camera.vertex(1, -1, 1);
+
+    return camera;
+}
+
 // dessiner une nouvelle image
 int TP2::render()
 {
-    //draw_shadow_map();
+    if (m_application_settings.draw_shadow_map)
+    {
+        draw_shadow_map();
 
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glUseProgram(m_wholescreen_texture_shader);
-    GLint texture_sampler_location = glGetUniformLocation(m_wholescreen_texture_shader, "u_texture");
-    glActiveTexture(GL_TEXTURE0 + TP2::SHADOW_MAP_UNIT);
-    glBindTexture(GL_TEXTURE_2D, m_shadow_map);
-    glUniform1i(texture_sampler_location, SHADOW_MAP_UNIT);
+        glUseProgram(m_wholescreen_texture_shader);
+        GLint texture_sampler_location = glGetUniformLocation(m_wholescreen_texture_shader, "u_texture");
+        glActiveTexture(GL_TEXTURE0 + TP2::SHADOW_MAP_UNIT);
+        glBindTexture(GL_TEXTURE_2D, m_shadow_map);
+        glUniform1i(texture_sampler_location, TP2::SHADOW_MAP_UNIT);
 
-    glBindVertexArray(m_cubemap_vao);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
+        glBindVertexArray(m_cubemap_vao);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
 
-	return 1;
+        ////////// ImGUI //////////
+        draw_imgui();
+        ////////// ImGUI //////////
+
+        return 1;
+    }
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		
 
 	//On selectionne notre shader
     glUseProgram(m_diffuse_texture_shader);
@@ -704,8 +742,11 @@ int TP2::render()
 	//On update l'uniform mvpMatrix de notre shader
 	Transform mvpMatrix = m_camera.projection() * m_camera.view() * Identity();
 	Transform mvpMatrixInverse = mvpMatrix.inverse();
-    GLint mvpMatrixLocation = glGetUniformLocation(m_diffuse_texture_shader, "mvpMatrix");
+    GLint mvpMatrixLocation = glGetUniformLocation(m_diffuse_texture_shader, "u_mvp_matrix");
 	glUniformMatrix4fv(mvpMatrixLocation, 1, GL_TRUE, mvpMatrix.data());
+
+    GLint mlpMatrixLocation = glGetUniformLocation(m_diffuse_texture_shader, "u_mlp_matrix");
+    glUniformMatrix4fv(mlpMatrixLocation, 1, GL_TRUE, m_mlp_light_transform.data());
 
 	//Setting the camera position
     GLint camera_position_uniform_location = glGetUniformLocation(m_diffuse_texture_shader, "u_camera_position");
@@ -716,7 +757,15 @@ int TP2::render()
 	//The irradiance map is in texture unit 2
 	glActiveTexture(GL_TEXTURE0 + TP2::DIFFUSE_IRRADIANCE_MAP_UNIT);
 	glBindTexture(GL_TEXTURE_2D, m_irradiance_map);
-	glUniform1i(irradiance_map_uniform_location, 2);
+    glUniform1i(irradiance_map_uniform_location, TP2::DIFFUSE_IRRADIANCE_MAP_UNIT);
+
+    GLint shadow_map_uniform_location = glGetUniformLocation(m_diffuse_texture_shader, "u_shadow_map");
+    glActiveTexture(GL_TEXTURE0 + TP2::SHADOW_MAP_UNIT);
+    glBindTexture(GL_TEXTURE_2D, m_shadow_map);
+    glUniform1i(shadow_map_uniform_location, TP2::SHADOW_MAP_UNIT);
+
+    GLint light_position_uniform_location = glGetUniformLocation(m_diffuse_texture_shader, "u_light_position");
+    glUniform3f(light_position_uniform_location, m_light_camera.position().x, m_light_camera.position().y, m_light_camera.position().z);
 
     //Selecting the VAO of the mesh
     glBindVertexArray(m_mesh_vao);
@@ -741,7 +790,7 @@ int TP2::render()
                     glBindTexture(GL_TEXTURE_2D, group_texture_id);
                 }
                 else
-                    //TODO afficher le material plutot que la texture --> changer de shader
+                    //TODO afficher texture blanche
                     ;
 
                 glDrawArrays(GL_TRIANGLES, group.first, group.n);
@@ -756,9 +805,35 @@ int TP2::render()
         }
     }
 
-    std::cout << "Groups drawn: " << groups_sent_to_gpu << " / " << m_mesh_triangles_group.size() << std::endl;
+    //std::cout << "Groups drawn: " << groups_sent_to_gpu << " / " << m_mesh_triangles_group.size() << std::endl;
 
 	draw_skysphere();
+
+
+
+
+
+
+
+    // affiche le frustum de la camera
+    Mesh frustum_mesh = make_frustum();
+    draw(frustum_mesh, m_mlp_light_transform.inverse(), camera());
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 	////////// ImGUI //////////
 	draw_imgui();

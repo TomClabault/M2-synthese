@@ -11,6 +11,8 @@ struct ApplicationSettings
 
 	//1 for cubemap, 0 for skysphere
 	int cubemap_or_skysphere = 0;
+    bool draw_shadow_map = false;
+    bool bind_light_camera_to_camera = false;
 
 	bool currently_recomputing_irradiance = false;
     int irradiance_map_precomputation_samples = 8192;

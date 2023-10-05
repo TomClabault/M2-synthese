@@ -39,9 +39,7 @@ public:
 	void draw_imgui();
 
 	// dessiner une nouvelle image
-        int render();
-
-        inline static const Vector LIGHT_POSITION = Vector(2, 0, -10);
+    int render();
 
 protected:
 	ApplicationTimer m_app_timer;

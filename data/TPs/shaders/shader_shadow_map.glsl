@@ -8,6 +8,6 @@ uniform mat4 mlp_matrix;
 
 void main()
 {
-	gl_Position = mlp_matrix * vec4(position, 1);
+    gl_Position = mlp_matrix * vec4(position, 1);
 }
 #endif
