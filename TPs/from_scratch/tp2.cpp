@@ -28,6 +28,9 @@ TP2::TP2() : AppCamera(1280, 720, 3, 3, 8)
 int TP2::get_window_width() { return window_width(); }
 int TP2::get_window_height() { return window_height(); }
 
+int TP2::mesh_groups_count() { return m_mesh_triangles_group.size(); }
+int TP2::mesh_groups_drawn() { return m_mesh_groups_drawn; }
+
 int TP2::prerender()
 {
 	//Timing of the application
@@ -107,19 +110,41 @@ int TP2::postrender()
 
 void TP2::update_ambient_uniforms()
 {
-    glUseProgram(m_diffuse_texture_shader);
+    glUseProgram(m_texture_shadow_cook_torrance_shader);
 
-    GLuint use_irradiance_map_location = glGetUniformLocation(m_diffuse_texture_shader, "u_use_irradiance_map");
+    GLuint use_irradiance_map_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_use_irradiance_map");
 	glUniform1i(use_irradiance_map_location, m_application_settings.use_ambient);
 
 	//TODO supprimer ambient color parce qu'on utilise que l'irradiance map, pas de ambient color a deux balles
-    GLuint ambient_color_location = glGetUniformLocation(m_diffuse_texture_shader, "u_ambient_color");
+    GLuint ambient_color_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_ambient_color");
 	glUniform4f(ambient_color_location, m_application_settings.ambient_color.r, m_application_settings.ambient_color.g, m_application_settings.ambient_color.b, m_application_settings.ambient_color.a);
+}
+
+GLuint TP2::create_opengl_texture(std::string& filepath)
+{
+    ImageData texture_data = read_image_data(filepath.c_str());
+
+    GLuint texture_id;
+    glGenTextures(1, &texture_id);
+    glBindTexture(GL_TEXTURE_2D, texture_id);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+                 texture_data.width, texture_data.height, 0,
+                 texture_data.channels == 3 ? GL_RGB : GL_RGBA, GL_UNSIGNED_BYTE,
+                 texture_data.data());
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_REPEAT);
+
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    return texture_id;
 }
 
 void TP2::load_mesh_textures_thread_function(const Materials& materials)
 {
-    m_mesh_textures.resize(materials.count());
+    m_mesh_base_color_textures.resize(materials.count());
     for (const Material& mat : materials.materials)
     {
         int diffuse_texture_index = mat.diffuse_texture;
@@ -145,7 +170,7 @@ void TP2::load_mesh_textures_thread_function(const Materials& materials)
 
             glGenerateMipmap(GL_TEXTURE_2D);
 
-            m_mesh_textures[diffuse_texture_index] = texture_id;
+            m_mesh_base_color_textures[diffuse_texture_index] = texture_id;
         }
     }
 }
@@ -310,10 +335,10 @@ int TP2::init()
     m_mlp_light_transform = TP2::LIGHT_CAMERA_ORTHO_PROJ_BISTRO * m_light_camera.view();
 
 	//Reading the mesh displayed
-    m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
-	//m_mesh = read_mesh("data/TPs/test_cubes.obj");
-    //m_mesh = read_mesh("data/cube.obj");
+    //m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
+    m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj");
     //m_mesh = read_mesh("data/cube_plane_touching.obj");
+    //m_mesh = read_mesh("data/sphere_high.obj");
 	if (m_mesh.positions().size() == 0)
 	{
 		std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -334,17 +359,17 @@ int TP2::init()
 	m_wholescreen_texture_shader = read_program("data/TPs/shaders/shader_wholescreen_texture.glsl");
 	program_print_errors(m_wholescreen_texture_shader);
 
-    m_diffuse_texture_shader = read_program("data/TPs/shaders/shader_diffuse_texture.glsl");
-    program_print_errors(m_diffuse_texture_shader);
+    m_texture_shadow_cook_torrance_shader = read_program("data/TPs/shaders/shader_texture_shadow_cook_torrance_shader.glsl");
+    program_print_errors(m_texture_shadow_cook_torrance_shader);
 
-    GLint use_irradiance_map_location = glGetUniformLocation(m_diffuse_texture_shader, "u_use_irradiance_map");
+    GLint use_irradiance_map_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_use_irradiance_map");
     glUniform1i(use_irradiance_map_location, m_application_settings.use_ambient);
 
-    GLint diffuse_texture_uniform_location = glGetUniformLocation(m_diffuse_texture_shader, "u_mesh_texture");
-    glUniform1i(diffuse_texture_uniform_location, 3);//The mesh texture is on unit 3
+    GLint base_color_texture_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_mesh_base_color_texture");
+    glUniform1i(base_color_texture_uniform_location, TP2::TRIANGLE_GROUP_BASE_COLOR_TEXTURE_UNIT);//The mesh texture is on unit 3
 
-    GLint ambient_color_location = glGetUniformLocation(m_diffuse_texture_shader, "u_ambient_color");
-    glUniform4f(ambient_color_location, m_application_settings.ambient_color.r, m_application_settings.ambient_color.g, m_application_settings.ambient_color.b, m_application_settings.ambient_color.a);
+    GLint specular_texture_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_mesh_specular_texture");
+    glUniform1i(specular_texture_uniform_location, TP2::TRIANGLE_GROUP_SPECULAR_TEXTURE_UNIT);//The mesh texture is on unit 3
 
 	m_shadow_map_program = read_program("data/TPs/shaders/shader_shadow_map.glsl");
 	program_print_errors(m_shadow_map_program);
@@ -364,33 +389,35 @@ int TP2::init()
 
 	//TODO sur un thread
     m_mesh_triangles_group = m_mesh.groups();
-	m_mesh_textures.resize(m_mesh.materials().filename_count());
+    m_mesh_base_color_textures.resize(m_mesh.materials().filename_count());
+    m_mesh_specular_textures.resize(m_mesh.materials().filename_count());
 	for (Material& mat : m_mesh.materials().materials)
 	{
-		int diffuse_texture_index = mat.diffuse_texture;
+        int diffuse_texture_index = mat.diffuse_texture;
+        int specular_texture_index = mat.specular_texture;
 		if (diffuse_texture_index != -1)
 		{
-			std::string texture_file_path = m_mesh.materials().texture_filenames[diffuse_texture_index];
-			ImageData texture_data = read_image_data(texture_file_path.c_str());
-
-			GLuint texture_id;
-			glGenTextures(1, &texture_id);
-			glBindTexture(GL_TEXTURE_2D, texture_id);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-						 texture_data.width, texture_data.height, 0,
-						 texture_data.channels == 3 ? GL_RGB : GL_RGBA, GL_UNSIGNED_BYTE,
-						 texture_data.data());
-
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_REPEAT);
-
-			glGenerateMipmap(GL_TEXTURE_2D);
-
-			m_mesh_textures[diffuse_texture_index] = texture_id;
+            GLuint texture_id = create_opengl_texture(m_mesh.materials().texture_filenames[diffuse_texture_index]);
+            m_mesh_base_color_textures[diffuse_texture_index] = texture_id;
 		}
+
+        if (specular_texture_index != -1)
+        {
+            GLuint texture_id = create_opengl_texture(m_mesh.materials().texture_filenames[specular_texture_index]);
+            m_mesh_specular_textures[specular_texture_index] = texture_id;
+        }
 	}
+
+    //Generating the default textures that the triangle groups that don't have texture will use
+    unsigned char default_texture_data[3] = {255, 255, 255};
+    glGenTextures(1, &m_default_texture);
+    glBindTexture(GL_TEXTURE_2D, m_default_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGB, GL_UNSIGNED_BYTE, default_texture_data);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_REPEAT);
+    glGenerateMipmap(GL_TEXTURE_2D);
 
     //Creating the VAO for the mesh that will be displayed
     glGenVertexArrays(1, &m_mesh_vao);
@@ -418,7 +445,7 @@ int TP2::init()
     glBufferSubData(GL_ARRAY_BUFFER, position_size + normal_size, m_mesh.texcoord_buffer_size(), m_mesh.texcoord_buffer());
 
 
-    glUseProgram(m_diffuse_texture_shader);
+    glUseProgram(m_texture_shadow_cook_torrance_shader);
     //Setting the id of the attributes (set using layout in the shader)
     GLint position_attribute = 0;//glGetAttribLocation(m_diffuse_texture_shader, "position");
     GLint normal_attribute = 1;//glGetAttribLocation(m_diffuse_texture_shader, "normal");
@@ -504,30 +531,6 @@ int TP2::quit()
 	return 0;//Error code 0 = no error
 }
 
-void TP2::create_shadow_map_texture()
-{
-    if (m_shadow_map != 0)
-        glDeleteTextures(1, &m_shadow_map);
-
-    glGenTextures(1, &m_shadow_map);
-    glBindTexture(GL_TEXTURE_2D, m_shadow_map);
-
-    glTexImage2D(GL_TEXTURE_2D, 0,
-                 GL_DEPTH_COMPONENT32F, m_application_settings.shadow_map_width_resolution, m_application_settings.shadow_map_height_resolution, 0,
-                 GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
-
-    float border_color[] = { 1.0f, 1.0f, 1.0f, 1.0f };
-    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border_color);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-
-    glGenerateMipmap(GL_TEXTURE_2D);
-}
-
 void TP2::draw_shadow_map()
 {
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_shadow_map_framebuffer);
@@ -593,6 +596,55 @@ void TP2::draw_skysphere()
 	glDrawArrays(GL_TRIANGLES, 0, 3);
 }
 
+Mesh make_frustum( )
+{
+    glLineWidth(2);
+    Mesh camera= Mesh(GL_LINES);
+
+    camera.color(Yellow());
+    // face avant
+    camera.vertex(-1, -1, -1);
+    camera.vertex(-1, 1, -1);
+    camera.vertex(-1, 1, -1);
+    camera.vertex(1, 1, -1);
+    camera.vertex(1, 1, -1);
+    camera.vertex(1, -1, -1);
+    camera.vertex(1, -1, -1);
+    camera.vertex(-1, -1, -1);
+
+    // face arriere
+    camera.vertex(-1, -1, 1);
+    camera.vertex(-1, 1, 1);
+    camera.vertex(-1, 1, 1);
+    camera.vertex(1, 1, 1);
+    camera.vertex(1, 1, 1);
+    camera.vertex(1, -1, 1);
+    camera.vertex(1, -1, 1);
+    camera.vertex(-1, -1, 1);
+
+    // aretes
+    camera.vertex(-1, -1, -1);
+    camera.vertex(-1, -1, 1);
+    camera.vertex(-1, 1, -1);
+    camera.vertex(-1, 1, 1);
+    camera.vertex(1, 1, -1);
+    camera.vertex(1, 1, 1);
+    camera.vertex(1, -1, -1);
+    camera.vertex(1, -1, 1);
+
+    return camera;
+}
+
+void TP2::draw_light_camera_frustum()
+{
+    if (m_application_settings.draw_light_camera_frustum)
+    {
+        // affiche le frustum de la camera
+        Mesh frustum_mesh = make_frustum();
+        draw(frustum_mesh, m_mlp_light_transform.inverse(), camera());
+    }
+}
+
 void TP2::draw_general_settings()
 {
 	if (ImGui::Checkbox("Enable VSync", &m_application_settings.enable_vsync))
@@ -637,6 +689,7 @@ void TP2::draw_lighting_window()
     ImGui::Separator();
     ImGui::Checkbox("Draw Shadow Map", &m_application_settings.draw_shadow_map);
     ImGui::Checkbox("Bind Light Camera to Camera", &m_application_settings.bind_light_camera_to_camera);
+    ImGui::Checkbox("Show Light Camera Frustum", &m_application_settings.draw_light_camera_frustum);
     ImGui::Separator();
 	ImGui::Text("Irradiance map");
 	ImGui::DragInt("Irradiance Map Precomputation Samples", &m_application_settings.irradiance_map_precomputation_samples, 1.0f, 1, 2048);
@@ -702,45 +755,6 @@ void TP2::draw_imgui()
 	ImGui_ImplSdlGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
-Mesh make_frustum( )
-{
-    glLineWidth(2);
-    Mesh camera= Mesh(GL_LINES);
-
-    camera.color(Yellow());
-    // face avant
-    camera.vertex(-1, -1, -1);
-    camera.vertex(-1, 1, -1);
-    camera.vertex(-1, 1, -1);
-    camera.vertex(1, 1, -1);
-    camera.vertex(1, 1, -1);
-    camera.vertex(1, -1, -1);
-    camera.vertex(1, -1, -1);
-    camera.vertex(-1, -1, -1);
-
-    // face arriere
-    camera.vertex(-1, -1, 1);
-    camera.vertex(-1, 1, 1);
-    camera.vertex(-1, 1, 1);
-    camera.vertex(1, 1, 1);
-    camera.vertex(1, 1, 1);
-    camera.vertex(1, -1, 1);
-    camera.vertex(1, -1, 1);
-    camera.vertex(-1, -1, 1);
-
-    // aretes
-    camera.vertex(-1, -1, -1);
-    camera.vertex(-1, -1, 1);
-    camera.vertex(-1, 1, -1);
-    camera.vertex(-1, 1, 1);
-    camera.vertex(1, 1, -1);
-    camera.vertex(1, 1, 1);
-    camera.vertex(1, -1, -1);
-    camera.vertex(1, -1, 1);
-
-    return camera;
-}
-
 // dessiner une nouvelle image
 int TP2::render()
 {
@@ -766,105 +780,82 @@ int TP2::render()
         return 1;
     }
 
+    m_mesh_groups_drawn = 0;
+
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	//On selectionne notre shader
-    glUseProgram(m_diffuse_texture_shader);
+    glUseProgram(m_texture_shadow_cook_torrance_shader);
 
 	//On update l'uniform mvpMatrix de notre shader
 	Transform mvpMatrix = m_camera.projection() * m_camera.view() * Identity();
 	Transform mvpMatrixInverse = mvpMatrix.inverse();
-    GLint mvpMatrixLocation = glGetUniformLocation(m_diffuse_texture_shader, "u_mvp_matrix");
+    GLint mvpMatrixLocation = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_mvp_matrix");
 	glUniformMatrix4fv(mvpMatrixLocation, 1, GL_TRUE, mvpMatrix.data());
 
-    GLint mlpMatrixLocation = glGetUniformLocation(m_diffuse_texture_shader, "u_mlp_matrix");
+    GLint mlpMatrixLocation = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_mlp_matrix");
     glUniformMatrix4fv(mlpMatrixLocation, 1, GL_TRUE, m_mlp_light_transform.data());
 
 	//Setting the camera position
-    GLint camera_position_uniform_location = glGetUniformLocation(m_diffuse_texture_shader, "u_camera_position");
+    GLint camera_position_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_camera_position");
 	glUniform3f(camera_position_uniform_location, m_camera.position().x, m_camera.position().y, m_camera.position().z);
 
 	//Setting up the irradiance map
-    GLint irradiance_map_uniform_location = glGetUniformLocation(m_diffuse_texture_shader, "u_irradiance_map");
+    GLint irradiance_map_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_irradiance_map");
 	//The irradiance map is in texture unit 2
 	glActiveTexture(GL_TEXTURE0 + TP2::DIFFUSE_IRRADIANCE_MAP_UNIT);
 	glBindTexture(GL_TEXTURE_2D, m_irradiance_map);
     glUniform1i(irradiance_map_uniform_location, TP2::DIFFUSE_IRRADIANCE_MAP_UNIT);
 
-    GLint shadow_map_uniform_location = glGetUniformLocation(m_diffuse_texture_shader, "u_shadow_map");
+    GLint shadow_map_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_shadow_map");
     glActiveTexture(GL_TEXTURE0 + TP2::SHADOW_MAP_UNIT);
     glBindTexture(GL_TEXTURE_2D, m_shadow_map);
     glUniform1i(shadow_map_uniform_location, TP2::SHADOW_MAP_UNIT);
 
-    GLint light_position_uniform_location = glGetUniformLocation(m_diffuse_texture_shader, "u_light_position");
+    GLint light_position_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_light_position");
     glUniform3f(light_position_uniform_location, m_light_camera.position().x, m_light_camera.position().y, m_light_camera.position().z);
 
     //Selecting the VAO of the mesh
     glBindVertexArray(m_mesh_vao);
 
     //Drawing the mesh group by group
-    int groups_sent_to_gpu = 0;
 	for (TriangleGroup& group : m_mesh_triangles_group)
 	{
         if (!rejection_test_bbox_frustum_culling(m_mesh_groups_bounding_boxes[group.index], mvpMatrix))
 		{
             if (!rejection_test_bbox_frustum_culling_scene(m_mesh_groups_bounding_boxes[group.index], mvpMatrixInverse))
             {
-                //std::cout << "1 ";
-                //fflush(stdout);
-
                 int diffuse_texture_index = m_mesh.materials()(group.index).diffuse_texture;
+                int specular_texture_index = m_mesh.materials()(group.index).specular_texture;
 
                 if (diffuse_texture_index != -1)
                 {
-                    GLuint group_texture_id = m_mesh_textures[diffuse_texture_index];
-                    glActiveTexture(GL_TEXTURE0 + TP2::TRIANGLE_GROUP_TEXTURE_UNIT); //The textures of the mesh are on unit 3
-                    glBindTexture(GL_TEXTURE_2D, group_texture_id);
+                    GLuint group_base_color_texture_id = m_mesh_base_color_textures[diffuse_texture_index];
+                    glActiveTexture(GL_TEXTURE0 + TP2::TRIANGLE_GROUP_BASE_COLOR_TEXTURE_UNIT); //The textures of the mesh are on unit 3
+                    glBindTexture(GL_TEXTURE_2D, group_base_color_texture_id);
                 }
                 else
-                    //TODO afficher texture blanche
-                    ;
+                {
+                    glActiveTexture(GL_TEXTURE0 + TP2::TRIANGLE_GROUP_BASE_COLOR_TEXTURE_UNIT); //The textures of the mesh are on unit 3
+                    glBindTexture(GL_TEXTURE_2D, m_default_texture);
+                }
+
+                if (specular_texture_index != -1)
+                {
+                    GLuint group_specular_texture_id = m_mesh_specular_textures[specular_texture_index];
+                    glActiveTexture(GL_TEXTURE0 + TP2::TRIANGLE_GROUP_SPECULAR_TEXTURE_UNIT); //The textures of the mesh are on unit 3
+                    glBindTexture(GL_TEXTURE_2D, group_specular_texture_id);
+                }
 
                 glDrawArrays(GL_TRIANGLES, group.first, group.n);
 
-                groups_sent_to_gpu++;
+                m_mesh_groups_drawn++;
             }
 		}
-        else
-        {
-            //std::cout << "0 ";
-            //fflush(stdout);
-        }
     }
 
-    //std::cout << "Groups drawn: " << groups_sent_to_gpu << " / " << m_mesh_triangles_group.size() << std::endl;
-
 	draw_skysphere();
-
-
-
-
-
-
-
-    // affiche le frustum de la camera
-    Mesh frustum_mesh = make_frustum();
-    draw(frustum_mesh, m_mlp_light_transform.inverse(), camera());
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    draw_light_camera_frustum();
 
 
 	////////// ImGUI //////////

@@ -23,6 +23,9 @@ public:
 	int get_window_width();
 	int get_window_height();
 
+    int mesh_groups_count();
+    int mesh_groups_drawn();
+
 	int prerender() override;
 	int postrender() override;
 
@@ -30,6 +33,7 @@ public:
 	void setup_diffuse_color_uniform();
 	void setup_roughness_uniform(const float roughness);
 
+    GLuint create_opengl_texture(std::string& filepath);
     void load_mesh_textures_thread_function(const Materials& materials);
 
 	void compute_bounding_boxes_of_groups(std::vector<TriangleGroup>& groups);
@@ -44,8 +48,8 @@ public:
 
 	void update_recomputed_irradiance_map();
 
-    void create_shadow_map_texture();
 	void draw_shadow_map();
+    void draw_light_camera_frustum();
 	void draw_skysphere();
 
 	void draw_general_settings();
@@ -60,8 +64,9 @@ public:
 	inline static const int SKYBOX_UNIT = 0;
 	inline static const int SKYSPHERE_UNIT = 1;
 	inline static const int DIFFUSE_IRRADIANCE_MAP_UNIT = 2;
-	inline static const int TRIANGLE_GROUP_TEXTURE_UNIT = 3;
-	inline static const int SHADOW_MAP_UNIT = 4;
+    inline static const int TRIANGLE_GROUP_BASE_COLOR_TEXTURE_UNIT = 3;
+    inline static const int TRIANGLE_GROUP_SPECULAR_TEXTURE_UNIT = 4;
+    inline static const int SHADOW_MAP_UNIT = 5;
 
     inline static const Transform LIGHT_CAMERA_ORTHO_PROJ_BISTRO = Ortho(-60, 90, -80, 110, 50, 190);
     inline static const int SHADOW_MAP_RESOLUTION = 16384;
@@ -75,13 +80,16 @@ protected:
 
 	//Mesh m_repere;
 	Mesh m_mesh;
+    int m_mesh_groups_drawn;
 	std::vector<BoundingBox> m_mesh_groups_bounding_boxes;
     std::vector<TriangleGroup> m_mesh_triangles_group;
-	std::vector<GLuint> m_mesh_textures;
+    std::vector<GLuint> m_mesh_base_color_textures;
+    std::vector<GLuint> m_mesh_specular_textures;
+    GLuint m_default_texture;
 
 	GLuint m_cubemap_vao;
     GLuint m_mesh_vao;
-    GLuint m_diffuse_texture_shader;
+    GLuint m_texture_shadow_cook_torrance_shader;
 
 	GLuint m_cubemap_shader;
 	GLuint m_cubemap;

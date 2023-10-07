@@ -76,7 +76,8 @@ void ApplicationTimer::postrender()
 	// afficher le texte
 	clear(m_console);
 	printf(m_console, 0, 1, "cpu  %02dms %03dus (%04d FPS)", cpu_time / 1000, cpu_time % 1000, (int)(1000000.0f / cpu_time));
-	printf(m_console, 0, 2, "gpu  %02dms %03dus (%04d FPS)", int(m_frame_time / 1000000), int((m_frame_time / 1000) % 1000), int(1000000000.0f / m_frame_time));
+    printf(m_console, 0, 2, "gpu  %02dms %03dus (%04d FPS)", int(m_frame_time / 1000000), int((m_frame_time / 1000) % 1000), int(1000000000.0f / m_frame_time));
+    printf(m_console, 0, 3, "Triangle groups drawn: %d / %d", m_tp2->mesh_groups_drawn(), m_tp2->mesh_groups_count());
 
 	// affiche le temps dans le terminal 
 	//~ printf("cpu  %02dms %03dus    ", cpu_time / 1000, cpu_time % 1000);
