@@ -18,9 +18,9 @@ public:
 
 	static void precompute_irradiance_map_from_skysphere_and_write(const char* skysphere_path, unsigned int samples, unsigned int downscale_factor, const char* output_irradiance_map_path);
 	static Image precompute_irradiance_map_from_skysphere(const char* skysphere_path, unsigned int samples, unsigned int downscale_factor = 1);
-	static ImageData precompute_and_load_associated_irradiance(const char* skysphere_file_path, unsigned int samples = 20, unsigned int downscale_factor = 1);
+    static Image precompute_and_load_associated_irradiance(const char* skysphere_file_path, unsigned int samples = 20, unsigned int downscale_factor = 1);
 
-	static std::vector<ImageData> read_cubemap_data(const char* folder_name, const char* face_extension);
+    static std::vector<ImageData> read_cubemap_data(const char* folder_name, const char* face_extension);
 	static GLuint create_cubemap_texture_from_data(std::vector<ImageData>& faces_data);
 	/*
 	 * @param folder_name The folder containing the faces of the cubemap. The folder path should NOT contain a trailing '/'
@@ -31,8 +31,8 @@ public:
 
 	static void downscale_image(const Image& input_image, Image& downscaled_output, const int factor);
 
-	static ImageData read_skysphere_data(const char* filename);
-	static GLuint create_skysphere_texture_from_data(ImageData& skysphere_image_data, int texture_unit);
+    static Image read_skysphere_image(const char* filename);
+    static GLuint create_skysphere_texture_hdr(Image& skysphere_image, int texture_unit);
 	static GLuint create_skysphere_texture_from_path(const char* filename, int texture_unit);
 };
 

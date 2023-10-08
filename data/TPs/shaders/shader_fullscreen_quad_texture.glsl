@@ -25,7 +25,6 @@ in vec2 vs_tex_coords;
 
 void main()
 {
-    float depthValue = texture(u_texture, vs_tex_coords).r;
-    gl_FragColor = vec4(vec3(depthValue), 1.0);
+    gl_FragColor = texture(u_texture, vs_tex_coords);
 }
 #endif

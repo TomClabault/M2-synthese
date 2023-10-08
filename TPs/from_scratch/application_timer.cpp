@@ -83,8 +83,8 @@ void ApplicationTimer::postrender()
 	//~ printf("cpu  %02dms %03dus    ", cpu_time / 1000, cpu_time % 1000);
 	//~ printf("gpu  %02dms %03dus\n", int(m_frame_time/ 1000000), int((m_frame_time / 1000) % 1000));
 
-    if(m_tp1)
-        draw(m_console, m_tp1->get_window_width(), m_tp1->get_window_height());
-    else
+    //if(m_tp1)
+        //draw(m_console, m_tp1->get_window_width(), m_tp1->get_window_height());
+    //else
         draw(m_console, m_tp2->get_window_width(), m_tp2->get_window_height());
 }

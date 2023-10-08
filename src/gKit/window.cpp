@@ -144,13 +144,13 @@ float delta_time( )
 static int stop= 0;
 
 //! boucle de gestion des evenements de l'application.
-int run( Window window, int (*draw)() )
+int run( Window window, int (*draw)(), bool& resize_event_fired )
 {
     // configure openGL
     glViewport(0, 0, width, height);
 
     // run
-    while(events(window))
+    while(events(window, resize_event_fired))
     {
         // dessiner
         if(draw() < 1)
@@ -171,9 +171,9 @@ int last_event_count( ) { return event_count; }
 
 #define IMGUI_PROCESS_EVENTS
 
-int events( Window window )
+int events( Window window, bool& resize_event_fired)
 {
-    bool resize_event= false;
+    resize_event_fired = false;
     
     // gestion des evenements
     SDL_Event event;
@@ -190,7 +190,7 @@ int events( Window window )
                 if(event.window.event == SDL_WINDOWEVENT_RESIZED)
                 {
                     // traite l'evenement apres la boucle... 
-                    resize_event= true;
+                    resize_event_fired = true;
                     
                     // conserve les proportions de la fenetre
                     width= event.window.data1;
@@ -246,7 +246,7 @@ int events( Window window )
         }
     }
 
-    if(resize_event)
+    if (resize_event_fired)
     {
         int w= std::floor(height * aspect);
         int h= height;

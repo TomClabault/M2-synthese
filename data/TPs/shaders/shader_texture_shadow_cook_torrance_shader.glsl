@@ -106,6 +106,9 @@ float GGX_smith_masking_shadowing(float roughness_squared, float NoV, float NoL)
 
 void main()
 {
+    gl_FragColor = vec4(0, 1, 0, 1);
+    return;
+
     vec3 ambient_irrandiance_color = vec3(0);
     if (u_use_irradiance_map)
     {

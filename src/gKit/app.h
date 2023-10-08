@@ -44,6 +44,7 @@ protected:
     void vsync_off( );
     void vsync_on();
     
+    bool m_resize_event_fired;
     Window m_window;
     Context m_context;
     

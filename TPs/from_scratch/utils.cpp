@@ -1,3 +1,4 @@
+#include "image_hdr.h"
 #include "mat.h"
 #include "tp.h"
 #include "utils.h"
@@ -29,53 +30,75 @@ void Utils::precompute_irradiance_map_from_skysphere_and_write(const char* skysp
 	auto stop = std::chrono::high_resolution_clock::now();
 
 	std::cout << "Writing the precomputed irradiance map to disk..." << std::endl;
-	write_image(irradiance_map, output_irradiance_map_path);
+    write_image_hdr(irradiance_map, output_irradiance_map_path);
 
 	std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << "ms --- " << (irradiance_map.width() * irradiance_map.height() * samples) / (float)(std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count()) * 1000 << "samples/s" << std::endl;
 }
 
-void Utils::downscale_image(const Image& input_image, Image& downscaled_output, const int factor)
+Image Utils::precompute_and_load_associated_irradiance(const char* skysphere_file_path, unsigned int samples, unsigned int downscale_factor)
 {
-	if (input_image.width() % factor != 0)
-	{
-		std::cerr << "Image width isn't divisible by the factor";
+    std::string skysphere_file_string = std::string(skysphere_file_path);
+    //Only the name of the jpg (or png, bmp, ...) file without the path in front of it
+    std::string skysphere_image_file_name = skysphere_file_string.substr(skysphere_file_string.rfind('/') + 1);
 
-		return;
-	}
+    //Creating the complete (path + image file name) file name of the irradiance map
+    std::filesystem::create_directory(TP::IRRADIANCE_MAPS_CACHE_FOLDER);
+    std::string irradiance_map_name = skysphere_file_string.substr(0, skysphere_file_string.rfind('/')) + "/irradiance_maps_cache/" + skysphere_image_file_name + "_Irradiance_" + std::to_string(samples) + "x.hdr";
 
-	if (input_image.height() % factor != 0)
-	{
-		std::cerr << "Image height isn't divisible by the factor";
+    //Checking whether the irradiance map already exists or not
+    std::ifstream input_irradiance(irradiance_map_name);
+    if (input_irradiance.is_open())
+    {
+        std::cout << "An irradiance map has been found!" << std::endl;
+        //The irradiance map already exists
+        return read_skysphere_image(irradiance_map_name.c_str());
+    }
+    else
+    {
+        //No irradiance map was found, precomputing it
 
-		return;
-	}
+        precompute_irradiance_map_from_skysphere_and_write(skysphere_file_path, samples, downscale_factor, irradiance_map_name.c_str());
+        return read_skysphere_image(irradiance_map_name.c_str());
+    }
+}
 
+Image Utils::read_skysphere_image(const char* filename)
+{
+    return read_image_hdr(filename);
+}
 
-	int downscaled_width = input_image.width() / factor;
-	int downscaled_height = input_image.height() / factor;
-	downscaled_output = Image(downscaled_width, downscaled_height);
+GLuint Utils::create_skysphere_texture_hdr(Image& skysphere_image, int texture_unit)
+{
+    GLuint skysphere;
+    glGenTextures(1, &skysphere);
+    //Texture 0 is the cubemap so we're incrementing by the texture unit number
+    glActiveTexture(GL_TEXTURE0 + texture_unit);
+    //Selecting the cubemap as active
+    glBindTexture(GL_TEXTURE_2D, skysphere);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, skysphere_image.width(), skysphere_image.height(), 0, GL_RGBA, GL_FLOAT, skysphere_image.data());
 
-#pragma omp parallel for
-	for (int y = 0; y < downscaled_height; y++)
-	{
-		for (int x = 0; x < downscaled_width; x++)
-		{
-			Color average;
+    // When scaling the texture down (displaying the texture on a small object), we want to linearly interpolate
+    // between mipmaps levels and linearly interpolate the texel within the resulting mipmap level
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    // Linearly interpolating the texel color when displaying the texture on a big object (the texture is stretched)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // Clamping method if we use texture coordinates that are out of the [0-1] range
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-			for (int i = 0; i < factor; i++)
-				for (int j = 0; j < factor; j++)
-					average = average + input_image(x * factor + j, y * factor + i);
+    return skysphere;
+}
 
-			average = average / (factor * factor);
+GLuint Utils::create_skysphere_texture_from_path(const char* filename, int texture_unit)
+{
+    Image skysphere_image = read_skysphere_image(filename);
 
-			downscaled_output(x, y) = average;
-		}
-	}
+    return create_skysphere_texture_hdr(skysphere_image, texture_unit);
 }
 
 Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path, unsigned int samples, unsigned int downscale_factor)
 {
-	Image skysphere_image = read_image(skysphere_path);
+    Image skysphere_image = read_image_hdr(skysphere_path);
 	if (downscale_factor > 1)
 	{
 		Image skysphere_image_downscaled;
@@ -270,68 +293,41 @@ GLuint Utils::create_cubemap_texture_from_path(const char* folder_name, const ch
 	return create_cubemap_texture_from_data(faces_data);
 }
 
-ImageData Utils::precompute_and_load_associated_irradiance(const char* skysphere_file_path, unsigned int samples, unsigned int downscale_factor)
+void Utils::downscale_image(const Image& input_image, Image& downscaled_output, const int factor)
 {
-	std::string skysphere_file_string = std::string(skysphere_file_path);
-	//Only the name of the jpg (or png, bmp, ...) file without the path in front of it
-	std::string skysphere_image_file_name = skysphere_file_string.substr(skysphere_file_string.rfind('/') + 1);
+    if (input_image.width() % factor != 0)
+    {
+        std::cerr << "Image width isn't divisible by the factor";
 
-	//Creating the complete (path + image file name) file name of the irradiance map
-	std::filesystem::create_directory(TP::IRRADIANCE_MAPS_CACHE_FOLDER);
-	std::string irradiance_map_name = skysphere_file_string.substr(0, skysphere_file_string.rfind('/')) + "/irradiance_maps_cache/" + skysphere_image_file_name + "_Irradiance_" + std::to_string(samples) + "x.png";
+        return;
+    }
 
-	//Checking whether the irradiance map already exists or not
-	std::ifstream input_irradiance(irradiance_map_name);
-	if (input_irradiance.is_open())
-	{
-		std::cout << "An irradiance map has been found!" << std::endl;
-		//The irradiance map already exists
-		return read_skysphere_data(irradiance_map_name.c_str());
-	}
-	else
-	{
-		//No irradiance map was found, precomputing it
+    if (input_image.height() % factor != 0)
+    {
+        std::cerr << "Image height isn't divisible by the factor";
 
-		precompute_irradiance_map_from_skysphere_and_write(skysphere_file_path, samples, downscale_factor, irradiance_map_name.c_str());
-		return read_skysphere_data(irradiance_map_name.c_str());
-	}
-}
-
-ImageData Utils::read_skysphere_data(const char* filename)
-{
-	return read_image_data(filename);
-}
-
-GLuint Utils::create_skysphere_texture_from_data(ImageData& skysphere_image_data, int texture_unit)
-{
-	GLuint skysphere;
-	glGenTextures(1, &skysphere);
-	//Texture 0 is the cubemap so we're incrementing by the texture unit number
-	glActiveTexture(GL_TEXTURE0 + texture_unit);
-	//Selecting the cubemap as active
-	glBindTexture(GL_TEXTURE_2D, skysphere);
+        return;
+    }
 
 
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, skysphere_image_data.width, skysphere_image_data.height, 0, skysphere_image_data.channels == 3 ? GL_RGB : GL_RGBA, GL_UNSIGNED_BYTE, skysphere_image_data.data());
+    int downscaled_width = input_image.width() / factor;
+    int downscaled_height = input_image.height() / factor;
+    downscaled_output = Image(downscaled_width, downscaled_height);
 
-	// When scaling the texture down (displaying the texture on a small object), we want to linearly interpolate
-	// between mipmaps levels and linearly interpolate the texel within the resulting mipmap level
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	// Linearly interpolating the texel color when displaying the texture on a big object (the texture is stretched)
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	// Clamping method if we use texture coordinates that are out of the [0-1] range
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+#pragma omp parallel for
+    for (int y = 0; y < downscaled_height; y++)
+    {
+        for (int x = 0; x < downscaled_width; x++)
+        {
+            Color average;
 
-	// Generating the MIPMAP levels for the skysphere
-	//glGenerateMipmap(GL_TEXTURE_2D);
+            for (int i = 0; i < factor; i++)
+                for (int j = 0; j < factor; j++)
+                    average = average + input_image(x * factor + j, y * factor + i);
 
-	return skysphere;
-}
+            average = average / (factor * factor);
 
-GLuint Utils::create_skysphere_texture_from_path(const char* filename, int texture_unit)
-{
-	ImageData skysphere_image = read_skysphere_data(filename);
-
-	return create_skysphere_texture_from_data(skysphere_image, texture_unit);
+            downscaled_output(x, y) = average;
+        }
+    }
 }

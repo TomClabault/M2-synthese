@@ -70,12 +70,12 @@ float global_time( );
 float delta_time( );
 
 //! fonction principale. gestion des evenements et appel de la fonction draw de l'application.
-int run( Window window, int (*draw)( void ) );
+int run( Window window, int (*draw)( void ), bool& resize_event_fired );
 
 int last_event_count( );
 
 //! fonction interne de gestion d'evenements.
-int events( Window window );
+int events( Window window, bool& resize_event_fired);
 
 //! renvoie le chemin(path) vers le fichier 'filename' apres l'avoir cherche dans un repertoire standard...
 const char *smart_path( const char* filename );

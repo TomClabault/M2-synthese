@@ -97,6 +97,9 @@ int TP2::prerender()
 		}
 	}
 
+    if(m_resize_event_fired)
+        resize_hdr_frame();
+
 	// appelle la fonction update() de la classe derivee
 	return update(global_time(), delta_time());
 }
@@ -336,9 +339,9 @@ int TP2::init()
 
 	//Reading the mesh displayed
     //m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
-    m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj");
+    //m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj");
     //m_mesh = read_mesh("data/cube_plane_touching.obj");
-    //m_mesh = read_mesh("data/sphere_high.obj");
+    m_mesh = read_mesh("data/sphere_high.obj");
 	if (m_mesh.positions().size() == 0)
 	{
 		std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -356,8 +359,11 @@ int TP2::init()
 	glEnable(GL_DEPTH_TEST);                    // activer le ztest
 
 
-	m_wholescreen_texture_shader = read_program("data/TPs/shaders/shader_wholescreen_texture.glsl");
-	program_print_errors(m_wholescreen_texture_shader);
+    m_fullscreen_quad_texture_shader = read_program("data/TPs/shaders/shader_fullscreen_quad_texture.glsl");
+    program_print_errors(m_fullscreen_quad_texture_shader);
+
+    m_fullscreen_quad_texture_hdr_exposure_shader = read_program("data/TPs/shaders/shader_fullscreen_quad_texture_hdr_exposure.glsl");
+    program_print_errors(m_fullscreen_quad_texture_hdr_exposure_shader);
 
     m_texture_shadow_cook_torrance_shader = read_program("data/TPs/shaders/shader_texture_shadow_cook_torrance_shader.glsl");
     program_print_errors(m_texture_shadow_cook_torrance_shader);
@@ -464,23 +470,20 @@ int TP2::init()
 	//TODO sur un thread
 	compute_bounding_boxes_of_groups(m_mesh_triangles_group);
 
-	//TODO HDR pipeline pour l'irradiance map
-
 	//Reading the faces of the skybox and creating the OpenGL Cubemap
 	std::vector<ImageData> cubemap_data;
-	ImageData skysphere_data, irradiance_map_data;
+    Image skysphere_image, irradiance_map_image;
 
     std::thread load_thread_cubemap = std::thread([&] {cubemap_data = Utils::read_cubemap_data("data/TPs/skybox", ".jpg"); });
-	std::thread load_thread_skypshere = std::thread([&] {skysphere_data = Utils::read_skysphere_data(m_application_settings.irradiance_map_file_path.c_str()); });
-    std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_data = Utils::precompute_and_load_associated_irradiance(m_application_settings.irradiance_map_file_path.c_str(), m_application_settings.irradiance_map_precomputation_samples, m_application_settings.irradiance_map_precomputation_downscale_factor); });
+    std::thread load_thread_skypshere = std::thread([&] {skysphere_image = Utils::read_skysphere_image(m_application_settings.irradiance_map_file_path.c_str()); });
+    std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_image = Utils::precompute_and_load_associated_irradiance(m_application_settings.irradiance_map_file_path.c_str(), m_application_settings.irradiance_map_precomputation_samples, m_application_settings.irradiance_map_precomputation_downscale_factor); });
 	load_thread_cubemap.join();
 	load_thread_skypshere.join();
 	load_thread_irradiance_map.join();
 
-
-	m_cubemap = Utils::create_cubemap_texture_from_data(cubemap_data);
-	m_skysphere = Utils::create_skysphere_texture_from_data(skysphere_data, 1);
-    m_irradiance_map = Utils::create_skysphere_texture_from_data(irradiance_map_data, 2);
+    m_cubemap = Utils::create_cubemap_texture_from_data(cubemap_data);
+    m_skysphere = Utils::create_skysphere_texture_hdr(skysphere_image, TP2::SKYSPHERE_UNIT);
+    m_irradiance_map = Utils::create_skysphere_texture_hdr(irradiance_map_image, TP2::DIFFUSE_IRRADIANCE_MAP_UNIT);
 
 	//Cleaning (repositionning the buffers that have been selected to their default value)
 	glBindVertexArray(0);
@@ -491,6 +494,56 @@ int TP2::init()
     m_mesh.bounds(p_min, p_max);
     //m_camera.lookat(p_min, p_max);
 
+    if(create_shadow_map() == -1)
+        return -1;
+    draw_shadow_map();
+
+    if(create_hdr_frame() == -1)
+        return -1;
+
+	return 0;
+}
+
+int TP2::quit()
+{
+	return 0;//Error code 0 = no error
+}
+
+int TP2::create_hdr_frame()
+{
+    glGenTextures(1, &m_hdr_shader_output_texture);
+    glBindTexture(GL_TEXTURE_2D, m_hdr_shader_output_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, window_width(), window_height(), 0, GL_RGBA, GL_FLOAT, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
+    GLuint render_buffer;
+    glGenRenderbuffers(1, &render_buffer);
+    glBindRenderbuffer(GL_RENDERBUFFER, render_buffer);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, window_width(), window_height());
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+    glGenFramebuffers(1, &m_hdr_framebuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_hdr_framebuffer);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, render_buffer);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_hdr_shader_output_texture, 0);
+
+    if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+      return -1;
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0); //Cleaning
+}
+
+int TP2::resize_hdr_frame()
+{
+    glDeleteTextures(1, &m_hdr_shader_output_texture);
+    glDeleteFramebuffers(1, &m_hdr_framebuffer);
+
+    return create_hdr_frame();
+}
+
+int TP2::create_shadow_map()
+{
     glGenTextures(1, &m_shadow_map);
     glBindTexture(GL_TEXTURE_2D, m_shadow_map);
 
@@ -516,19 +569,10 @@ int TP2::init()
     glFramebufferTexture(GL_DRAW_FRAMEBUFFER, /* attachment */ GL_DEPTH_ATTACHMENT, m_shadow_map, /* mipmap */ 0);
 
     if (glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-		return -1;
+        return -1;
 
-	//Cleaning
-	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-
-    draw_shadow_map();
-
-	return 0;
-}
-
-int TP2::quit()
-{
-	return 0;//Error code 0 = no error
+    //Cleaning
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 }
 
 void TP2::draw_shadow_map()
@@ -645,6 +689,39 @@ void TP2::draw_light_camera_frustum()
     }
 }
 
+void TP2::draw_fullscreen_quad_texture(GLuint texture_to_draw)
+{
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    glUseProgram(m_fullscreen_quad_texture_shader);
+
+    GLint texture_sampler_location = glGetUniformLocation(m_fullscreen_quad_texture_shader, "u_texture");
+    glActiveTexture(GL_TEXTURE0 + TP2::FULLSCREEN_QUAD_TEXTURE_UNIT);
+    glBindTexture(GL_TEXTURE_2D, texture_to_draw);
+    glUniform1i(texture_sampler_location, TP2::FULLSCREEN_QUAD_TEXTURE_UNIT);
+
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+}
+
+void TP2::draw_fullscreen_quad_texture_hdr_exposure(GLuint texture_to_draw)
+{
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    glUseProgram(m_fullscreen_quad_texture_hdr_exposure_shader);
+
+    GLint u_exposure_uniform_location = glGetUniformLocation(m_fullscreen_quad_texture_hdr_exposure_shader, "u_exposure");
+    glUniform1f(u_exposure_uniform_location, m_application_settings.hdr_exposure);
+
+    GLint texture_sampler_location = glGetUniformLocation(m_fullscreen_quad_texture_shader, "u_texture");
+    glActiveTexture(GL_TEXTURE0 + TP2::FULLSCREEN_QUAD_TEXTURE_UNIT);
+    glBindTexture(GL_TEXTURE_2D, texture_to_draw);
+    glUniform1i(texture_sampler_location, TP2::FULLSCREEN_QUAD_TEXTURE_UNIT);
+
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+}
+
 void TP2::draw_general_settings()
 {
 	if (ImGui::Checkbox("Enable VSync", &m_application_settings.enable_vsync))
@@ -661,11 +738,11 @@ void TP2::update_recomputed_irradiance_map()
 	if (m_application_state.irradiance_map_freshly_recomputed)
 	{
 		//An irradiance has just been recomputed, we're going to update the texture used by the shader
-		GLuint new_irradiance_map_texture = Utils::create_skysphere_texture_from_data(m_recomputed_irradiance_map_data, 2);
+        GLuint new_irradiance_map_texture = Utils::create_skysphere_texture_hdr(m_recomputed_irradiance_map_data, 2);
 
 		//Deleting the old texture
 		glDeleteTextures(1, &m_irradiance_map);
-		m_irradiance_map = new_irradiance_map_texture;
+        m_irradiance_map = new_irradiance_map_texture;
 
 		m_application_state.irradiance_map_freshly_recomputed = false;
 	}
@@ -690,6 +767,8 @@ void TP2::draw_lighting_window()
     ImGui::Checkbox("Draw Shadow Map", &m_application_settings.draw_shadow_map);
     ImGui::Checkbox("Bind Light Camera to Camera", &m_application_settings.bind_light_camera_to_camera);
     ImGui::Checkbox("Show Light Camera Frustum", &m_application_settings.draw_light_camera_frustum);
+    ImGui::Separator();
+    ImGui::SliderFloat("HDR Tone Mapping Exposure", &m_application_settings.hdr_exposure, 0.0f, 10.0f);
     ImGui::Separator();
 	ImGui::Text("Irradiance map");
 	ImGui::DragInt("Irradiance Map Precomputation Samples", &m_application_settings.irradiance_map_precomputation_samples, 1.0f, 1, 2048);
@@ -764,8 +843,8 @@ int TP2::render()
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        glUseProgram(m_wholescreen_texture_shader);
-        GLint texture_sampler_location = glGetUniformLocation(m_wholescreen_texture_shader, "u_texture");
+        glUseProgram(m_fullscreen_quad_texture_shader);
+        GLint texture_sampler_location = glGetUniformLocation(m_fullscreen_quad_texture_shader, "u_texture");
         glActiveTexture(GL_TEXTURE0 + TP2::SHADOW_MAP_UNIT);
         glBindTexture(GL_TEXTURE_2D, m_shadow_map);
         glUniform1i(texture_sampler_location, TP2::SHADOW_MAP_UNIT);
@@ -782,6 +861,7 @@ int TP2::render()
 
     m_mesh_groups_drawn = 0;
 
+    glBindFramebuffer(GL_FRAMEBUFFER,  m_hdr_framebuffer);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	//On selectionne notre shader
@@ -856,7 +936,7 @@ int TP2::render()
 
 	draw_skysphere();
     draw_light_camera_frustum();
-
+    draw_fullscreen_quad_texture_hdr_exposure(m_hdr_shader_output_texture);
 
 	////////// ImGUI //////////
 	draw_imgui();

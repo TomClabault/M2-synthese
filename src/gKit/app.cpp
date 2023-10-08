@@ -52,7 +52,7 @@ int App::run( )
     glViewport(0, 0, window_width(), window_height());
     
     // gestion des evenements
-    while(events(m_window))
+    while(events(m_window, m_resize_event_fired))
     {
         if(prerender() < 0)
             break;

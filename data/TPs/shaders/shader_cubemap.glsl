@@ -44,19 +44,14 @@ void main()
 
 	vec3 direction = normalize(pixel - u_camera_position);
 
-	vec4 color;
 	if (u_use_cubemap == 1)
-	{
-		color = texture(u_cubemap, direction);
-	}
+                gl_FragColor = texture(u_cubemap, direction);
 	else
 	{
 		float u = 0.5 + atan(direction.z, direction.x) / (2.0f * M_PI);
 		float v = 0.5 + asin(direction.y) / M_PI;
 
-		color = texture(u_skysphere, vec2(u, v));
+                gl_FragColor = texture(u_skysphere, vec2(u, v));
 	}
-
-	gl_FragColor = color;
 }
 #endif
