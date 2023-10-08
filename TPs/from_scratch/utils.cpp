@@ -32,7 +32,7 @@ void Utils::precompute_irradiance_map_from_skysphere_and_write(const char* skysp
 	std::cout << "Writing the precomputed irradiance map to disk..." << std::endl;
     write_image_hdr(irradiance_map, output_irradiance_map_path);
 
-	std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << "ms --- " << (irradiance_map.width() * irradiance_map.height() * samples) / (float)(std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count()) * 1000 << "samples/s" << std::endl;
+	std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << "ms --- " << (irradiance_map.width() * irradiance_map.height() * samples) / (float)(std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count()) << "samples/ms" << std::endl;
 }
 
 Image Utils::precompute_and_load_associated_irradiance(const char* skysphere_file_path, unsigned int samples, unsigned int downscale_factor)
@@ -96,6 +96,15 @@ GLuint Utils::create_skysphere_texture_from_path(const char* filename, int textu
     return create_skysphere_texture_hdr(skysphere_image, texture_unit);
 }
 
+void branchlessONB(const Vector& n, Vector& b1, Vector& b2)
+{
+	float sign = std::copysign(1.0f, n.z);
+	const float a = -1.0f / (sign + n.z);
+	const float b = n.x * n.y * a;
+	b1 = Vector(1.0f + sign * n.x * n.x * a, sign * b, -sign * n.x);
+	b2 = Vector(b, sign + n.y * n.y * a, -n.y);
+}
+
 Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path, unsigned int samples, unsigned int downscale_factor)
 {
     Image skysphere_image = read_image_hdr(skysphere_path);
@@ -141,17 +150,12 @@ Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path
 										  std::sin(phi) * std::sin(theta),
 										  std::cos(theta)));
 				
-				Vector arbitrary_vector = Vector(1, 0, 0);
-				//To avoid issues when the main direction is colinear with the arbitrary vector
-				if (1 - std::abs(dot(normal, arbitrary_vector)) < 1e-6f)
-					arbitrary_vector = Vector(0, 1, 0);
-
 				//Calculating the vectors of the basis we're going to use to rotate the randomly generated vector
 				//around our main direction
-				Vector tangent = normalize(cross(normal, arbitrary_vector));
-				Vector bitangent = cross(tangent, normal);
+				Vector tangent, bitangent;
 
-				Transform obn(tangent, bitangent, normal, Vector(0, 0, 0));
+				branchlessONB(normal, tangent, bitangent);
+				Transform onb(tangent, bitangent, normal, Vector(0, 0, 0));
 
 				Color sum = Color(0, 0, 0);
 				for (unsigned int i = 0; i < samples; i++)
@@ -166,7 +170,7 @@ Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path
                                                                                        std::sin(phi_rand) * std::sin(theta_rand),
                                                                                        std::cos(theta_rand)));
 						
-                    Vector random_direction_in_hemisphere_around_normal = obn(random_direction_in_canonical_hemisphere);
+                    Vector random_direction_in_hemisphere_around_normal = onb(random_direction_in_canonical_hemisphere);
 					Vector random_direction_rotated = random_direction_in_hemisphere_around_normal;
 
                     vec2 uv = vec2(0.5 - std::atan2(random_direction_rotated.y, random_direction_rotated.x) / (2.0 * M_PI),
