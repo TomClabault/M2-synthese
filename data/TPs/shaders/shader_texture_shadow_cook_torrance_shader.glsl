@@ -106,13 +106,13 @@ float GGX_smith_masking_shadowing(float roughness_squared, float NoV, float NoL)
 
 void main()
 {
-    vec3 ambient_irrandiance_color = vec3(0);
+    vec3 irradiance_map_color = vec3(0);
     if (u_use_irradiance_map)
     {
         float u = 0.5 + atan(vs_normal.z, vs_normal.x) / (2.0f * M_PI);
         float v = 0.5 + asin(vs_normal.y) / M_PI;
 
-        ambient_irrandiance_color = texture2D(u_irradiance_map, vec2(u, v)).rgb;
+        irradiance_map_color = texture2D(u_irradiance_map, vec2(u, v)).rgb;
     }
 
     vec4 base_color = texture2D(u_mesh_base_color_texture, vs_texcoords);
@@ -158,8 +158,7 @@ void main()
         vec3 diffuse_part = kD * base_color.rgb / M_PI;
         vec3 specular_part = (F * D * G) / (4.0f * NoV * NoL);
 
-        vec3 light_color = vec3(2.0f);
-        gl_FragColor = vec4((diffuse_part + specular_part) * light_color * ambient_irrandiance_color, 1);
+        gl_FragColor = vec4((diffuse_part * irradiance_map_color) + specular_part, 1);
         gl_FragColor = gl_FragColor * compute_shadow(vs_position_light_space, normalize(vs_normal), normalize(u_light_position - vs_position));
     }
 }

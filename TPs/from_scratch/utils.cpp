@@ -99,6 +99,7 @@ GLuint Utils::create_skysphere_texture_from_path(const char* filename, int textu
 Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path, unsigned int samples, unsigned int downscale_factor)
 {
     Image skysphere_image = read_image_hdr(skysphere_path);
+
 	if (downscale_factor > 1)
 	{
 		Image skysphere_image_downscaled;
@@ -171,7 +172,8 @@ Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path
                     vec2 uv = vec2(0.5 - std::atan2(random_direction_rotated.y, random_direction_rotated.x) / (2.0 * M_PI),
                                    1.0 - std::acos(random_direction_rotated.z) / M_PI);
 
-					sum = sum + skysphere_image(uv.x * skysphere_image.width(), uv.y * skysphere_image.height());
+					Color sample_color = skysphere_image(uv.x * skysphere_image.width(), uv.y * skysphere_image.height());
+					sum = sum + sample_color;
 				}
 
 				irradiance_map(x, y) = sum / (float)samples;
@@ -181,7 +183,7 @@ Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path
 
 			if (omp_get_thread_num() == 0)
 			{
-				if (completed_lines % std::max(2, (int)((float)irradiance_map.height() / 100.0f)))
+				if (completed_lines % 20)
                 {
                     printf("[%d*%d, %dx] - %.3f%% completed", skysphere_image.width(), skysphere_image.height(), samples, completed_lines / (float)skysphere_image.height() * 100);
                     std::cout << std::endl;
