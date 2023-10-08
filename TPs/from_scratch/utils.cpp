@@ -137,7 +137,7 @@ Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path
 	//This variable is then used to print a completion purcentage on stdout
 	std::atomic<int> completed_lines(0);
 
-#pragma omp parallel for schedule(dynamic) collapse(2)
+#pragma omp parallel for schedule(dynamic)
 		for (int y = 0; y < irradiance_map.height(); y++)
 		{
             float theta = M_PI * (1.0f - (float)y / irradiance_map.height());

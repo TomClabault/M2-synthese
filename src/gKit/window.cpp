@@ -218,8 +218,8 @@ int events( Window window, bool& resize_event_fired)
                 }
                 
                 // fermer l'application
-                if(event.key.keysym.sym == SDLK_ESCAPE)
-                    stop= 1;
+                //if(event.key.keysym.sym == SDLK_ESCAPE)
+                    //stop= 1;
                 break;
             
             case SDL_KEYUP:

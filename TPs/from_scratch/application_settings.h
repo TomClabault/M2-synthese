@@ -9,16 +9,17 @@ struct ApplicationSettings
 {
 	bool enable_vsync = true;
 
-	bool use_ambient = true;
+    bool use_irradiance_map = true;
 
 	//1 for cubemap, 0 for skysphere
 	int cubemap_or_skysphere = 0;
 
+    float shadow_intensity = -0.5;
     bool draw_shadow_map = false;
     bool bind_light_camera_to_camera = false;
     bool draw_light_camera_frustum = false;
 
-    float hdr_exposure = 2.0f;
+    float hdr_exposure = 0.9f;
 
 	bool currently_recomputing_irradiance = false;
     int irradiance_map_precomputation_samples = 16384 * 4;
