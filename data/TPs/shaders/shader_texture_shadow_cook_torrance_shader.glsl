@@ -120,7 +120,7 @@ void main()
     //base_color = vec4(1.0, 0.71, 0.29, 1); //Hardcoded gold color
 
     //Handling transparency on the texture
-    if (base_color.a == 0)
+    if (base_color.a < 0.5)
         discard;
     else
     {

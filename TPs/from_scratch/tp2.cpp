@@ -123,14 +123,14 @@ void TP2::update_ambient_uniforms()
     glUniform4f(ambient_color_location, m_application_settings.ambient_color.r, m_application_settings.ambient_color.g, m_application_settings.ambient_color.b, m_application_settings.ambient_color.a);
 }
 
-GLuint TP2::create_opengl_texture(std::string& filepath)
+GLuint TP2::create_opengl_texture(std::string& filepath, bool srgb)
 {
     ImageData texture_data = read_image_data(filepath.c_str());
 
     GLuint texture_id;
     glGenTextures(1, &texture_id);
     glBindTexture(GL_TEXTURE_2D, texture_id);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+    glTexImage2D(GL_TEXTURE_2D, 0, srgb ? GL_SRGB_ALPHA : GL_RGBA,
                  texture_data.width, texture_data.height, 0,
                  texture_data.channels == 3 ? GL_RGB : GL_RGBA, GL_UNSIGNED_BYTE,
                  texture_data.data());
@@ -339,9 +339,9 @@ int TP2::init()
 
     //Reading the mesh displayed
     //m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
-    //m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj");
+    m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj");
     //m_mesh = read_mesh("data/cube_plane_touching.obj");
-    m_mesh = read_mesh("data/sphere_high.obj");
+    //m_mesh = read_mesh("data/sphere_high.obj");
     if (m_mesh.positions().size() == 0)
     {
         std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -403,13 +403,13 @@ int TP2::init()
         int specular_texture_index = mat.specular_texture;
         if (diffuse_texture_index != -1)
         {
-            GLuint texture_id = create_opengl_texture(m_mesh.materials().texture_filenames[diffuse_texture_index]);
+            GLuint texture_id = create_opengl_texture(m_mesh.materials().texture_filenames[diffuse_texture_index], true);
             m_mesh_base_color_textures[diffuse_texture_index] = texture_id;
         }
 
         if (specular_texture_index != -1)
         {
-            GLuint texture_id = create_opengl_texture(m_mesh.materials().texture_filenames[specular_texture_index]);
+            GLuint texture_id = create_opengl_texture(m_mesh.materials().texture_filenames[specular_texture_index], false);
             m_mesh_specular_textures[specular_texture_index] = texture_id;
         }
     }
