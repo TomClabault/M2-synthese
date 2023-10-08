@@ -111,11 +111,6 @@ Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path
 	Image irradiance_map(skysphere_image.width(), skysphere_image.height());
 
 	std::cout << "Precomputing the irradiance map..." << std::endl;
-	float phi_step = (2 * M_PI) / (irradiance_map.width());
-	float theta_step = M_PI / (irradiance_map.height());
-
-	Utils::xorshift32_state state;
-	state.a = rand();
 
 	//Generating one random number generator for each thread
 	std::vector<Utils::xorshift32_state> states;
@@ -139,31 +134,16 @@ Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path
 #pragma omp for
 		for (int y = 0; y < irradiance_map.height(); y++)
 		{
-			float theta = M_PI - y * theta_step;
-			//for (int x = irradiance_map.width() / 2; x < irradiance_map.width(); x++)
+            float theta = M_PI * (1.0f - (float)y / irradiance_map.height());
 			for (int x = 0; x < irradiance_map.width(); x++)
 			{
-				float phi = x * phi_step;
+                float phi = 2.0f * M_PI * (0.5f - (float)x / irradiance_map.width());
 
 				//The main direction we're going to randomly sample the skysphere around
-				/*Vector normal = normalize(Vector(std::cos(phi) * std::sin(theta),
-										  std::cos(theta),
-										  -std::sin(phi) * std::sin(theta)));*/
-				Vector normal = normalize(Vector(std::cos(phi) * std::sin(theta),
+                Vector normal = normalize(Vector(std::cos(phi) * std::sin(theta),
 										  std::sin(phi) * std::sin(theta),
 										  std::cos(theta)));
-				//Spherical coordinates follow the convention that +Z is the up vector and +Y is the forward vector
-				//We want +Y as the up vector and -Z as the forward vector
 				
-				
-				
-				
-				
-				normal = RotationX(-90)(normal);
-
-
-
-
 				Vector arbitrary_vector = Vector(1, 0, 0);
 				//To avoid issues when the main direction is colinear with the arbitrary vector
 				if (1 - std::abs(dot(normal, arbitrary_vector)) < 1e-6f)
@@ -174,25 +154,26 @@ Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path
 				Vector tangent = normalize(cross(normal, arbitrary_vector));
 				Vector bitangent = cross(tangent, normal);
 
-				//Transform obn(bitangent, normal, tangent, Vector(0, 0, 0));
 				Transform obn(tangent, bitangent, normal, Vector(0, 0, 0));
 
 				Color sum = Color(0, 0, 0);
 				for (unsigned int i = 0; i < samples; i++)
 				{
-					float rand1 = Utils::xorshift32(&states.at(thread_id)) / (float)std::numeric_limits<unsigned int>::max();
-					float rand2 = Utils::xorshift32(&states.at(thread_id)) / (float)std::numeric_limits<unsigned int>::max();
+                    float rand1 = Utils::xorshift32(&states[thread_id]) / (float)std::numeric_limits<unsigned int>::max();
+                    float rand2 = Utils::xorshift32(&states[thread_id]) / (float)std::numeric_limits<unsigned int>::max();
 
-					float root = std::sqrt(1 - rand1 * rand1);
-					float angle = 2 * M_PI * rand2;
-					Vector random_direction_in_canonical_hemisphere(std::cos(angle) * root,
-																	std::sin(angle) * root,
-																	rand1);
+                    float phi_rand = 2.0f * M_PI * rand1;
+                    float theta_rand = std::asin(std::sqrt(rand2));
+
+                    Vector random_direction_in_canonical_hemisphere = normalize(Vector(std::cos(phi_rand) * std::sin(theta_rand),
+                                                                                       std::sin(phi_rand) * std::sin(theta_rand),
+                                                                                       std::cos(theta_rand)));
 						
-					Vector random_direction_in_hemisphere_around_normal = obn(random_direction_in_canonical_hemisphere);
+                    Vector random_direction_in_hemisphere_around_normal = obn(random_direction_in_canonical_hemisphere);
 					Vector random_direction_rotated = random_direction_in_hemisphere_around_normal;
 
-					vec2 uv = vec2(0.5 + std::atan2(random_direction_rotated.z, random_direction_rotated.x) / (2.0f * M_PI), 0.5 + std::asin(random_direction_rotated.y) / M_PI);
+                    vec2 uv = vec2(0.5 - std::atan2(random_direction_rotated.y, random_direction_rotated.x) / (2.0 * M_PI),
+                                   1.0 - std::acos(random_direction_rotated.z) / M_PI);
 
 					sum = sum + skysphere_image(uv.x * skysphere_image.width(), uv.y * skysphere_image.height());
 				}

@@ -5,7 +5,7 @@
 #include "texture.h"
 
 #include "app_camera.h"        // classe Application a deriver
-#include "draw.h"        
+#include "draw.h"
 #include "orbiter.h"
 #include "text.h"
 #include "uniforms.h"
@@ -22,7 +22,7 @@
 // constructeur : donner les dimensions de l'image, et eventuellement la version d'openGL.
 TP2::TP2() : AppCamera(1280, 720, 3, 3, 8)
 {
-	m_app_timer = ApplicationTimer(this);
+    m_app_timer = ApplicationTimer(this);
 }
 
 int TP2::get_window_width() { return window_width(); }
@@ -33,82 +33,82 @@ int TP2::mesh_groups_drawn() { return m_mesh_groups_drawn; }
 
 int TP2::prerender()
 {
-	//Timing of the application
-	m_app_timer.prerender();
+    //Timing of the application
+    m_app_timer.prerender();
 
 
 
 
 
-	// recupere les mouvements de la souris
-	int mx, my;
-	unsigned int mb = SDL_GetRelativeMouseState(&mx, &my);
-	int mousex, mousey;
-	SDL_GetMouseState(&mousex, &mousey);
+    // recupere les mouvements de la souris
+    int mx, my;
+    unsigned int mb = SDL_GetRelativeMouseState(&mx, &my);
+    int mousex, mousey;
+    SDL_GetMouseState(&mousex, &mousey);
 
-	// deplace la camera
-	auto& imgui_io = ImGui::GetIO();
+    // deplace la camera
+    auto& imgui_io = ImGui::GetIO();
 
-	if (!imgui_io.WantCaptureMouse) {
-		if (mb & SDL_BUTTON(1))
-			m_camera.rotation(mx, my);      // tourne autour de l'objet
-		else if (mb & SDL_BUTTON(3))
-			m_camera.translation((float)mx / (float)window_width(), (float)my / (float)window_height()); // deplace le point de rotation
-		else if (mb & SDL_BUTTON(2))
-			m_camera.move(mx);           // approche / eloigne l'objet
+    if (!imgui_io.WantCaptureMouse) {
+        if (mb & SDL_BUTTON(1))
+            m_camera.rotation(mx, my);      // tourne autour de l'objet
+        else if (mb & SDL_BUTTON(3))
+            m_camera.translation((float)mx / (float)window_width(), (float)my / (float)window_height()); // deplace le point de rotation
+        else if (mb & SDL_BUTTON(2))
+            m_camera.move(mx);           // approche / eloigne l'objet
 
-		SDL_MouseWheelEvent wheel = wheel_event();
-		if (wheel.y != 0)
-		{
-			clear_wheel_event();
-			m_camera.move(8.f * wheel.y);  // approche / eloigne l'objet
-		}
-	}
+        SDL_MouseWheelEvent wheel = wheel_event();
+        if (wheel.y != 0)
+        {
+            clear_wheel_event();
+            m_camera.move(8.f * wheel.y);  // approche / eloigne l'objet
+        }
+    }
 
-	const char* orbiter_filename = "app_orbiter.txt";
-	// copy / export / write orbiter
-	if (!imgui_io.WantCaptureKeyboard)
-	{
-		if (key_state('c'))
-		{
-			clear_key_state('c');
-			m_camera.write_orbiter(orbiter_filename);
+    const char* orbiter_filename = "app_orbiter.txt";
+    // copy / export / write orbiter
+    if (!imgui_io.WantCaptureKeyboard)
+    {
+        if (key_state('c'))
+        {
+            clear_key_state('c');
+            m_camera.write_orbiter(orbiter_filename);
 
-		}
-		// paste / read orbiter
-		if (key_state('v'))
-		{
-			clear_key_state('v');
+        }
+        // paste / read orbiter
+        if (key_state('v'))
+        {
+            clear_key_state('v');
 
-			Orbiter tmp;
-			if (tmp.read_orbiter(orbiter_filename) < 0)
-				// ne pas modifer la camera en cas d'erreur de lecture...
-				tmp = m_camera;
+            Orbiter tmp;
+            if (tmp.read_orbiter(orbiter_filename) < 0)
+                // ne pas modifer la camera en cas d'erreur de lecture...
+                tmp = m_camera;
 
-			m_camera = tmp;
-		}
+            m_camera = tmp;
+        }
 
-		// screenshot
-		if (key_state('s'))
-		{
-			static int calls = 1;
-			clear_key_state('s');
-			screenshot("app", calls++);
-		}
-	}
+        // screenshot
+        if (key_state('s'))
+        {
+            static int calls = 1;
+            clear_key_state('s');
+            screenshot("app", calls++);
+        }
+    }
 
     if(m_resize_event_fired)
         resize_hdr_frame();
 
-	// appelle la fonction update() de la classe derivee
-	return update(global_time(), delta_time());
+    // appelle la fonction update() de la classe derivee
+    return update(global_time(), delta_time());
 }
 
 int TP2::postrender()
 {
-	m_app_timer.postrender();
-		
-	return 0;
+    m_app_timer.postrender();
+
+    return 0;
 }
 
 void TP2::update_ambient_uniforms()
@@ -116,11 +116,11 @@ void TP2::update_ambient_uniforms()
     glUseProgram(m_texture_shadow_cook_torrance_shader);
 
     GLuint use_irradiance_map_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_use_irradiance_map");
-	glUniform1i(use_irradiance_map_location, m_application_settings.use_ambient);
+    glUniform1i(use_irradiance_map_location, m_application_settings.use_ambient);
 
-	//TODO supprimer ambient color parce qu'on utilise que l'irradiance map, pas de ambient color a deux balles
+    //TODO supprimer ambient color parce qu'on utilise que l'irradiance map, pas de ambient color a deux balles
     GLuint ambient_color_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_ambient_color");
-	glUniform4f(ambient_color_location, m_application_settings.ambient_color.r, m_application_settings.ambient_color.g, m_application_settings.ambient_color.b, m_application_settings.ambient_color.a);
+    glUniform4f(ambient_color_location, m_application_settings.ambient_color.r, m_application_settings.ambient_color.g, m_application_settings.ambient_color.b, m_application_settings.ambient_color.a);
 }
 
 GLuint TP2::create_opengl_texture(std::string& filepath)
@@ -180,42 +180,42 @@ void TP2::load_mesh_textures_thread_function(const Materials& materials)
 
 void TP2::compute_bounding_boxes_of_groups(std::vector<TriangleGroup>& groups)
 {
-	vec3 init_min_bbox = vec3(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
-	vec3 init_max_bbox = vec3(std::numeric_limits<float>::min(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min());
+    vec3 init_min_bbox = vec3(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
+    vec3 init_max_bbox = vec3(std::numeric_limits<float>::min(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min());
 
-	m_mesh_groups_bounding_boxes.resize(groups.size());
+    m_mesh_groups_bounding_boxes.resize(groups.size());
 
 #pragma omp parallel for schedule(dynamic)
-	for (int group_index = 0; group_index < groups.size(); group_index++)
-	{
-		TriangleGroup& group = groups.at(group_index);
+    for (int group_index = 0; group_index < groups.size(); group_index++)
+    {
+        TriangleGroup& group = groups.at(group_index);
 
-		BoundingBox bbox {init_min_bbox, init_max_bbox};
+        BoundingBox bbox {init_min_bbox, init_max_bbox};
 
-		for (int pos = group.first; pos < group.first + group.n; pos += 3)
-		{
-			vec3 a, b, c;
-			a = m_mesh.positions()[pos + 0];
-			b = m_mesh.positions()[pos + 1];
-			c = m_mesh.positions()[pos + 2];
+        for (int pos = group.first; pos < group.first + group.n; pos += 3)
+        {
+            vec3 a, b, c;
+            a = m_mesh.positions()[pos + 0];
+            b = m_mesh.positions()[pos + 1];
+            c = m_mesh.positions()[pos + 2];
 
-			bbox.pMin = min(bbox.pMin, a);
-			bbox.pMin = min(bbox.pMin, b);
-			bbox.pMin = min(bbox.pMin, c);
+            bbox.pMin = min(bbox.pMin, a);
+            bbox.pMin = min(bbox.pMin, b);
+            bbox.pMin = min(bbox.pMin, c);
 
-			bbox.pMax = max(bbox.pMax, a);
-			bbox.pMax = max(bbox.pMax, b);
-			bbox.pMax = max(bbox.pMax, c);
-		}
+            bbox.pMax = max(bbox.pMax, a);
+            bbox.pMax = max(bbox.pMax, b);
+            bbox.pMax = max(bbox.pMax, c);
+        }
 
-		m_mesh_groups_bounding_boxes[group_index] = bbox;
-	}
+        m_mesh_groups_bounding_boxes[group_index] = bbox;
+    }
 }
 
 bool TP2::rejection_test_bbox_frustum_culling(const BoundingBox& bbox, const Transform& mvpMatrix)
 {
-	/*
-	* 
+    /*
+    *
     *     6--------7
          /|       /|
         / |      / |
@@ -225,7 +225,7 @@ bool TP2::rejection_test_bbox_frustum_culling(const BoundingBox& bbox, const Tra
        |  /     | /
        | /      |/
        0--------1
-	*/
+    */
 
     std::vector<vec4> bbox_points_projective(8);
     bbox_points_projective[0] = mvpMatrix(vec4(bbox.pMin, 1));
@@ -237,30 +237,30 @@ bool TP2::rejection_test_bbox_frustum_culling(const BoundingBox& bbox, const Tra
     bbox_points_projective[6] = mvpMatrix(vec4(bbox.pMin.x, bbox.pMax.y, bbox.pMax.z, 1));
     bbox_points_projective[7] = mvpMatrix(vec4(bbox.pMax, 1));
 
-	for (int coord_index = 0; coord_index < 6; coord_index++)
-	{
-		bool all_points_outside = true;
+    for (int coord_index = 0; coord_index < 6; coord_index++)
+    {
+        bool all_points_outside = true;
 
-		for (int i = 0; i < 8; i++)
-		{
-			vec4& bbox_point = bbox_points_projective[i];
+        for (int i = 0; i < 8; i++)
+        {
+            vec4& bbox_point = bbox_points_projective[i];
 
-			bool test_negative_plane = coord_index & 1;
+            bool test_negative_plane = coord_index & 1;
 
-			if (test_negative_plane)
-				all_points_outside &= bbox_point(coord_index / 2) < -bbox_point.w;
-			else
-				all_points_outside &= bbox_point(coord_index / 2) > bbox_point.w;
+            if (test_negative_plane)
+                all_points_outside &= bbox_point(coord_index / 2) < -bbox_point.w;
+            else
+                all_points_outside &= bbox_point(coord_index / 2) > bbox_point.w;
 
-			if (!all_points_outside)
-				break;
-		}
+            if (!all_points_outside)
+                break;
+        }
 
-		if (all_points_outside)
-			return true;
-	}
+        if (all_points_outside)
+            return true;
+    }
 
-	return false;
+    return false;
 }
 
 bool TP2::rejection_test_bbox_frustum_culling_scene(const BoundingBox& bbox, const Transform& inverse_mvp_matrix)
@@ -291,72 +291,72 @@ bool TP2::rejection_test_bbox_frustum_culling_scene(const BoundingBox& bbox, con
     };
 
     std::vector<Vector> frustum_points_in_scene(8);
-	for (int i = 0; i < 8; i++)
-	{
-		vec4 world_space = inverse_mvp_matrix(frustum_points_projective_space[i]);
-		if (world_space.w != 0)
-			frustum_points_in_scene[i] = Vector(world_space) / world_space.w;
-	}
+    for (int i = 0; i < 8; i++)
+    {
+        vec4 world_space = inverse_mvp_matrix(frustum_points_projective_space[i]);
+        if (world_space.w != 0)
+            frustum_points_in_scene[i] = Vector(world_space) / world_space.w;
+    }
 
-	for (int coord_index = 0; coord_index < 6; coord_index++)
-	{
-		bool all_points_outside = true;
-		for (int i = 0; i < 8; i++)
-		{
-			Vector& frustum_point = frustum_points_in_scene[i];
+    for (int coord_index = 0; coord_index < 6; coord_index++)
+    {
+        bool all_points_outside = true;
+        for (int i = 0; i < 8; i++)
+        {
+            Vector& frustum_point = frustum_points_in_scene[i];
 
-			bool test_negative = coord_index & 1;
+            bool test_negative = coord_index & 1;
 
-			if (test_negative)
-				all_points_outside &= frustum_point(coord_index / 2) < bbox.pMin(coord_index / 2);
-			else
-				all_points_outside &= frustum_point(coord_index / 2) > bbox.pMax(coord_index / 2);
+            if (test_negative)
+                all_points_outside &= frustum_point(coord_index / 2) < bbox.pMin(coord_index / 2);
+            else
+                all_points_outside &= frustum_point(coord_index / 2) > bbox.pMax(coord_index / 2);
 
-			if (!all_points_outside)
-				break;
-		}
+            if (!all_points_outside)
+                break;
+        }
 
-		if (all_points_outside)
-			return true;
-	}
+        if (all_points_outside)
+            return true;
+    }
 
-	return false;
+    return false;
 }
 
 // creation des objets de l'application
 int TP2::init()
 {
-	//Setting ImGUI up
-	ImGui::CreateContext();
+    //Setting ImGUI up
+    ImGui::CreateContext();
 
-	m_imgui_io = ImGui::GetIO();
-	ImGui_ImplSdlGL3_Init(m_window);
+    m_imgui_io = ImGui::GetIO();
+    ImGui_ImplSdlGL3_Init(m_window);
 
-	//Positioning the camera to a default state
-    m_camera.read_orbiter("data/TPs/app_orbiter.txt");
+    //Positioning the camera to a default state
+    m_camera.read_orbiter("data/TPs/start_camera_bistro.txt");
     m_light_camera.read_orbiter("data/TPs/light_camera_bistro.txt");
     m_mlp_light_transform = TP2::LIGHT_CAMERA_ORTHO_PROJ_BISTRO * m_light_camera.view();
 
-	//Reading the mesh displayed
+    //Reading the mesh displayed
     //m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
     //m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj");
     //m_mesh = read_mesh("data/cube_plane_touching.obj");
     m_mesh = read_mesh("data/sphere_high.obj");
-	if (m_mesh.positions().size() == 0)
-	{
-		std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
+    if (m_mesh.positions().size() == 0)
+    {
+        std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
 
-		exit(-1);
-	}
+        exit(-1);
+    }
 
 
 
-	// etat openGL par defaut
-	glClearColor(0.2f, 0.2f, 0.2f, 1.f);        // couleur par defaut de la fenetre
-	glClearDepth(1.f);                          // profondeur par defaut
+    // etat openGL par defaut
+    glClearColor(0.2f, 0.2f, 0.2f, 1.f);        // couleur par defaut de la fenetre
+    glClearDepth(1.f);                          // profondeur par defaut
 
-	glDepthFunc(GL_LEQUAL);                       // ztest, conserver l'intersection la plus proche de la camera
-	glEnable(GL_DEPTH_TEST);                    // activer le ztest
+    glDepthFunc(GL_LEQUAL);                       // ztest, conserver l'intersection la plus proche de la camera
+    glEnable(GL_DEPTH_TEST);                    // activer le ztest
 
 
     m_fullscreen_quad_texture_shader = read_program("data/TPs/shaders/shader_fullscreen_quad_texture.glsl");
@@ -377,13 +377,13 @@ int TP2::init()
     GLint specular_texture_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_mesh_specular_texture");
     glUniform1i(specular_texture_uniform_location, TP2::TRIANGLE_GROUP_SPECULAR_TEXTURE_UNIT);//The mesh texture is on unit 3
 
-	m_shadow_map_program = read_program("data/TPs/shaders/shader_shadow_map.glsl");
-	program_print_errors(m_shadow_map_program);
+    m_shadow_map_program = read_program("data/TPs/shaders/shader_shadow_map.glsl");
+    program_print_errors(m_shadow_map_program);
     m_cubemap_shader = read_program("data/TPs/shaders/shader_cubemap.glsl");
-	program_print_errors(m_cubemap_shader);
+    program_print_errors(m_cubemap_shader);
 
-	GLint skysphere_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_skysphere");
-	//The skysphere is on texture unit 1 so we're using 1 for the value of the uniform
+    GLint skysphere_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_skysphere");
+    //The skysphere is on texture unit 1 so we're using 1 for the value of the uniform
     glUniform1i(skysphere_uniform_location, 1);
 
 
@@ -393,26 +393,26 @@ int TP2::init()
     //Loading the textures on another thread
     //std::thread texture_thread(&TP2::load_mesh_textures_thread_function, this, std::ref(m_mesh.materials()));
 
-	//TODO sur un thread
+    //TODO sur un thread
     m_mesh_triangles_group = m_mesh.groups();
     m_mesh_base_color_textures.resize(m_mesh.materials().filename_count());
     m_mesh_specular_textures.resize(m_mesh.materials().filename_count());
-	for (Material& mat : m_mesh.materials().materials)
-	{
+    for (Material& mat : m_mesh.materials().materials)
+    {
         int diffuse_texture_index = mat.diffuse_texture;
         int specular_texture_index = mat.specular_texture;
-		if (diffuse_texture_index != -1)
-		{
+        if (diffuse_texture_index != -1)
+        {
             GLuint texture_id = create_opengl_texture(m_mesh.materials().texture_filenames[diffuse_texture_index]);
             m_mesh_base_color_textures[diffuse_texture_index] = texture_id;
-		}
+        }
 
         if (specular_texture_index != -1)
         {
             GLuint texture_id = create_opengl_texture(m_mesh.materials().texture_filenames[specular_texture_index]);
             m_mesh_specular_textures[specular_texture_index] = texture_id;
         }
-	}
+    }
 
     //Generating the default textures that the triangle groups that don't have texture will use
     unsigned char default_texture_data[3] = {255, 255, 255};
@@ -467,26 +467,26 @@ int TP2::init()
     //Creating an empty VAO that will be used for the cubemap
     glGenVertexArrays(1, &m_cubemap_vao);
 
-	//TODO sur un thread
-	compute_bounding_boxes_of_groups(m_mesh_triangles_group);
+    //TODO sur un thread
+    compute_bounding_boxes_of_groups(m_mesh_triangles_group);
 
-	//Reading the faces of the skybox and creating the OpenGL Cubemap
-	std::vector<ImageData> cubemap_data;
+    //Reading the faces of the skybox and creating the OpenGL Cubemap
+    std::vector<ImageData> cubemap_data;
     Image skysphere_image, irradiance_map_image;
 
     std::thread load_thread_cubemap = std::thread([&] {cubemap_data = Utils::read_cubemap_data("data/TPs/skybox", ".jpg"); });
     std::thread load_thread_skypshere = std::thread([&] {skysphere_image = Utils::read_skysphere_image(m_application_settings.irradiance_map_file_path.c_str()); });
     std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_image = Utils::precompute_and_load_associated_irradiance(m_application_settings.irradiance_map_file_path.c_str(), m_application_settings.irradiance_map_precomputation_samples, m_application_settings.irradiance_map_precomputation_downscale_factor); });
-	load_thread_cubemap.join();
-	load_thread_skypshere.join();
-	load_thread_irradiance_map.join();
+    load_thread_cubemap.join();
+    load_thread_skypshere.join();
+    load_thread_irradiance_map.join();
 
     m_cubemap = Utils::create_cubemap_texture_from_data(cubemap_data);
     m_skysphere = Utils::create_skysphere_texture_hdr(skysphere_image, TP2::SKYSPHERE_UNIT);
     m_irradiance_map = Utils::create_skysphere_texture_hdr(irradiance_map_image, TP2::DIFFUSE_IRRADIANCE_MAP_UNIT);
 
-	//Cleaning (repositionning the buffers that have been selected to their default value)
-	glBindVertexArray(0);
+    //Cleaning (repositionning the buffers that have been selected to their default value)
+    glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     Point p_min, p_max;
@@ -501,12 +501,12 @@ int TP2::init()
     if(create_hdr_frame() == -1)
         return -1;
 
-	return 0;
+    return 0;
 }
 
 int TP2::quit()
 {
-	return 0;//Error code 0 = no error
+    return 0;//Error code 0 = no error
 }
 
 int TP2::create_hdr_frame()
@@ -532,6 +532,8 @@ int TP2::create_hdr_frame()
       return -1;
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0); //Cleaning
+
+    return 0;
 }
 
 int TP2::resize_hdr_frame()
@@ -573,6 +575,8 @@ int TP2::create_shadow_map()
 
     //Cleaning
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+
+    return 0;
 }
 
 void TP2::draw_shadow_map()
@@ -582,62 +586,62 @@ void TP2::draw_shadow_map()
     glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
     glCullFace(GL_FRONT);
 
-	glUseProgram(m_shadow_map_program);
-	GLint mlp_matrix_uniform_location = glGetUniformLocation(m_shadow_map_program, "mlp_matrix");
+    glUseProgram(m_shadow_map_program);
+    GLint mlp_matrix_uniform_location = glGetUniformLocation(m_shadow_map_program, "mlp_matrix");
     if (m_application_settings.bind_light_camera_to_camera)
         glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, (m_camera.projection() * m_camera.view()).data());
     else
         glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, m_mlp_light_transform.data());
 
-	glBindVertexArray(m_mesh_vao);
-	glDrawArrays(GL_TRIANGLES, 0, m_mesh.triangle_count() * 3);
+    glBindVertexArray(m_mesh_vao);
+    glDrawArrays(GL_TRIANGLES, 0, m_mesh.triangle_count() * 3);
 
-	//Cleaning
+    //Cleaning
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-	glViewport(0, 0, window_width(), window_height());
-	glBindVertexArray(0);
+    glViewport(0, 0, window_width(), window_height());
+    glBindVertexArray(0);
     glCullFace(GL_BACK);
 }
 
 void TP2::draw_skysphere()
 {
-	//Selecting the empty VAO for the cubemap shader
-	glBindVertexArray(m_cubemap_vao);
-	glUseProgram(m_cubemap_shader);
-	GLint camera_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_camera_position");
-	GLint use_cubemap_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_use_cubemap");
-	GLint inverse_matrix_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_inverse_matrix");
+    //Selecting the empty VAO for the cubemap shader
+    glBindVertexArray(m_cubemap_vao);
+    glUseProgram(m_cubemap_shader);
+    GLint camera_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_camera_position");
+    GLint use_cubemap_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_use_cubemap");
+    GLint inverse_matrix_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_inverse_matrix");
 
-	glUniform3f(camera_uniform_location, m_camera.position().x, m_camera.position().y, m_camera.position().z);
-	glUniformMatrix4fv(inverse_matrix_uniform_location, 1, GL_TRUE, (m_camera.viewport() * m_camera.projection() * m_camera.view() * Identity()).inverse().data());
-	glUniform1i(use_cubemap_uniform_location, m_application_settings.cubemap_or_skysphere);
+    glUniform3f(camera_uniform_location, m_camera.position().x, m_camera.position().y, m_camera.position().z);
+    glUniformMatrix4fv(inverse_matrix_uniform_location, 1, GL_TRUE, (m_camera.viewport() * m_camera.projection() * m_camera.view() * Identity()).inverse().data());
+    glUniform1i(use_cubemap_uniform_location, m_application_settings.cubemap_or_skysphere);
 
-	if (m_application_settings.cubemap_or_skysphere)
-	{
-		//Cubemap
+    if (m_application_settings.cubemap_or_skysphere)
+    {
+        //Cubemap
 
-		GLint cubemap_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_cubemap");
+        GLint cubemap_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_cubemap");
 
-		glActiveTexture(GL_TEXTURE0 + TP2::SKYBOX_UNIT);
-		glBindTexture(GL_TEXTURE_CUBE_MAP, m_cubemap);
+        glActiveTexture(GL_TEXTURE0 + TP2::SKYBOX_UNIT);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, m_cubemap);
 
-		//The cubemap is on texture unit 0 so we're using 0 for the value of the uniform
-		glUniform1i(cubemap_uniform_location, 0);
-	}
-	else
-	{
-		//Skysphere
+        //The cubemap is on texture unit 0 so we're using 0 for the value of the uniform
+        glUniform1i(cubemap_uniform_location, 0);
+    }
+    else
+    {
+        //Skysphere
 
-		GLint skysphere_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_skysphere");
+        GLint skysphere_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_skysphere");
 
-		glActiveTexture(GL_TEXTURE0 + TP2::SKYSPHERE_UNIT);
-		glBindTexture(GL_TEXTURE_2D, m_skysphere);
+        glActiveTexture(GL_TEXTURE0 + TP2::SKYSPHERE_UNIT);
+        glBindTexture(GL_TEXTURE_2D, m_skysphere);
 
-		//The skysphere is on texture unit 1 so we're using 1 for the value of the uniform
-		glUniform1i(skysphere_uniform_location, 1);
-	}
+        //The skysphere is on texture unit 1 so we're using 1 for the value of the uniform
+        glUniform1i(skysphere_uniform_location, 1);
+    }
 
-	glDrawArrays(GL_TRIANGLES, 0, 3);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
 }
 
 Mesh make_frustum( )
@@ -724,45 +728,45 @@ void TP2::draw_fullscreen_quad_texture_hdr_exposure(GLuint texture_to_draw)
 
 void TP2::draw_general_settings()
 {
-	if (ImGui::Checkbox("Enable VSync", &m_application_settings.enable_vsync))
-	{
-		if (!m_application_settings.enable_vsync)
-			vsync_off();
-		else
-			vsync_on();
-	}
+    if (ImGui::Checkbox("Enable VSync", &m_application_settings.enable_vsync))
+    {
+        if (!m_application_settings.enable_vsync)
+            vsync_off();
+        else
+            vsync_on();
+    }
 }
 
 void TP2::update_recomputed_irradiance_map()
 {
-	if (m_application_state.irradiance_map_freshly_recomputed)
-	{
-		//An irradiance has just been recomputed, we're going to update the texture used by the shader
+    if (m_application_state.irradiance_map_freshly_recomputed)
+    {
+        //An irradiance has just been recomputed, we're going to update the texture used by the shader
         GLuint new_irradiance_map_texture = Utils::create_skysphere_texture_hdr(m_recomputed_irradiance_map_data, 2);
 
-		//Deleting the old texture
-		glDeleteTextures(1, &m_irradiance_map);
+        //Deleting the old texture
+        glDeleteTextures(1, &m_irradiance_map);
         m_irradiance_map = new_irradiance_map_texture;
 
-		m_application_state.irradiance_map_freshly_recomputed = false;
-	}
+        m_application_state.irradiance_map_freshly_recomputed = false;
+    }
 }
 
 void TP2::draw_lighting_window()
 {
-	/*if(ImGui::Checkbox("Use ambient", &m_application_settings.use_ambient))
-		update_ambient_uniforms();
+    /*if(ImGui::Checkbox("Use ambient", &m_application_settings.use_ambient))
+        update_ambient_uniforms();
 
-	if (m_application_settings.use_ambient)
-		if(ImGui::ColorPicker4("Ambient color", (float*)(&m_application_settings.ambient_color)))
-			update_ambient_uniforms();*/
+    if (m_application_settings.use_ambient)
+        if(ImGui::ColorPicker4("Ambient color", (float*)(&m_application_settings.ambient_color)))
+            update_ambient_uniforms();*/
 
-	ImGui::Separator();
-	ImGui::Text("Sky & Irradiance");
-	if(ImGui::Checkbox("Use Irradiance Map", &m_application_settings.use_ambient))
-		update_ambient_uniforms();
-	ImGui::RadioButton("Use Skybox", &m_application_settings.cubemap_or_skysphere, 1); ImGui::SameLine();
-	ImGui::RadioButton("Use Skysphere", &m_application_settings.cubemap_or_skysphere, 0);
+    ImGui::Separator();
+    ImGui::Text("Sky & Irradiance");
+    if(ImGui::Checkbox("Use Irradiance Map", &m_application_settings.use_ambient))
+        update_ambient_uniforms();
+    ImGui::RadioButton("Use Skybox", &m_application_settings.cubemap_or_skysphere, 1); ImGui::SameLine();
+    ImGui::RadioButton("Use Skysphere", &m_application_settings.cubemap_or_skysphere, 0);
     ImGui::Separator();
     ImGui::Checkbox("Draw Shadow Map", &m_application_settings.draw_shadow_map);
     ImGui::Checkbox("Bind Light Camera to Camera", &m_application_settings.bind_light_camera_to_camera);
@@ -770,37 +774,37 @@ void TP2::draw_lighting_window()
     ImGui::Separator();
     ImGui::SliderFloat("HDR Tone Mapping Exposure", &m_application_settings.hdr_exposure, 0.0f, 10.0f);
     ImGui::Separator();
-	ImGui::Text("Irradiance map");
-	ImGui::DragInt("Irradiance Map Precomputation Samples", &m_application_settings.irradiance_map_precomputation_samples, 1.0f, 1, 2048);
-	ImGui::DragInt("Irradiance Map Downscale Factor", &m_application_settings.irradiance_map_precomputation_downscale_factor, 1.0f, 1, 8);
-	if (ImGui::Button("Recompute"))
-	{
-		//If we are not already recomputing an irradiance map
-		if (!m_application_state.currently_recomputing_irradiance)
-		{
-			m_application_state.currently_recomputing_irradiance = true;
+    ImGui::Text("Irradiance map");
+    ImGui::DragInt("Irradiance Map Precomputation Samples", &m_application_settings.irradiance_map_precomputation_samples, 1.0f, 1, 2048);
+    ImGui::DragInt("Irradiance Map Downscale Factor", &m_application_settings.irradiance_map_precomputation_downscale_factor, 1.0f, 1, 8);
+    if (ImGui::Button("Recompute"))
+    {
+        //If we are not already recomputing an irradiance map
+        if (!m_application_state.currently_recomputing_irradiance)
+        {
+            m_application_state.currently_recomputing_irradiance = true;
 
-			//Recomputing the irradiance map in a thread to avoid freezing the application
-			std::thread recompute_thread([&] {
-				m_recomputed_irradiance_map_data = Utils::precompute_and_load_associated_irradiance(m_application_settings.irradiance_map_file_path.c_str(), 
-																									m_application_settings.irradiance_map_precomputation_samples, 
-																									m_application_settings.irradiance_map_precomputation_downscale_factor);
+            //Recomputing the irradiance map in a thread to avoid freezing the application
+            std::thread recompute_thread([&] {
+                m_recomputed_irradiance_map_data = Utils::precompute_and_load_associated_irradiance(m_application_settings.irradiance_map_file_path.c_str(),
+                                                                                                    m_application_settings.irradiance_map_precomputation_samples,
+                                                                                                    m_application_settings.irradiance_map_precomputation_downscale_factor);
 
-				m_application_state.currently_recomputing_irradiance = false;
-				m_application_state.irradiance_map_freshly_recomputed = true;
-			});
+                m_application_state.currently_recomputing_irradiance = false;
+                m_application_state.irradiance_map_freshly_recomputed = true;
+            });
 
-			recompute_thread.detach();
-		}
-	}
-	update_recomputed_irradiance_map();
+            recompute_thread.detach();
+        }
+    }
+    update_recomputed_irradiance_map();
 
-	if (ImGui::Button("Clear Irradiance Maps Cache"))
-	{
-		//Removing all the files from the 
+    if (ImGui::Button("Clear Irradiance Maps Cache"))
+    {
+        //Removing all the files from the
         for (const auto& entry : std::filesystem::directory_iterator(TP2::IRRADIANCE_MAPS_CACHE_FOLDER))
-			std::filesystem::remove_all(entry.path());
-	}
+            std::filesystem::remove_all(entry.path());
+    }
 
     //Debug light camera position
 //    ImGui::InputFloat("min x", &m_debug_min_x);
@@ -813,25 +817,25 @@ void TP2::draw_lighting_window()
 
 void TP2::draw_imgui()
 {
-	ImGui_ImplSdlGL3_NewFrame(m_window);
+    ImGui_ImplSdlGL3_NewFrame(m_window);
 
-	ImGui::ShowDemoWindow();
+    ImGui::ShowDemoWindow();
 
-	ImGui::Begin("General settings");
-	draw_general_settings();
-	ImGui::End();
+    ImGui::Begin("General settings");
+    draw_general_settings();
+    ImGui::End();
 
-	ImGui::Begin("Lighting");
-	draw_lighting_window();
-	ImGui::End();
+    ImGui::Begin("Lighting");
+    draw_lighting_window();
+    ImGui::End();
 
     //ImGui::Begin("Materials");
     //draw_materials_window();
     //ImGui::End();
 
 
-	ImGui::Render();
-	ImGui_ImplSdlGL3_RenderDrawData(ImGui::GetDrawData());
+    ImGui::Render();
+    ImGui_ImplSdlGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
 // dessiner une nouvelle image
@@ -862,29 +866,29 @@ int TP2::render()
     m_mesh_groups_drawn = 0;
 
     glBindFramebuffer(GL_FRAMEBUFFER,  m_hdr_framebuffer);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	//On selectionne notre shader
+    //On selectionne notre shader
     glUseProgram(m_texture_shadow_cook_torrance_shader);
 
-	//On update l'uniform mvpMatrix de notre shader
-	Transform mvpMatrix = m_camera.projection() * m_camera.view() * Identity();
-	Transform mvpMatrixInverse = mvpMatrix.inverse();
+    //On update l'uniform mvpMatrix de notre shader
+    Transform mvpMatrix = m_camera.projection() * m_camera.view() * Identity();
+    Transform mvpMatrixInverse = mvpMatrix.inverse();
     GLint mvpMatrixLocation = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_mvp_matrix");
-	glUniformMatrix4fv(mvpMatrixLocation, 1, GL_TRUE, mvpMatrix.data());
+    glUniformMatrix4fv(mvpMatrixLocation, 1, GL_TRUE, mvpMatrix.data());
 
     GLint mlpMatrixLocation = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_mlp_matrix");
     glUniformMatrix4fv(mlpMatrixLocation, 1, GL_TRUE, m_mlp_light_transform.data());
 
-	//Setting the camera position
+    //Setting the camera position
     GLint camera_position_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_camera_position");
-	glUniform3f(camera_position_uniform_location, m_camera.position().x, m_camera.position().y, m_camera.position().z);
+    glUniform3f(camera_position_uniform_location, m_camera.position().x, m_camera.position().y, m_camera.position().z);
 
-	//Setting up the irradiance map
+    //Setting up the irradiance map
     GLint irradiance_map_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_irradiance_map");
-	//The irradiance map is in texture unit 2
-	glActiveTexture(GL_TEXTURE0 + TP2::DIFFUSE_IRRADIANCE_MAP_UNIT);
-	glBindTexture(GL_TEXTURE_2D, m_irradiance_map);
+    //The irradiance map is in texture unit 2
+    glActiveTexture(GL_TEXTURE0 + TP2::DIFFUSE_IRRADIANCE_MAP_UNIT);
+    glBindTexture(GL_TEXTURE_2D, m_irradiance_map);
     glUniform1i(irradiance_map_uniform_location, TP2::DIFFUSE_IRRADIANCE_MAP_UNIT);
 
     GLint shadow_map_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_shadow_map");
@@ -899,10 +903,10 @@ int TP2::render()
     glBindVertexArray(m_mesh_vao);
 
     //Drawing the mesh group by group
-	for (TriangleGroup& group : m_mesh_triangles_group)
-	{
+    for (TriangleGroup& group : m_mesh_triangles_group)
+    {
         if (!rejection_test_bbox_frustum_culling(m_mesh_groups_bounding_boxes[group.index], mvpMatrix))
-		{
+        {
             if (!rejection_test_bbox_frustum_culling_scene(m_mesh_groups_bounding_boxes[group.index], mvpMatrixInverse))
             {
                 int diffuse_texture_index = m_mesh.materials()(group.index).diffuse_texture;
@@ -931,22 +935,22 @@ int TP2::render()
 
                 m_mesh_groups_drawn++;
             }
-		}
+        }
     }
 
-	draw_skysphere();
+    draw_skysphere();
     draw_light_camera_frustum();
     draw_fullscreen_quad_texture_hdr_exposure(m_hdr_shader_output_texture);
 
-	////////// ImGUI //////////
-	draw_imgui();
-	////////// ImGUI //////////
+    ////////// ImGUI //////////
+    draw_imgui();
+    ////////// ImGUI //////////
 
-	//Cleaning stuff
-	glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-	glBindTexture(GL_TEXTURE_2D, 0);
-	glUseProgram(0);
-	glBindVertexArray(0);
+    //Cleaning stuff
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glUseProgram(0);
+    glBindVertexArray(0);
 
-	return 1;
+    return 1;
 }
