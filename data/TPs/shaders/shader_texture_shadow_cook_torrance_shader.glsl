@@ -116,7 +116,7 @@ void main()
     }
 
     vec4 base_color = texture2D(u_mesh_base_color_texture, vs_texcoords);
-    //base_color = vec4(1.0, 0.71, 0.29, 1);
+    base_color = vec4(1.0, 0.71, 0.29, 1);
 
     //Handling transparency on the texture
     if (base_color.a == 0)
@@ -135,7 +135,10 @@ void main()
 
         float metalness = texture2D(u_mesh_specular_texture, vs_texcoords).b;
         float roughness = texture2D(u_mesh_specular_texture, vs_texcoords).g;
+        roughness = 0.4;
+        metalness = 1.0;
         float alpha = roughness * roughness;
+
 
         ////////// Cook Torrance BRDF //////////
         vec3 F;

@@ -43,7 +43,7 @@ Image Utils::precompute_and_load_associated_irradiance(const char* skysphere_fil
 
     //Creating the complete (path + image file name) file name of the irradiance map
     std::filesystem::create_directory(TP::IRRADIANCE_MAPS_CACHE_FOLDER);
-    std::string irradiance_map_name = skysphere_file_string.substr(0, skysphere_file_string.rfind('/')) + "/irradiance_maps_cache/" + skysphere_image_file_name + "_Irradiance_" + std::to_string(samples) + "x.hdr";
+    std::string irradiance_map_name = skysphere_file_string.substr(0, skysphere_file_string.rfind('/')) + "/irradiance_maps_cache/" + skysphere_image_file_name + "_Irradiance_" + std::to_string(samples) + "x_Down" + std::to_string(downscale_factor) + "x.hdr";
 
     //Checking whether the irradiance map already exists or not
     std::ifstream input_irradiance(irradiance_map_name);
@@ -127,11 +127,7 @@ Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path
 	//This variable is then used to print a completion purcentage on stdout
 	std::atomic<int> completed_lines(0);
 
-#pragma omp parallel
-	{
-		int thread_id = omp_get_thread_num();
-
-#pragma omp for
+#pragma omp parallel for schedule(dynamic) collapse(2)
 		for (int y = 0; y < irradiance_map.height(); y++)
 		{
             float theta = M_PI * (1.0f - (float)y / irradiance_map.height());
@@ -159,8 +155,8 @@ Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path
 				Color sum = Color(0, 0, 0);
 				for (unsigned int i = 0; i < samples; i++)
 				{
-                    float rand1 = Utils::xorshift32(&states[thread_id]) / (float)std::numeric_limits<unsigned int>::max();
-                    float rand2 = Utils::xorshift32(&states[thread_id]) / (float)std::numeric_limits<unsigned int>::max();
+                    float rand1 = Utils::xorshift32(&states[omp_get_thread_num()]) / (float)std::numeric_limits<unsigned int>::max();
+                    float rand2 = Utils::xorshift32(&states[omp_get_thread_num()]) / (float)std::numeric_limits<unsigned int>::max();
 
                     float phi_rand = 2.0f * M_PI * rand1;
                     float theta_rand = std::asin(std::sqrt(rand2));
@@ -183,16 +179,15 @@ Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path
 
 			completed_lines++;
 
-			if (thread_id == 0)
+			if (omp_get_thread_num() == 0)
 			{
-				if (completed_lines % 40)
+				if (completed_lines % std::max(2, (int)((float)irradiance_map.height() / 100.0f)))
                 {
                     printf("[%d*%d, %dx] - %.3f%% completed", skysphere_image.width(), skysphere_image.height(), samples, completed_lines / (float)skysphere_image.height() * 100);
                     std::cout << std::endl;
                 }
 			}
 		}
-	}
 
 	return irradiance_map;
 }
