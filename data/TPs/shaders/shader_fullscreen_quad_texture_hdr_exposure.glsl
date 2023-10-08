@@ -32,7 +32,7 @@ void main()
     vec3 tone_mapped = vec3(1.0) - exp(-hdr_color * u_exposure);
 
     // Gamma correction 2.2
-    tone_mapped = pow(tone_mapped, vec3(1.0f / 2.2f));
+    //tone_mapped = pow(tone_mapped, vec3(1.0f / 2.2f));
 
     gl_FragColor = vec4(tone_mapped, 1);
 }

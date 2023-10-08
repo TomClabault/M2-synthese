@@ -116,7 +116,7 @@ void TP2::update_ambient_uniforms()
     glUseProgram(m_texture_shadow_cook_torrance_shader);
 
     GLuint use_irradiance_map_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_use_irradiance_map");
-    glUniform1i(use_irradiance_map_location, m_application_settings.use_ambient);
+    glUniform1i(use_irradiance_map_location, m_application_settings.use_irradiance_map);
 
     //TODO supprimer ambient color parce qu'on utilise que l'irradiance map, pas de ambient color a deux balles
     GLuint ambient_color_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_ambient_color");
@@ -333,15 +333,15 @@ int TP2::init()
     ImGui_ImplSdlGL3_Init(m_window);
 
     //Positioning the camera to a default state
-    //m_camera.read_orbiter("data/TPs/start_camera_bistro.txt");
+    m_camera.read_orbiter("data/TPs/start_camera_bistro.txt");
     m_light_camera.read_orbiter("data/TPs/light_camera_bistro.txt");
     m_mlp_light_transform = TP2::LIGHT_CAMERA_ORTHO_PROJ_BISTRO * m_light_camera.view();
 
     //Reading the mesh displayed
     //m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
-    //m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj");
+    m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj");
     //m_mesh = read_mesh("data/cube_plane_touching.obj");
-    m_mesh = read_mesh("data/sphere_high.obj");
+    //m_mesh = read_mesh("data/sphere_high.obj");
     if (m_mesh.positions().size() == 0)
     {
         std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -369,7 +369,7 @@ int TP2::init()
     program_print_errors(m_texture_shadow_cook_torrance_shader);
 
     GLint use_irradiance_map_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_use_irradiance_map");
-    glUniform1i(use_irradiance_map_location, m_application_settings.use_ambient);
+    glUniform1i(use_irradiance_map_location, m_application_settings.use_irradiance_map);
 
     GLint base_color_texture_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_mesh_base_color_texture");
     glUniform1i(base_color_texture_uniform_location, TP2::TRIANGLE_GROUP_BASE_COLOR_TEXTURE_UNIT);//The mesh texture is on unit 3
@@ -754,16 +754,9 @@ void TP2::update_recomputed_irradiance_map()
 
 void TP2::draw_lighting_window()
 {
-    /*if(ImGui::Checkbox("Use ambient", &m_application_settings.use_ambient))
-        update_ambient_uniforms();
-
-    if (m_application_settings.use_ambient)
-        if(ImGui::ColorPicker4("Ambient color", (float*)(&m_application_settings.ambient_color)))
-            update_ambient_uniforms();*/
-
     ImGui::Separator();
     ImGui::Text("Sky & Irradiance");
-    if(ImGui::Checkbox("Use Irradiance Map", &m_application_settings.use_ambient))
+    if(ImGui::Checkbox("Use Irradiance Map", &m_application_settings.use_irradiance_map))
         update_ambient_uniforms();
     ImGui::RadioButton("Use Skybox", &m_application_settings.cubemap_or_skysphere, 1); ImGui::SameLine();
     ImGui::RadioButton("Use Skysphere", &m_application_settings.cubemap_or_skysphere, 0);
@@ -772,6 +765,7 @@ void TP2::draw_lighting_window()
     ImGui::Checkbox("Bind Light Camera to Camera", &m_application_settings.bind_light_camera_to_camera);
     ImGui::Checkbox("Show Light Camera Frustum", &m_application_settings.draw_light_camera_frustum);
     ImGui::Separator();
+    ImGui::SliderFloat("Shadows Intensity", &m_application_settings.shadow_intensity, -1.0f, 1.0f);
     ImGui::SliderFloat("HDR Tone Mapping Exposure", &m_application_settings.hdr_exposure, 0.0f, 10.0f);
     ImGui::Separator();
     ImGui::Text("Irradiance map");
@@ -895,6 +889,9 @@ int TP2::render()
     glActiveTexture(GL_TEXTURE0 + TP2::SHADOW_MAP_UNIT);
     glBindTexture(GL_TEXTURE_2D, m_shadow_map);
     glUniform1i(shadow_map_uniform_location, TP2::SHADOW_MAP_UNIT);
+
+    GLint shadow_intensity_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_shadow_intensity");
+    glUniform1f(shadow_intensity_uniform_location, m_application_settings.shadow_intensity);
 
     GLint light_position_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_light_position");
     glUniform3f(light_position_uniform_location, m_light_camera.position().x, m_light_camera.position().y, m_light_camera.position().z);

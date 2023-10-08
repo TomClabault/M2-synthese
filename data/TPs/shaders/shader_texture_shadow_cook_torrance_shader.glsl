@@ -38,6 +38,7 @@ uniform sampler2D u_irradiance_map;
 uniform sampler2D u_mesh_base_color_texture;
 uniform sampler2D u_mesh_specular_texture;
 uniform sampler2D u_shadow_map;
+uniform float u_shadow_intensity;
 
 in vec4 vs_position_light_space;
 in vec3 vs_normal;
@@ -55,7 +56,7 @@ float percentage_closer_filtering(sampler2D shadow_map, vec2 texcoords, float sc
         for (int j = -1; j <= 1; j++)
         {
             float shadow_map_depth = texture2D(shadow_map, texcoords + vec2(i, j) * texel_size).r;
-            shadow_sum += scene_depth - bias > shadow_map_depth ? 0.5f : 1.0f;
+            shadow_sum += scene_depth - bias > shadow_map_depth ? u_shadow_intensity : 1.0f;
         }
     }
 
@@ -116,7 +117,7 @@ void main()
     }
 
     vec4 base_color = texture2D(u_mesh_base_color_texture, vs_texcoords);
-    base_color = vec4(1.0, 0.71, 0.29, 1);
+    //base_color = vec4(1.0, 0.71, 0.29, 1); //Hardcoded gold color
 
     //Handling transparency on the texture
     if (base_color.a == 0)
@@ -133,34 +134,44 @@ void main()
         float NoH = max(0.0f, dot(vs_normal_normalized, halfway_vector));
         float VoH = max(0.0f, dot(vs_normal, halfway_vector));
 
-        float metalness = texture2D(u_mesh_specular_texture, vs_texcoords).b;
-        float roughness = texture2D(u_mesh_specular_texture, vs_texcoords).g;
-        roughness = 0.4;
-        metalness = 1.0;
-        float alpha = roughness * roughness;
+        if (NoV > 0 && NoL > 0 && NoH > 0)
+        {
+
+            float metalness = texture2D(u_mesh_specular_texture, vs_texcoords).b;
+            float roughness = texture2D(u_mesh_specular_texture, vs_texcoords).g;
+            float alpha = roughness * roughness;
 
 
-        ////////// Cook Torrance BRDF //////////
-        vec3 F;
-        float D, G;
+            ////////// Cook Torrance BRDF //////////
+            vec3 F;
+            float D, G;
 
-        //F0 = 0.04 for dielectrics, 1.0 for metals (approximation)
-        vec3 F0 = 0.04f * (1.0f - metalness) + metalness * base_color.rgb;
+            //F0 = 0.04 for dielectrics, 1.0 for metals (approximation)
+            vec3 F0 = 0.04f * (1.0f - metalness) + metalness * base_color.rgb;
 
-        //GGX Distribution function
-        F = fresnel_schlick(F0, VoH);
-        D = GGX_normal_distribution(alpha, NoH);
-        G = GGX_smith_masking_shadowing(alpha, NoV, NoL);
+            //GGX Distribution function
+            F = fresnel_schlick(F0, VoH);
+            D = GGX_normal_distribution(alpha, NoH);
+            G = GGX_smith_masking_shadowing(alpha, NoV, NoL);
 
-        vec3 kD = vec3(1.0f - metalness); //Metals do not have a diffuse part
-        kD *= 1.0f - F;//Only the transmitted light is diffused
+            vec3 kD = vec3(1.0f - metalness); //Metals do not have a diffuse part
+            kD *= 1.0f - F;//Only the transmitted light is diffused
 
-        vec3 diffuse_part = kD * base_color.rgb / M_PI;
-        vec3 specular_part = (F * D * G) / (4.0f * NoV * NoL);
+            vec3 diffuse_part = kD * base_color.rgb / M_PI;
+            vec3 specular_part = (F * D * G) / (4.0f * NoV * NoL);
 
-        gl_FragColor = vec4((diffuse_part * irradiance_map_color) + specular_part, 1);
-        gl_FragColor = gl_FragColor * compute_shadow(vs_position_light_space, normalize(vs_normal), normalize(u_light_position - vs_position));
+            gl_FragColor = vec4(diffuse_part + specular_part, 1);
+            gl_FragColor *= compute_shadow(vs_position_light_space, normalize(vs_normal), normalize(u_light_position - vs_position));
+        }
+        else
+            gl_FragColor = vec4(0, 0, 0, 1);
     }
+
+    //TODO ambient lighting. Est-ce qu'on a des nan sur les facades des murs ? Pourquoi c'est toujours tout noir
+    //quand on fait gl_FragColor += base_color.rgb mais c'st ok quand on fait gl_FragColor = base_color.rgb ?
+    //gl_FragColor = vec4(base_color.rgb, 1);// Ambient lighting
+    gl_FragColor += vec4(base_color.rgb * irradiance_map_color, 0);// Ambient lighting
+    //gl_FragColor.a = 1.0f;
 }
 
 #endif
