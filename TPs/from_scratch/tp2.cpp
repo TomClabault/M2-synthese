@@ -333,7 +333,7 @@ int TP2::init()
     ImGui_ImplSdlGL3_Init(m_window);
 
     //Positioning the camera to a default state
-    m_camera.read_orbiter("data/TPs/start_camera_bistro.txt");
+    //m_camera.read_orbiter("data/TPs/start_camera_bistro.txt");
     m_light_camera.read_orbiter("data/TPs/light_camera_bistro.txt");
     m_mlp_light_transform = TP2::LIGHT_CAMERA_ORTHO_PROJ_BISTRO * m_light_camera.view();
 
