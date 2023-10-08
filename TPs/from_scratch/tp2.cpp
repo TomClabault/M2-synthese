@@ -339,9 +339,9 @@ int TP2::init()
 
     //Reading the mesh displayed
     //m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
-    m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj");
+    //m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj");
     //m_mesh = read_mesh("data/cube_plane_touching.obj");
-    //m_mesh = read_mesh("data/sphere_high.obj");
+    m_mesh = read_mesh("data/sphere_high.obj");
     if (m_mesh.positions().size() == 0)
     {
         std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -765,10 +765,13 @@ void TP2::draw_lighting_window()
     ImGui::Checkbox("Bind Light Camera to Camera", &m_application_settings.bind_light_camera_to_camera);
     ImGui::Checkbox("Show Light Camera Frustum", &m_application_settings.draw_light_camera_frustum);
     ImGui::Separator();
+    ImGui::PushItemWidth(256);
     ImGui::SliderFloat("Shadows Intensity", &m_application_settings.shadow_intensity, -1.0f, 1.0f);
     ImGui::SliderFloat("HDR Tone Mapping Exposure", &m_application_settings.hdr_exposure, 0.0f, 10.0f);
+    ImGui::PopItemWidth();
     ImGui::Separator();
     ImGui::Text("Irradiance map");
+    ImGui::PushItemWidth(128);
     ImGui::DragInt("Irradiance Map Precomputation Samples", &m_application_settings.irradiance_map_precomputation_samples, 1.0f, 1, 2048);
     ImGui::DragInt("Irradiance Map Downscale Factor", &m_application_settings.irradiance_map_precomputation_downscale_factor, 1.0f, 1, 8);
     if (ImGui::Button("Recompute"))
