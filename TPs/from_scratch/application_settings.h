@@ -14,7 +14,7 @@ struct ApplicationSettings
 	//1 for cubemap, 0 for skysphere
 	int cubemap_or_skysphere = 0;
 
-    float shadow_intensity = -0.5;
+    float shadow_intensity = 0.3;
     bool draw_shadow_map = false;
     bool bind_light_camera_to_camera = false;
     bool draw_light_camera_frustum = false;

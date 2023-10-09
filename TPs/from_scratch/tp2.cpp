@@ -766,7 +766,7 @@ void TP2::draw_lighting_window()
     ImGui::Checkbox("Show Light Camera Frustum", &m_application_settings.draw_light_camera_frustum);
     ImGui::Separator();
     ImGui::PushItemWidth(256);
-    ImGui::SliderFloat("Shadows Intensity", &m_application_settings.shadow_intensity, -1.0f, 1.0f);
+    ImGui::SliderFloat("Shadows Intensity", &m_application_settings.shadow_intensity, 0.0f, 1.0f);
     ImGui::SliderFloat("HDR Tone Mapping Exposure", &m_application_settings.hdr_exposure, 0.0f, 10.0f);
     ImGui::PopItemWidth();
     ImGui::Separator();

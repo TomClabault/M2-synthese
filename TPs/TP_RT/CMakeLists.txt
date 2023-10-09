@@ -10,4 +10,6 @@ project(simple-dpcpp LANGUAGES CXX)
 
 find_package(IntelDPCPP REQUIRED)
 
+
+
 add_executable(simple-dpcpp simple.cpp)

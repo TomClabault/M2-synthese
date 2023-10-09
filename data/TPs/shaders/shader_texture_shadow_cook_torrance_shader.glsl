@@ -132,15 +132,13 @@ void main()
         float NoV = max(0.0f, dot(vs_normal_normalized, view_direction));
         float NoL = max(0.0f, dot(vs_normal_normalized, light_direction));
         float NoH = max(0.0f, dot(vs_normal_normalized, halfway_vector));
-        float VoH = max(0.0f, dot(vs_normal, halfway_vector));
+        float VoH = max(0.0f, dot(halfway_vector, view_direction));
 
         if (NoV > 0 && NoL > 0 && NoH > 0)
         {
-
             float metalness = texture2D(u_mesh_specular_texture, vs_texcoords).b;
             float roughness = texture2D(u_mesh_specular_texture, vs_texcoords).g;
             float alpha = roughness * roughness;
-
 
             ////////// Cook Torrance BRDF //////////
             vec3 F;
@@ -161,16 +159,13 @@ void main()
             vec3 specular_part = (F * D * G) / (4.0f * NoV * NoL);
 
             gl_FragColor = vec4(diffuse_part + specular_part, 1);
-            gl_FragColor *= compute_shadow(vs_position_light_space, normalize(vs_normal), normalize(u_light_position - vs_position));
         }
         else
             gl_FragColor = vec4(0, 0, 0, 1);
     }
 
-    //TODO ambient lighting. Est-ce qu'on a des nan sur les facades des murs ? Pourquoi c'est toujours tout noir
-    //quand on fait gl_FragColor += base_color.rgb mais c'st ok quand on fait gl_FragColor = base_color.rgb ?
-    //gl_FragColor = vec4(base_color.rgb, 1);// Ambient lighting
     gl_FragColor += vec4(base_color.rgb * irradiance_map_color, 0);// Ambient lighting
+    gl_FragColor *= compute_shadow(vs_position_light_space, normalize(vs_normal), normalize(u_light_position - vs_position));
     //gl_FragColor.a = 1.0f;
 }
 
