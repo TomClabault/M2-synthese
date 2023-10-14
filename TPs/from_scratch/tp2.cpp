@@ -123,14 +123,14 @@ void TP2::update_ambient_uniforms()
     glUniform4f(ambient_color_location, m_application_settings.ambient_color.r, m_application_settings.ambient_color.g, m_application_settings.ambient_color.b, m_application_settings.ambient_color.a);
 }
 
-GLuint TP2::create_opengl_texture(std::string& filepath, bool srgb)
+GLuint TP2::create_opengl_texture(std::string& filepath, int GL_tex_format)
 {
     ImageData texture_data = read_image_data(filepath.c_str());
 
     GLuint texture_id;
     glGenTextures(1, &texture_id);
     glBindTexture(GL_TEXTURE_2D, texture_id);
-    glTexImage2D(GL_TEXTURE_2D, 0, srgb ? GL_SRGB_ALPHA : GL_RGBA,
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_tex_format,
                  texture_data.width, texture_data.height, 0,
                  texture_data.channels == 3 ? GL_RGB : GL_RGBA, GL_UNSIGNED_BYTE,
                  texture_data.data());
@@ -323,6 +323,8 @@ bool TP2::rejection_test_bbox_frustum_culling_scene(const BoundingBox& bbox, con
     return false;
 }
 
+#define TIME(x, message) { auto __start_timer = std::chrono::high_resolution_clock::now(); x; auto __stop_timer = std::chrono::high_resolution_clock::now(); std::cout << message << std::chrono::duration_cast<std::chrono::milliseconds>(__stop_timer - __start_timer).count() << "ms" << std::endl;}
+
 // creation des objets de l'application
 int TP2::init()
 {
@@ -335,13 +337,14 @@ int TP2::init()
     //Positioning the camera to a default state
     m_camera.read_orbiter("data/TPs/start_camera_bistro.txt");
     m_light_camera.read_orbiter("data/TPs/light_camera_bistro.txt");
-    m_mlp_light_transform = TP2::LIGHT_CAMERA_ORTHO_PROJ_BISTRO * m_light_camera.view();
+    m_lp_light_transform = TP2::LIGHT_CAMERA_ORTHO_PROJ_BISTRO * m_light_camera.view();
 
     //Reading the mesh displayed
-    //m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj");
-    m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj");
-    //m_mesh = read_mesh("data/cube_plane_touching.obj");
-    //m_mesh = read_mesh("data/sphere_high.obj");
+    //TIME(m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj"), "Load OBJ Time: ");
+    TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
+    //TIME(m_mesh = read_mesh("data/cube_plane_touching.obj"), "Load OBJ Time: ");
+    //TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
+    //TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
     if (m_mesh.positions().size() == 0)
     {
         std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -372,10 +375,13 @@ int TP2::init()
     glUniform1i(use_irradiance_map_location, m_application_settings.use_irradiance_map);
 
     GLint base_color_texture_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_mesh_base_color_texture");
-    glUniform1i(base_color_texture_uniform_location, TP2::TRIANGLE_GROUP_BASE_COLOR_TEXTURE_UNIT);//The mesh texture is on unit 3
+    glUniform1i(base_color_texture_uniform_location, TP2::TRIANGLE_GROUP_BASE_COLOR_TEXTURE_UNIT);
 
     GLint specular_texture_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_mesh_specular_texture");
-    glUniform1i(specular_texture_uniform_location, TP2::TRIANGLE_GROUP_SPECULAR_TEXTURE_UNIT);//The mesh texture is on unit 3
+    glUniform1i(specular_texture_uniform_location, TP2::TRIANGLE_GROUP_SPECULAR_TEXTURE_UNIT);
+
+    GLint normal_map_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_mesh_normal_map");
+    glUniform1i(normal_map_uniform_location, TP2::TRIANGLE_GROUP_NORMAL_MAP_UNIT);
 
     m_shadow_map_program = read_program("data/TPs/shaders/shader_shadow_map.glsl");
     program_print_errors(m_shadow_map_program);
@@ -394,25 +400,37 @@ int TP2::init()
     //std::thread texture_thread(&TP2::load_mesh_textures_thread_function, this, std::ref(m_mesh.materials()));
 
     //TODO sur un thread
+    auto start = std::chrono::high_resolution_clock::now();
     m_mesh_triangles_group = m_mesh.groups();
     m_mesh_base_color_textures.resize(m_mesh.materials().filename_count());
     m_mesh_specular_textures.resize(m_mesh.materials().filename_count());
+    m_mesh_normal_maps.resize(m_mesh.materials().filename_count());
     for (Material& mat : m_mesh.materials().materials)
     {
         int diffuse_texture_index = mat.diffuse_texture;
         int specular_texture_index = mat.specular_texture;
+        int normal_map_index = mat.normal_map;
+
         if (diffuse_texture_index != -1)
         {
-            GLuint texture_id = create_opengl_texture(m_mesh.materials().texture_filenames[diffuse_texture_index], true);
+            GLuint texture_id = create_opengl_texture(m_mesh.materials().texture_filenames[diffuse_texture_index], GL_SRGB_ALPHA);
             m_mesh_base_color_textures[diffuse_texture_index] = texture_id;
         }
 
         if (specular_texture_index != -1)
         {
-            GLuint texture_id = create_opengl_texture(m_mesh.materials().texture_filenames[specular_texture_index], false);
+            GLuint texture_id = create_opengl_texture(m_mesh.materials().texture_filenames[specular_texture_index], GL_RGB);
             m_mesh_specular_textures[specular_texture_index] = texture_id;
         }
+
+        if (normal_map_index != -1)
+        {
+            GLuint texture_id = create_opengl_texture(m_mesh.materials().texture_filenames[normal_map_index], GL_RGB);
+            m_mesh_normal_maps[normal_map_index] = texture_id;
+        }
     }
+    auto stop = std::chrono::high_resolution_clock::now();
+    std::cout << "Texture loading time: " << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << "ms" << std::endl;
 
     //Generating the default textures that the triangle groups that don't have texture will use
     unsigned char default_texture_data[3] = {255, 255, 255};
@@ -591,7 +609,7 @@ void TP2::draw_shadow_map()
     if (m_application_settings.bind_light_camera_to_camera)
         glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, (m_camera.projection() * m_camera.view()).data());
     else
-        glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, m_mlp_light_transform.data());
+        glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, m_lp_light_transform.data());
 
     glBindVertexArray(m_mesh_vao);
     glDrawArrays(GL_TRIANGLES, 0, m_mesh.triangle_count() * 3);
@@ -689,7 +707,7 @@ void TP2::draw_light_camera_frustum()
     {
         // affiche le frustum de la camera
         Mesh frustum_mesh = make_frustum();
-        draw(frustum_mesh, m_mlp_light_transform.inverse(), camera());
+        draw(frustum_mesh, m_lp_light_transform.inverse(), camera());
     }
 }
 
@@ -765,6 +783,7 @@ void TP2::draw_lighting_window()
     ImGui::Checkbox("Bind Light Camera to Camera", &m_application_settings.bind_light_camera_to_camera);
     ImGui::Checkbox("Show Light Camera Frustum", &m_application_settings.draw_light_camera_frustum);
     ImGui::Separator();
+    ImGui::SliderFloat3("Light Position", (float*)&m_light_pos, -100.0f, 100.0f);
     ImGui::PushItemWidth(256);
     ImGui::SliderFloat("Shadows Intensity", &m_application_settings.shadow_intensity, 0.0f, 1.0f);
     ImGui::SliderFloat("HDR Tone Mapping Exposure", &m_application_settings.hdr_exposure, 0.0f, 10.0f);
@@ -802,14 +821,6 @@ void TP2::draw_lighting_window()
         for (const auto& entry : std::filesystem::directory_iterator(TP2::IRRADIANCE_MAPS_CACHE_FOLDER))
             std::filesystem::remove_all(entry.path());
     }
-
-    //Debug light camera position
-//    ImGui::InputFloat("min x", &m_debug_min_x);
-//    ImGui::InputFloat("max x", &m_debug_max_x);
-//    ImGui::InputFloat("min y", &m_debug_min_y);
-//    ImGui::InputFloat("max y", &m_debug_max_y);
-//    ImGui::InputFloat("min z", &m_debug_min_z);
-//    ImGui::InputFloat("max z", &m_debug_max_z);
 }
 
 void TP2::draw_imgui()
@@ -825,11 +836,6 @@ void TP2::draw_imgui()
     ImGui::Begin("Lighting");
     draw_lighting_window();
     ImGui::End();
-
-    //ImGui::Begin("Materials");
-    //draw_materials_window();
-    //ImGui::End();
-
 
     ImGui::Render();
     ImGui_ImplSdlGL3_RenderDrawData(ImGui::GetDrawData());
@@ -869,17 +875,25 @@ int TP2::render()
     glUseProgram(m_texture_shadow_cook_torrance_shader);
 
     //On update l'uniform mvpMatrix de notre shader
-    Transform mvpMatrix = m_camera.projection() * m_camera.view() * Identity();
-    Transform mvpMatrixInverse = mvpMatrix.inverse();
-    GLint mvpMatrixLocation = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_mvp_matrix");
-    glUniformMatrix4fv(mvpMatrixLocation, 1, GL_TRUE, mvpMatrix.data());
+    Transform model_matrix;// = RotationX(90);
+    Transform vp_matrix = m_camera.projection() * m_camera.view();
+    Transform mvpMatrixInverse = vp_matrix.inverse();
+    GLint model_matrix_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_model_matrix");
+    glUniformMatrix4fv(model_matrix_uniform_location, 1, GL_TRUE, model_matrix.data());
 
-    GLint mlpMatrixLocation = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_mlp_matrix");
-    glUniformMatrix4fv(mlpMatrixLocation, 1, GL_TRUE, m_mlp_light_transform.data());
+    GLint mvp_matrix_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_vp_matrix");
+    glUniformMatrix4fv(mvp_matrix_uniform_location, 1, GL_TRUE, vp_matrix.data());
+
+    GLint mlp_matrix_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_lp_matrix");
+    glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, m_lp_light_transform.data());
 
     //Setting the camera position
     GLint camera_position_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_camera_position");
     glUniform3f(camera_position_uniform_location, m_camera.position().x, m_camera.position().y, m_camera.position().z);
+
+    GLint light_position_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_light_position");
+    //glUniform3f(light_position_uniform_location, m_light_camera.position().x, m_light_camera.position().y, m_light_camera.position().z);
+    glUniform3f(light_position_uniform_location, m_light_pos.x, m_light_pos.y, m_light_pos.z);
 
     //Setting up the irradiance map
     GLint irradiance_map_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_irradiance_map");
@@ -896,21 +910,20 @@ int TP2::render()
     GLint shadow_intensity_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_shadow_intensity");
     glUniform1f(shadow_intensity_uniform_location, m_application_settings.shadow_intensity);
 
-    GLint light_position_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_light_position");
-    glUniform3f(light_position_uniform_location, m_light_camera.position().x, m_light_camera.position().y, m_light_camera.position().z);
-
     //Selecting the VAO of the mesh
     glBindVertexArray(m_mesh_vao);
 
     //Drawing the mesh group by group
+    GLint has_normal_map_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_has_normal_map");
     for (TriangleGroup& group : m_mesh_triangles_group)
     {
-        if (!rejection_test_bbox_frustum_culling(m_mesh_groups_bounding_boxes[group.index], mvpMatrix))
+        if (!rejection_test_bbox_frustum_culling(m_mesh_groups_bounding_boxes[group.index], vp_matrix))
         {
             if (!rejection_test_bbox_frustum_culling_scene(m_mesh_groups_bounding_boxes[group.index], mvpMatrixInverse))
             {
                 int diffuse_texture_index = m_mesh.materials()(group.index).diffuse_texture;
                 int specular_texture_index = m_mesh.materials()(group.index).specular_texture;
+                int normal_map_index = m_mesh.materials()(group.index).normal_map;
 
                 if (diffuse_texture_index != -1)
                 {
@@ -920,16 +933,27 @@ int TP2::render()
                 }
                 else
                 {
-                    glActiveTexture(GL_TEXTURE0 + TP2::TRIANGLE_GROUP_BASE_COLOR_TEXTURE_UNIT); //The textures of the mesh are on unit 3
+                    glActiveTexture(GL_TEXTURE0 + TP2::TRIANGLE_GROUP_BASE_COLOR_TEXTURE_UNIT);
                     glBindTexture(GL_TEXTURE_2D, m_default_texture);
                 }
 
                 if (specular_texture_index != -1)
                 {
                     GLuint group_specular_texture_id = m_mesh_specular_textures[specular_texture_index];
-                    glActiveTexture(GL_TEXTURE0 + TP2::TRIANGLE_GROUP_SPECULAR_TEXTURE_UNIT); //The textures of the mesh are on unit 3
+                    glActiveTexture(GL_TEXTURE0 + TP2::TRIANGLE_GROUP_SPECULAR_TEXTURE_UNIT);
                     glBindTexture(GL_TEXTURE_2D, group_specular_texture_id);
                 }
+
+                if (normal_map_index != -1)
+                {
+                    GLuint group_normal_map_id = m_mesh_normal_maps[normal_map_index];
+                    glActiveTexture(GL_TEXTURE0 + TP2::TRIANGLE_GROUP_NORMAL_MAP_UNIT);
+                    glBindTexture(GL_TEXTURE_2D, group_normal_map_id);
+
+                    glUniform1i(has_normal_map_uniform_location, 1);
+                }
+                else
+                    glUniform1i(has_normal_map_uniform_location, 0);
 
                 glDrawArrays(GL_TRIANGLES, group.first, group.n);
 

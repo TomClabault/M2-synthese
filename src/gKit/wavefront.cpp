@@ -524,6 +524,9 @@ Materials read_materials( const char *filename )
                 
             else if(sscanf(line, "map_Ke %[^\r\n]", tmp) == 1)
                 material->emission_texture= materials.insert_texture( texture_filename(tmp, pathname(filename)).c_str() );
+
+            else if(sscanf(line, "map_Bump %[^\r\n]", tmp) == 1)
+                material->normal_map = materials.insert_texture( texture_filename(tmp, pathname(filename)).c_str() );
         }
         
     }

@@ -33,7 +33,7 @@ public:
 	void setup_diffuse_color_uniform();
 	void setup_roughness_uniform(const float roughness);
 
-    GLuint create_opengl_texture(std::string& filepath, bool srgb = false);
+    GLuint create_opengl_texture(std::string& filepath, int GL_tex_format);
     void load_mesh_textures_thread_function(const Materials& materials);
 
 	void compute_bounding_boxes_of_groups(std::vector<TriangleGroup>& groups);
@@ -72,7 +72,8 @@ public:
 	inline static const int DIFFUSE_IRRADIANCE_MAP_UNIT = 2;
     inline static const int TRIANGLE_GROUP_BASE_COLOR_TEXTURE_UNIT = 3;
     inline static const int TRIANGLE_GROUP_SPECULAR_TEXTURE_UNIT = 4;
-    inline static const int SHADOW_MAP_UNIT = 5;
+    inline static const int TRIANGLE_GROUP_NORMAL_MAP_UNIT = 5;
+    inline static const int SHADOW_MAP_UNIT = 6;
 
     inline static const Transform LIGHT_CAMERA_ORTHO_PROJ_BISTRO = Ortho(-60, 90, -80, 110, 50, 190);
     inline static const int SHADOW_MAP_RESOLUTION = 16384;
@@ -91,6 +92,7 @@ protected:
     std::vector<TriangleGroup> m_mesh_triangles_group;
     std::vector<GLuint> m_mesh_base_color_textures;
     std::vector<GLuint> m_mesh_specular_textures;
+    std::vector<GLuint> m_mesh_normal_maps;
     GLuint m_default_texture;
 
 	GLuint m_cubemap_vao;
@@ -112,7 +114,8 @@ protected:
     GLuint m_shadow_map = 0;
 
     Orbiter m_light_camera;
-	Transform m_mlp_light_transform;
+    Vector m_light_pos = Vector(1.0f, 0.0, -1.0f);
+	Transform m_lp_light_transform;
 
     Transform m_debug_current_projection;
     float m_debug_min_x = -90, m_debug_max_x = 110, m_debug_min_y = -35, m_debug_max_y = 50, m_debug_min_z = 0.1, m_debug_max_z = 160;

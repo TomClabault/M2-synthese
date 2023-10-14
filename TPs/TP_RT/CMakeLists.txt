@@ -10,6 +10,38 @@ project(simple-dpcpp LANGUAGES CXX)
 
 find_package(IntelDPCPP REQUIRED)
 
+file(GLOB SYCL_HEADERS "/opt/intel/oneapi/compiler/2023.2.1/linux/include/sycl/*.hpp" "/opt/intel/oneapi/compiler/2023.2.1/linux/include/sycl/CL/*.hpp")
 
+#[===[
+add_executable(simple-dpcpp
+    ${SYCL_HEADERS}
 
-add_executable(simple-dpcpp simple.cpp)
+    source/color.cpp
+    source/image_io.cpp
+    source/main.cpp
+    source/mat.cpp
+    source/triangle.cpp
+    source/triangle.cpp
+
+    include/color.h
+    include/image.h
+    include/image_io.h
+    include/mat.h
+    include/ray.h
+    include/triangle.h
+    include/vec.h
+
+    stbi/stb_image.h
+    stbi/stb_image_write.h)
+]===]
+
+add_executable(
+    simple-dpcpp
+    vector_test.cpp
+    vector_test.h
+    source/main.cpp)
+
+target_include_directories(simple-dpcpp PRIVATE "/opt/intel/oneapi/compiler/2023.2.1/linux/include/sycl/")
+target_include_directories(simple-dpcpp PRIVATE "include/")
+target_include_directories(simple-dpcpp PRIVATE "stbi/")
+target_include_directories(simple-dpcpp PRIVATE ".")

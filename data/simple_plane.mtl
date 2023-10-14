@@ -1,0 +1,12 @@
+# Blender MTL File: 'None'
+# Material Count: 1
+
+newmtl None
+Ns 500
+Ka 0.8 0.8 0.8
+Kd 0.8 0.8 0.8
+Ks 0.8 0.8 0.8
+map_Kd simple_plane_base_color.jpg
+map_Bump simple_plane_normals.jpg
+d 1
+illum 2
