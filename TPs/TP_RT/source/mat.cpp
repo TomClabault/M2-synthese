@@ -418,8 +418,10 @@ Transform Transform::inverse( ) const
                             icol = k;
                         }
                     }
+#ifndef SYCL_EXTERNAL
                     else if (ipiv[k] > 1)
                         printf("singular matrix in Transform::inverse()\n");
+#endif
                 }
             }
         }
@@ -436,8 +438,10 @@ Transform Transform::inverse( ) const
 
         indxr[i] = irow;
         indxc[i] = icol;
+#ifndef SYCL_EXTERNAL
         if (minv.m[icol][icol] == 0.)
             printf("singular matrix in Transform::inverse()\n");
+#endif
 
         // Set $m[icol][icol]$ to one by scaling row _icol_ appropriately
         float pivinv = 1.f / minv.m[icol][icol];

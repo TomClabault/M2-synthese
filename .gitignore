@@ -6,6 +6,7 @@ obj/
 build*/
 *.make
 *.cbp
+*.bak
 extern/
 
 *.workspace
@@ -22,3 +23,6 @@ irradiance_map_pink*.png
 irradiance_maps_cache/
 bistro-small-export
 bistro-big
+
+*.hdr
+#Heavy HDR files. git add -f if you really want to

@@ -1,8 +1,9 @@
-/*#include <iostream>
+#include <iostream>
 #include <CL/sycl.hpp>
 #include <chrono>
 #include <cmath>
 
+#include "camera.h"
 #include "image_io.h"
 #include "triangle.h"
 
@@ -23,18 +24,29 @@ int main(int argc, char* argv[])
     sycl::buffer<Color> image_buffer(image.color_data(), image.width() * image.height());
     sycl::buffer<Triangle> triangle_buffer(triangles_buffer_host.data(), triangles_buffer_host.size());
 
+    Camera camera;
+
     auto start = std::chrono::high_resolution_clock::now();
     queue.submit([&] (sycl::handler& handler) {
         auto image_buffer_access = image_buffer.get_access<sycl::access::mode::read_write>(handler);
         auto triangle_buffer_access = triangle_buffer.get_access<sycl::access::mode::read>(handler);
 
-        handler.parallel_for(sycl::range<2>(height, width), [image_buffer_access, triangle_buffer_access] (sycl::id<2> coordinates)
+        handler.parallel_for(sycl::range<2>(height, width), [camera, image_buffer_access, triangle_buffer_access] (sycl::id<2> coordinates)
         {
-            int y = coordinates[0];
             int x = coordinates[1];
+            int y = coordinates[0];
 
-            Ray ray(Point(0, 0, 0), Point());
+            float x_ndc_space = (float)x / width * 2 - 1;
+            float y_ndc_space = (float)y / height * 2 - 1;
 
+            Point ray_origin(0, 0, 0);
+            Point ray_origin_world_space = camera.view_matrix(ray_origin);
+
+            Point ray_point_direction = Point(x_ndc_space, y_ndc_space, -1);
+            Point ray_point_direction_view_space = camera.perspective_projection(ray_point_direction);
+            Point ray_point_direction_world_space = camera.view_matrix(ray_point_direction_view_space);
+
+            Ray ray(ray_origin_world_space, ray_point_direction_world_space);
             for (const Triangle& triangle : triangle_buffer_access)
             {
                 HitInfo hit_info;
@@ -53,7 +65,7 @@ int main(int argc, char* argv[])
     // - Un cas simple (une seule fonction) pour que ce soit facilement reproduisible
     // - De memoire, quand on avait que queue.parallel_for on pouvait appeler les Operator+ de Vector ?
     // - L'histoire des kernel class
-    // TODO essayer de caller SYCL_EXTERNAL partout parce que ça a l'air de marcher
+    // TODO essayer de caller partout parce que ça a l'air de marcher
 
     //TODO demander sur le forum intel pour comment debugguer avec device_host() parce que c'est
     //deprecated (dire que j'ai installe SYCL avec ce tuto etc...)
@@ -64,7 +76,6 @@ int main(int argc, char* argv[])
 
     return 0;
 }
-*/
 
 /*
 #include <CL/sycl.hpp>
@@ -94,6 +105,7 @@ int main(){
 }
 */
 
+/*
 #include <sycl.hpp>
 
 #include "vector_test.h"
@@ -127,3 +139,4 @@ int main()
     for (int i = 0; i < vector_buffer_host.size(); i++)
         std::cout << vector_buffer_host[i].x << std::endl;
 }
+*/

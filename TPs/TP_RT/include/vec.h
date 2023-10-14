@@ -2,7 +2,7 @@
 #ifndef _VEC_H
 #define _VEC_H
 
-#include "sycl.hpp"
+#include <CL/sycl.hpp>
 
 //! \addtogroup math
 ///@{
@@ -66,65 +66,65 @@ struct Vector
     explicit Vector( const Point& a, const Point& b ) : x(b.x - a.x), y(b.y - a.y), z(b.z - a.z) {}
 
     //! cree un vecteur a partir des coordonnees du vecteur generique (v.x, v.y, v.z).
-    Vector( const vec3& v );   // l'implementation se trouve en fin de fichier, la structure vec3 n'est pas encore connue.
-    Vector( const vec4& v );   // l'implementation se trouve en fin de fichier, la structure vec3 n'est pas encore connue.
+    SYCL_EXTERNAL Vector( const vec3& v );   // l'implementation se trouve en fin de fichier, la structure vec3 n'est pas encore connue.
+    SYCL_EXTERNAL Vector( const vec4& v );   // l'implementation se trouve en fin de fichier, la structure vec3 n'est pas encore connue.
     //! cree un vecteur a partir des coordonnes du vecteur (v.x, v.y, v.z).
-    explicit Vector( const Point& a );   // l'implementation se trouve en fin de fichier.
+    SYCL_EXTERNAL explicit Vector( const Point& a );   // l'implementation se trouve en fin de fichier.
     
     //! renvoie la ieme composante du vecteur.
-    float operator() ( const unsigned int i ) const; // l'implementation se trouve en fin de fichier
-    float& operator() ( const unsigned int i ); // l'implementation se trouve en fin de fichier
+    SYCL_EXTERNAL float operator() ( const unsigned int i ) const; // l'implementation se trouve en fin de fichier
+    SYCL_EXTERNAL float& operator() ( const unsigned int i ); // l'implementation se trouve en fin de fichier
     
     float x, y, z;
 };
 
 //! renvoie un vecteur unitaire / longueur == 1.
-Vector normalize( const Vector& v );
+SYCL_EXTERNAL Vector normalize( const Vector& v );
 //! renvoie le produit vectoriel de 2 vecteurs.
-Vector cross( const Vector& u, const Vector& v );
+SYCL_EXTERNAL Vector cross( const Vector& u, const Vector& v );
 //! renvoie le produit scalaire de 2 vecteurs.
-float dot( const Vector& u, const Vector& v );
+SYCL_EXTERNAL float dot( const Vector& u, const Vector& v );
 //! renvoie la longueur d'un vecteur.
-float length( const Vector& v );
+SYCL_EXTERNAL float length( const Vector& v );
 //! renvoie la carre de la longueur d'un vecteur.
-float length2( const Vector& v );
+SYCL_EXTERNAL float length2( const Vector& v );
 
 //! renvoie le vecteur a - b.
-Vector operator- ( const Point& a, const Point& b );
+SYCL_EXTERNAL Vector operator- ( const Point& a, const Point& b );
 
 //! renvoie le "point" a + b.
-Point operator+ ( const Point& a, const Point& b );
+SYCL_EXTERNAL Point operator+ ( const Point& a, const Point& b );
 
 //! renvoie le "point" k*a;
-Point operator* ( const float k, const Point& a );
+SYCL_EXTERNAL Point operator* ( const float k, const Point& a );
 //! renvoie le "point" a*k;
-Point operator* ( const Point& a, const float k );
+SYCL_EXTERNAL Point operator* ( const Point& a, const float k );
 //! renvoie le "point" v/k;
-Point operator/ ( const Point& a, const float k );
+SYCL_EXTERNAL Point operator/ ( const Point& a, const float k );
 
 //! renvoie le vecteur -v.
-Vector operator- ( const Vector& v );
+SYCL_EXTERNAL Vector operator- ( const Vector& v );
 
 //! renvoie le point a+v.
-Point operator+ ( const Point& a, const Vector& v );
+SYCL_EXTERNAL Point operator+ ( const Point& a, const Vector& v );
 //! renvoie le point a+v.
-Point operator+ ( const Vector& v, const Point& a );
+SYCL_EXTERNAL Point operator+ ( const Vector& v, const Point& a );
 //! renvoie le point a-v.
-Point operator- ( const Vector& v, const Point& a );
+SYCL_EXTERNAL Point operator- ( const Vector& v, const Point& a );
 //! renvoie le point a-v.
-Point operator- ( const Point& a, const Vector& v );
+SYCL_EXTERNAL Point operator- ( const Point& a, const Vector& v );
 //! renvoie le vecteur u+v.
-Vector operator+ ( const Vector& u, const Vector& v );
+SYCL_EXTERNAL Vector operator+ ( const Vector& u, const Vector& v );
 //! renvoie le vecteur u-v.
-Vector operator- ( const Vector& u, const Vector& v );
+SYCL_EXTERNAL Vector operator- ( const Vector& u, const Vector& v );
 //! renvoie le vecteur k*u;
-Vector operator* ( const float k, const Vector& v );
+SYCL_EXTERNAL Vector operator* ( const float k, const Vector& v );
 //! renvoie le vecteur k*v;
-Vector operator* ( const Vector& v, const float k );
+SYCL_EXTERNAL Vector operator* ( const Vector& v, const float k );
 //! renvoie le vecteur (a.x*b.x, a.y*b.y, a.z*b.z ).
-Vector operator* ( const Vector& a, const Vector& b );
+SYCL_EXTERNAL Vector operator* ( const Vector& a, const Vector& b );
 //! renvoie le vecteur v/k;
-Vector operator/ ( const Vector& v, const float k );
+SYCL_EXTERNAL Vector operator/ ( const Vector& v, const float k );
 
 
 //! vecteur generique, utilitaire.
