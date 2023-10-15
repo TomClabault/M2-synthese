@@ -28,6 +28,8 @@ struct Color
 
     SYCL_EXTERNAL Color& operator=(const Vector& vec);
     SYCL_EXTERNAL Color& operator+=(const Color& other);
+    SYCL_EXTERNAL Color& operator*=(const Color& other);
+    SYCL_EXTERNAL Color& operator*=(float k);
     SYCL_EXTERNAL Color& operator/=(const float k);
 
     friend std::ostream& operator << (std::ostream& os, const Color& color);

@@ -10,6 +10,8 @@ struct HitInfo
 
     float t; //Distance along ray
     float u, v; //Barycentric coordinates
+
+    int triangle_index;
 };
 
 #endif

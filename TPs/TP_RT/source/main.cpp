@@ -80,36 +80,47 @@ int main(int argc, char* argv[])
     sycl::buffer<int> emissive_triangle_indices_buffer(emissive_triangle_indices_host_buffer.data(), emissive_triangle_indices_host_buffer.size());
     sycl::buffer<int> materials_indices_buffer(materials_indices_host_buffer.data(), materials_indices_host_buffer.size());
 
+
+    std::cout << "[" << width << "x" << height << "]: " << RENDER_KERNEL_ITERATIONS * SAMPLES_PER_KERNEL << " samples" << std::endl << std::endl;
+
     auto start = std::chrono::high_resolution_clock::now();
-    queue.submit([&] (sycl::handler& handler) {
-        auto image_buffer_access = image_buffer.get_access<sycl::access::mode::write, sycl::access::target::device>(handler);
-        auto triangle_buffer_access = triangle_buffer.get_access<sycl::access::mode::read>(handler);
-        auto materials_buffer_access = materials_buffer.get_access<sycl::access::mode::read>(handler);
-        auto emissive_triangle_buffer_access = emissive_triangle_indices_buffer.get_access<sycl::access::mode::read>(handler);
-        auto materials_indices_buffer_access = materials_indices_buffer.get_access<sycl::access::mode::read>(handler);
+    for (int i = 0; i < RENDER_KERNEL_ITERATIONS; i++)
+    {
+        queue.submit([&] (sycl::handler& handler) {
+            auto image_buffer_access = image_buffer.get_access<sycl::access::mode::write, sycl::access::target::device>(handler);
+            auto triangle_buffer_access = triangle_buffer.get_access<sycl::access::mode::read>(handler);
+            auto materials_buffer_access = materials_buffer.get_access<sycl::access::mode::read>(handler);
+            auto emissive_triangle_indices_buffer_access = emissive_triangle_indices_buffer.get_access<sycl::access::mode::read>(handler);
+            auto materials_indices_buffer_access = materials_indices_buffer.get_access<sycl::access::mode::read>(handler);
 
-        const auto global_range = sycl::range<2>(width, height);
-        const auto local_range = sycl::range<2>(TILE_SIZE_X, TILE_SIZE_Y);
-        const auto coordinates_indices = sycl::nd_range<2>(global_range, local_range);
+            const auto global_range = sycl::range<2>(width, height);
+            const auto local_range = sycl::range<2>(TILE_SIZE_X, TILE_SIZE_Y);
+            const auto coordinates_indices = sycl::nd_range<2>(global_range, local_range);
 
-        sycl::stream debug_out_stream(16384 * 64, 128, handler);
+            sycl::stream debug_out_stream(16384 * 64, 128, handler);
 
-        auto render_kernel = RenderKernel(width, height,
-                                          image_buffer_access,
-                                          triangle_buffer_access,
-                                          materials_buffer_access,
-                                          emissive_triangle_buffer_access,
-                                          materials_indices_buffer_access,
-                                          debug_out_stream);
-        render_kernel.set_camera(Camera(45, Translation(0, 1, 3.5)));
+            auto render_kernel = RenderKernel(width, height, i,
+                                              image_buffer_access,
+                                              triangle_buffer_access,
+                                              materials_buffer_access,
+                                              emissive_triangle_indices_buffer_access,
+                                              materials_indices_buffer_access,
+                                              debug_out_stream);
+            render_kernel.set_camera(Camera(45, Translation(0, 1, 3.5)));
 
-        handler.parallel_for(coordinates_indices, render_kernel);
-    }).wait();
+            handler.parallel_for(coordinates_indices, render_kernel);
+        }).wait();
+
+        std::cout << (float)(i + 1) / RENDER_KERNEL_ITERATIONS * 100.0f << "%" << std::endl;
+    }
+
+    queue.wait();
+
+    auto stop = std::chrono::high_resolution_clock::now();
+    std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << "ms" << std::endl;
 
     image_buffer.get_access<sycl::access::mode::read>();
-    auto stop = std::chrono::high_resolution_clock::now();
 
-    std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << "ms" << std::endl;
 
     write_image_png(image, "../TP_RT_output.png");
 

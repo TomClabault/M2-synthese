@@ -87,14 +87,6 @@ Transform& Transform::row_major( const float matrix[16] )
     return *this;
 }
 
-Transform::Transform( const Vector& x, const Vector& y, const Vector& z, const Vector& w )
-{
-    m[0][0] = x.x;	m[0][1] = y.x;	m[0][2] = z.x;	m[0][3] = w.x;
-    m[1][0] = x.y;	m[1][1] = y.y;	m[1][2] = z.y;	m[1][3] = w.y;
-    m[2][0] = x.z;	m[2][1] = y.z;	m[2][2] = z.z;	m[2][3] = w.z;
-    m[3][0] = 0;	m[3][1] = 0;	m[3][2] = 0;	m[3][3] = 1;
-}
-
 Transform::Transform( const vec4& x, const vec4& y, const vec4& z, const vec4& w )
 {
     m[0][0] = x.x;	m[0][1] = y.x;	m[0][2] = z.x;	m[0][3] = w.x;
