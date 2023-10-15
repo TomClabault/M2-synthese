@@ -31,8 +31,6 @@ Ray RenderKernel::get_camera_ray(float x, float y) const
 
 void RenderKernel::ray_trace_pixel(int x, int y) const
 {
-    Point light_position = Point(0, 1, 3.5);
-
     xorshift32_generator random_number_generator(x * y * SAMPLES);
 
     Color final_color = Color(0.0f, 0.0f, 0.0f);
@@ -52,7 +50,14 @@ void RenderKernel::ray_trace_pixel(int x, int y) const
 
             if (intersection_found)
             {
-                bool in_shadow = evaluate_shadow_ray(closest_hit_info.inter_point, closest_hit_info.normal_at_inter, random_number_generator);
+                Point random_light_point = sample_random_point_on_lights(random_number_generator);
+                Point shadow_ray_origin = closest_hit_info.inter_point + closest_hit_info.normal_at_inter * 1.0e-4f;
+                Vector shadow_ray_direction = random_light_point - shadow_ray_origin;
+                float t_max = length(shadow_ray_direction);
+
+                Ray shadow_ray(shadow_ray_origin, normalize(shadow_ray_direction));
+
+                bool in_shadow = evaluate_shadow_ray(shadow_ray, t_max);
                 sample_color = in_shadow ? Color(0.0f, 0.0f, 0.0f) : Color(1.0f, 1.0f, 1.0f);
             }
         }
@@ -60,8 +65,9 @@ void RenderKernel::ray_trace_pixel(int x, int y) const
         final_color += sample_color;
     }
 
-    final_color.a = 1.0f * SAMPLES;
-    m_frame_buffer_access[y * m_width + x] = final_color / SAMPLES;
+    final_color /= SAMPLES;
+    final_color.a = 1.0f;
+    m_frame_buffer_access[y * m_width + x] = final_color;
 }
 
 bool RenderKernel::intersect_scene(Ray& ray, HitInfo& closest_hit_info) const
@@ -69,7 +75,7 @@ bool RenderKernel::intersect_scene(Ray& ray, HitInfo& closest_hit_info) const
     float closest_intersection_distance = -1;
     bool intersection_found = false;
 
-    for (const Triangle& triangle : m_triangle_buffer_access)
+    for (const Triangle triangle : m_triangle_buffer_access)
     {
         HitInfo hit_info;
         if (triangle.intersect(ray, hit_info))
@@ -87,10 +93,11 @@ bool RenderKernel::intersect_scene(Ray& ray, HitInfo& closest_hit_info) const
     return intersection_found;
 }
 
-bool RenderKernel::evaluate_shadow_ray(const Point& shadow_ray_origin, const Vector& normal_at_intersection, xorshift32_generator& random_number_generator) const
+Point RenderKernel::sample_random_point_on_lights(xorshift32_generator& random_number_generator) const
 {
-    int random_emissive_triangle_index = random_number_generator() * m_emissive_triangle_buffer_access.size();
-    Triangle random_emissive_triangle = m_emissive_triangle_buffer_access[random_emissive_triangle_index];
+    int random_emissive_triangle_index = random_number_generator() * m_emissive_triangle_indices_buffer.size();
+    random_emissive_triangle_index = m_emissive_triangle_indices_buffer[random_emissive_triangle_index];
+    Triangle random_emissive_triangle = m_triangle_buffer_access[random_emissive_triangle_index];
 
     float rand_1 = random_number_generator();
     float rand_2 = random_number_generator();
@@ -103,15 +110,15 @@ bool RenderKernel::evaluate_shadow_ray(const Point& shadow_ray_origin, const Vec
     Vector AC = random_emissive_triangle.m_c - random_emissive_triangle.m_a;
 
     Point random_point_on_triangle = random_emissive_triangle.m_a + AB * u + AC * v;
-    //random_point_on_triangle = (random_emissive_triangle.m_a + random_emissive_triangle.m_b + random_emissive_triangle.m_c) / 3;
 
-    float distance_to_triangle = length(random_point_on_triangle - shadow_ray_origin);
+    return random_point_on_triangle;
+}
 
+bool RenderKernel::evaluate_shadow_ray(Ray& ray, float t_max) const
+{
     HitInfo hit_info;
-    Ray ray(shadow_ray_origin + normal_at_intersection * 1.0e-4f, random_point_on_triangle);
-
     intersect_scene(ray, hit_info);
-    if (hit_info.t + 1.0e-4f < distance_to_triangle)// length2(hit_info.inter_point - shadow_ray_origin) < distance_to_triangle - 1.0e-4f)
+    if (hit_info.t + 1.0e-4f < t_max)
     {
         //There is something in between the light and the origin of the ray
         return true;

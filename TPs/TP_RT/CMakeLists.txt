@@ -33,6 +33,7 @@ add_executable(TP_RT
     include/mat.h
     include/ray.h
     include/render_kernel.h
+    include/simple_material.h
     include/tests.h
     include/triangle.h
     include/vec.h

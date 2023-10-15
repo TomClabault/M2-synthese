@@ -8,6 +8,7 @@ bool Triangle::intersect(Ray& ray, HitInfo& hit_info) const
    float a, f, u, v;
    edge1 = m_b - m_a;
    edge2 = m_c - m_a;
+
    h = cross(ray.direction, edge2);
    a = dot(edge1, h);
 

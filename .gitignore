@@ -25,4 +25,5 @@ bistro-small-export
 bistro-big
 
 *.hdr
+TP_RT_output.png
 #Heavy HDR files. git add -f if you really want to
