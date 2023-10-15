@@ -2,6 +2,10 @@
 #ifndef _COLOR_H
 #define _COLOR_H
 
+#include "vec.h"
+
+#include <sycl/sycl.hpp>
+
 #include <iostream>
 
 //! \addtogroup image
@@ -20,7 +24,11 @@ struct Color
     
     //! cree une couleur avec les memes composantes que color, mais remplace sa composante alpha (color.r, color.g, color.b, alpha).
     Color( const Color& color, const float alpha ) : r(color.r), g(color.g), b(color.b), a(alpha) {}  // remplace alpha.
-    
+
+    SYCL_EXTERNAL Color& operator=(const Vector& vec);
+    SYCL_EXTERNAL Color& operator+=(const Color& other);
+    SYCL_EXTERNAL Color& operator/=(const float k);
+
     friend std::ostream& operator << (std::ostream& os, const Color& color);
 
     float power( ) const;
@@ -42,15 +50,15 @@ Color Blue( );
 //! utilitaire. renvoie une couleur jaune.
 Color Yellow( );
 
-Color operator+ ( const Color& a, const Color& b );
-Color operator- ( const Color& a, const Color& b );
-Color operator- ( const Color& c );
-Color operator* ( const Color& a, const Color& b );
-Color operator* ( const Color& c, const float k );
-Color operator* ( const float k, const Color& c );
-Color operator/ ( const Color& a, const Color& b );
-Color operator/ ( const float k, const Color& c );
-Color operator/ ( const Color& c, const float k );
+SYCL_EXTERNAL Color operator+ ( const Color& a, const Color& b );
+SYCL_EXTERNAL Color operator- ( const Color& a, const Color& b );
+SYCL_EXTERNAL Color operator- ( const Color& c );
+SYCL_EXTERNAL Color operator* ( const Color& a, const Color& b );
+SYCL_EXTERNAL Color operator* ( const Color& c, const float k );
+SYCL_EXTERNAL Color operator* ( const float k, const Color& c );
+SYCL_EXTERNAL Color operator/ ( const Color& a, const Color& b );
+SYCL_EXTERNAL Color operator/ ( const float k, const Color& c );
+SYCL_EXTERNAL Color operator/ ( const Color& c, const float k );
 
 ///@}
 #endif

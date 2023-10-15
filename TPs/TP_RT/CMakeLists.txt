@@ -20,6 +20,8 @@ add_executable(TP_RT
     source/image_io.cpp
     source/main.cpp
     source/mat.cpp
+    source/render_kernel.cpp
+    source/tests.cpp
     source/triangle.cpp
     source/triangle.cpp
     source/vec.cpp
@@ -30,21 +32,25 @@ add_executable(TP_RT
     include/image_io.h
     include/mat.h
     include/ray.h
+    include/render_kernel.h
+    include/tests.h
     include/triangle.h
     include/vec.h
+    include/xorshift.h
 
     stbi/stb_image.h
-    stbi/stb_image_write.h)
+    stbi/stb_image_write.h
 
-#[===[
-add_executable(
-    TP_RT
-    vector_test.cpp
-    vector_test.h
-    source/main.cpp)
-]===]
+    rapidobj/rapidobj.hpp)
 
-target_include_directories(TP_RT PRIVATE "/opt/intel/oneapi/compiler/2023.2.1/linux/include/sycl/")
+set_property(TARGET TP_RT PROPERTY CXX_STANDARD 17)
+
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+target_link_libraries(TP_RT PRIVATE Threads::Threads)
+
+target_include_directories(TP_RT PRIVATE "/opt/intel/oneapi/compiler/2023.2.1/linux/include/")
 target_include_directories(TP_RT PRIVATE "include/")
 target_include_directories(TP_RT PRIVATE "stbi/")
+target_include_directories(TP_RT PRIVATE "rapidobj/")
 target_include_directories(TP_RT PRIVATE ".")

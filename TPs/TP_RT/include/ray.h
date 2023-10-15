@@ -5,7 +5,8 @@
 
 struct Ray
 {
-    Ray(Point origin, Point direction) : origin(origin), direction(direction) {}
+    Ray(Point origin, Point direction_point) : origin(origin), direction(normalize(direction_point - origin)) {}
+    Ray(Point origin, Vector direction) : origin(origin), direction(direction) {}
 
     Point origin;
     Vector direction;

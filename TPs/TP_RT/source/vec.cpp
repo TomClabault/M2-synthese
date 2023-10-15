@@ -120,6 +120,11 @@ Vector operator/ ( const Vector& v, const float k )
     return kk * v;
 }
 
+Vector abs(const Vector& v)
+{
+    return Vector(std::abs(v.x), std::abs(v.y), std::abs(v.z));
+}
+
 Vector normalize( const Vector& v )
 {
     float kk= 1 / length(v);

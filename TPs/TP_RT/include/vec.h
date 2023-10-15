@@ -2,7 +2,7 @@
 #ifndef _VEC_H
 #define _VEC_H
 
-#include <CL/sycl.hpp>
+#include <sycl/sycl.hpp>
 
 //! \addtogroup math
 ///@{
@@ -78,6 +78,8 @@ struct Vector
     float x, y, z;
 };
 
+//! renvoie la valeur absolue des composantes
+SYCL_EXTERNAL Vector abs(const Vector& v);
 //! renvoie un vecteur unitaire / longueur == 1.
 SYCL_EXTERNAL Vector normalize( const Vector& v );
 //! renvoie le produit vectoriel de 2 vecteurs.

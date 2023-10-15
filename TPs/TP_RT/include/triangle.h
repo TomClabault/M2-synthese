@@ -5,7 +5,7 @@
 #include "ray.h"
 #include "vec.h"
 
-#include "sycl.hpp"
+#include <sycl/sycl.hpp>
 
 struct Triangle
 {

@@ -3,6 +3,32 @@
 
 #include "color.h"
 
+Color& Color::operator=(const Vector& vec)
+{
+    r = vec.x;
+    g = vec.y;
+    b = vec.z;
+
+    return *this;
+}
+
+Color& Color::operator+=(const Color &other)
+{
+    r += other.r;
+    g += other.g;
+    b += other.b;
+
+    return *this;
+}
+
+Color& Color::operator/=(const float k)
+{
+    r /= k;
+    g /= k;
+    b /= k;
+
+    return *this;
+}
 
 float Color::power( ) const
 {
