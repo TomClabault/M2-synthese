@@ -1,3 +1,6 @@
 [submodule "SYCL_RT"]
 	path = TPs/SYCL-ray-tracing
 	url = git@github.com:TomClabault/SYCL-ray-tracing.git
+[submodule "SYCL_RayTracing"]
+	path = TPs/SYCL-ray-tracing
+	url = git@github.com:TomClabault/SYCL-ray-tracing.git
