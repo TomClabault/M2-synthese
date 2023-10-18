@@ -6,7 +6,7 @@
 #include <sycl/sycl.hpp>
 
 struct xorshift32_state {
-    uint32_t a;
+    uint32_t a = 42;
 };
 
 struct xorshift32_generator
@@ -15,7 +15,8 @@ struct xorshift32_generator
 
     SYCL_EXTERNAL float operator()()
     {
-        return xorshift32() / (float)(uint32_t)(-1);
+        //Float in [0, 1[
+        return std::min(xorshift32() / (float)std::numeric_limits<unsigned int>::max(), 1.0f - 1.0e-6f);
     }
 
     SYCL_EXTERNAL uint32_t xorshift32()

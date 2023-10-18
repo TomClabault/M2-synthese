@@ -140,3 +140,13 @@ std::ostream& operator << (std::ostream& os, const Color& color)
     os << "Color[" << color.r << ", " << color.g << ", " << color.b << "]";
     return os;
 }
+
+Color exp(const Color &col)
+{
+    return Color(std::exp(col.r), std::exp(col.g), std::exp(col.b), col.a);
+}
+
+Color pow(const Color &col, float k)
+{
+    return Color(std::pow(col.r, k), std::pow(col.g, k), std::pow(col.b, k), col.a);
+}

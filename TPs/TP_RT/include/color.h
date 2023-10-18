@@ -53,6 +53,9 @@ Color Blue( );
 //! utilitaire. renvoie une couleur jaune.
 Color Yellow( );
 
+SYCL_EXTERNAL Color exp(const Color& col);
+SYCL_EXTERNAL Color pow(const Color& col, float k);
+
 SYCL_EXTERNAL Color operator+ ( const Color& a, const Color& b );
 SYCL_EXTERNAL Color operator- ( const Color& a, const Color& b );
 SYCL_EXTERNAL Color operator- ( const Color& c );

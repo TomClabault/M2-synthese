@@ -9,12 +9,18 @@
 #include "triangle.h"
 #include "xorshift.h"
 
-#define RENDER_KERNEL_ITERATIONS 1
-#define SAMPLES_PER_KERNEL 64
-#define MAX_BOUNCES 10
+#define RENDER_KERNEL_ITERATIONS 2
+#define SAMPLES_PER_KERNEL 128
+#define MAX_BOUNCES 5
 
 #define TILE_SIZE_X 8
 #define TILE_SIZE_Y TILE_SIZE_X
+
+struct LightSourceInformation
+{
+    int emissive_triangle_index;
+    Vector light_source_normal;
+};
 
 class RenderKernel
 {
@@ -38,13 +44,15 @@ public:
 
     SYCL_EXTERNAL void operator()(const sycl::nd_item<2>& coordinates) const;
     SYCL_EXTERNAL Ray get_camera_ray(float x, float y) const;
-    SYCL_EXTERNAL Vector random_dir_hemisphere_around_normal(const Vector& normal, xorshift32_generator& random_number_generator) const;
+
+    Vector rotate_vector_around_normal(const Vector& normal, const Vector& random_dir_local_space) const;
+    Vector cosine_weighted_direction_around_normal(const Vector& normal, float& pdf, xorshift32_generator& random_number_generator) const;
+    Vector uniform_direction_around_normal(const Vector& normal, float& pdf, xorshift32_generator& random_number_generator) const;
 
     SYCL_EXTERNAL void ray_trace_pixel(int x, int y) const;
 
     SYCL_EXTERNAL bool intersect_scene(Ray& ray, HitInfo& closest_hit_info) const;
-    SYCL_EXTERNAL Point sample_random_point_on_lights(xorshift32_generator& random_number_generator, float& pdf, int& random_emissive_triangle_index) const;
-    //SYCL_EXTERNAL bool evaluate_shadow_ray(const Point& shadow_ray_origin, const Vector& normal_at_intersection, xorshift32_generator& random_number_generator) const;
+    Point sample_random_point_on_lights(xorshift32_generator& random_number_generator, float& pdf, LightSourceInformation& light_info) const;
     SYCL_EXTERNAL bool evaluate_shadow_ray(Ray& ray, float t_max) const;
 
 private:

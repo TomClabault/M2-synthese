@@ -19,22 +19,46 @@ void branchlessONB(const Vector& n, Vector& b1, Vector& b2)
     b2 = Vector(b, sign + n.y * n.y * a, -n.y);
 }
 
-Vector RenderKernel::random_dir_hemisphere_around_normal(const Vector& normal, xorshift32_generator& random_number_generator) const
+Vector RenderKernel::rotate_vector_around_normal(const Vector& normal, const Vector& random_dir_local_space) const
 {
     Vector tangent, bitangent;
     branchlessONB(normal, tangent, bitangent);
 
-    Transform ONB = Transform(tangent, bitangent, normal, Vector(0, 0, 0));
+    //Transforming from the random_direction in its local space to the space around the normal
+    //given in parameter (the space with the given normal as the Z up vector)
+    return random_dir_local_space.x * tangent + random_dir_local_space.y * bitangent + random_dir_local_space.z * normal;
+}
 
+Vector RenderKernel::uniform_direction_around_normal(const Vector& normal, float& pdf, xorshift32_generator& random_number_generator) const
+{
     float rand_1 = random_number_generator();
     float rand_2 = random_number_generator();
 
     float phi = 2.0f * M_PI * rand_1;
     float root = sycl::sqrt(1 - rand_2 * rand_2);
 
-    Vector random_dir_world_space(sycl::cos(phi) * root, sycl::sin(phi) * root, rand_2);
+    pdf = 1.0f / (2.0f * M_PI);
 
-    return ONB(random_dir_world_space);
+    //Generating a random direction in a local space with Z as the Up vector
+    Vector random_dir_local_space(sycl::cos(phi) * root, sycl::sin(phi) * root, rand_2);
+    return rotate_vector_around_normal(normal, random_dir_local_space);
+}
+
+Vector RenderKernel::cosine_weighted_direction_around_normal(const Vector& normal, float& pdf, xorshift32_generator& random_number_generator) const
+{
+    float rand_1 = random_number_generator();
+    float rand_2 = random_number_generator();
+
+    float sqrt_rand_2 = sycl::sqrt(rand_2);
+    float phi = 2.0f * M_PI * rand_1;
+    float cos_theta = sqrt_rand_2;
+    float sin_theta = sycl::sqrt(sycl::max(0.0f, 1.0f - cos_theta * cos_theta));
+
+    pdf = sqrt_rand_2 / M_PI;
+
+    //Generating a random direction in a local space with Z as the Up vector
+    Vector random_dir_local_space = Vector(sycl::cos(phi) * sin_theta, sycl::sin(phi) * sin_theta, sqrt_rand_2);
+    return rotate_vector_around_normal(normal, random_dir_local_space);
 }
 
 Ray RenderKernel::get_camera_ray(float x, float y) const
@@ -67,11 +91,13 @@ void RenderKernel::ray_trace_pixel(int x, int y) const
         float x_jittered = (x + 0.5f) + random_number_generator() - 1.0f;
         float y_jittered = (y + 0.5f) + random_number_generator() - 1.0f;
 
+        //TODO area sampling triangles
         Ray ray = get_camera_ray(x_jittered, y_jittered);
 
         Color throughput = Color(1.0f, 1.0f, 1.0f);
         Color sample_color = Color(0.0f, 0.0f, 0.0f);
         RayState next_ray_state = RayState::BOUNCE;
+        float random_direction_pdf = 1.0f;
         for (int bounce = 0; bounce < MAX_BOUNCES; bounce++)
         {
             if (next_ray_state == BOUNCE)
@@ -81,59 +107,56 @@ void RenderKernel::ray_trace_pixel(int x, int y) const
 
                 if (intersection_found)
                 {
-                    // Direct lighting only
+                    //Indirect lighting
+                    int material_index = m_materials_indices_buffer[closest_hit_info.triangle_index];
+                    SimpleMaterial mat = m_materials_buffer_access[material_index];
+
+                    throughput *= mat.diffuse * sycl::max(0.0f, dot(-ray.direction, closest_hit_info.normal_at_inter));
+                    if (bounce == 0)
+                        sample_color += mat.emission;
+
+
+                    // Direct lighting
                     float pdf;
-                    int emissive_triangle_index; //Will be used later if we're not in
-                    //shadow to get the emission of the sampled emissive triangle
-                    Point random_light_point = sample_random_point_on_lights(random_number_generator, pdf, emissive_triangle_index);
+                    LightSourceInformation light_source_info;
+                    Point random_light_point = sample_random_point_on_lights(random_number_generator, pdf, light_source_info);
                     Point shadow_ray_origin = closest_hit_info.inter_point + closest_hit_info.normal_at_inter * 1.0e-4f;
                     Vector shadow_ray_direction = random_light_point - shadow_ray_origin;
-                    float t_max = length(shadow_ray_direction);
+                    float distance_to_light = length(shadow_ray_direction);
                     Vector shadow_ray_direction_normalized = normalize(shadow_ray_direction);
 
                     Ray shadow_ray(shadow_ray_origin, shadow_ray_direction_normalized);
 
-                    bool in_shadow = evaluate_shadow_ray(shadow_ray, t_max);
+                    bool in_shadow = evaluate_shadow_ray(shadow_ray, distance_to_light);
 
-                    int triangle_material_index = m_materials_indices_buffer[closest_hit_info.triangle_index];
-                    SimpleMaterial triangle_material = m_materials_buffer_access[triangle_material_index];
-
-                    next_ray_state = RayState::TERMINATED;
-
-                    if (in_shadow)
+                    Color radiance = Color(0.0f, 0.0f, 0.0f);
+                    if (!in_shadow)
                     {
-                        sample_color = Color(0.0f, 0.0f, 0.0f);
+                        const SimpleMaterial& emissive_triangle_material = m_materials_buffer_access[m_materials_indices_buffer[light_source_info.emissive_triangle_index]];
 
-                        break;
-                    }
-                    else
-                    {
-                        const SimpleMaterial& emissive_triangle_material = m_materials_buffer_access[m_materials_indices_buffer[emissive_triangle_index]];
-
-                        sample_color += emissive_triangle_material.emission;
-                        //Lambertian
-                        sample_color *= triangle_material.diffuse / M_PI;
-                        //Cosine angle
-                        sample_color *= sycl::max(dot(closest_hit_info.normal_at_inter, shadow_ray_direction_normalized), 0.0f);
-                        //PDF
-                        sample_color *= pdf;
+                        radiance = emissive_triangle_material.emission;
+                        //Cosine angle on the illuminated surface
+                        radiance *= sycl::max(dot(closest_hit_info.normal_at_inter, shadow_ray_direction_normalized), 0.0f);
+                        //Cosine angle on the light surface
+                        radiance *= sycl::max(dot(light_source_info.light_source_normal, -shadow_ray_direction_normalized), 0.0f);
+                        //Falloff of the light intensity with the distance squared
+                        radiance /= distance_to_light * distance_to_light;
+                        //PDF: Probability of having chosen this point on this exact light source
+                        radiance /= pdf;
+                        //The illuminated surface is Lambertian
+                        radiance /= M_PI;
                     }
 
+                    Vector random_dir = uniform_direction_around_normal(closest_hit_info.normal_at_inter, random_direction_pdf, random_number_generator);
+                    Point new_ray_origin = closest_hit_info.inter_point + closest_hit_info.normal_at_inter * 1.0e-4f;
 
+                    ray = Ray(new_ray_origin, normalize(random_dir));
+                    next_ray_state = RayState::BOUNCE;
 
+                    sample_color += radiance * throughput;
 
-                    //Indirect lighting
-//                    int material_index = m_materials_indices_buffer[closest_hit_info.triangle_index];
-//                    SimpleMaterial mat = m_materials_buffer_access[material_index];
-
-//                    throughput *= mat.diffuse;
-//                    sample_color += throughput * mat.emission;
-
-//                    Vector random_dir = random_dir_hemisphere_around_normal(closest_hit_info.normal_at_inter, random_number_generator);
-//                    Point new_ray_origin = closest_hit_info.inter_point + closest_hit_info.normal_at_inter * 1.0e-4f;
-
-//                    ray = Ray(new_ray_origin, normalize(random_dir));
-//                    next_ray_state = RayState::BOUNCE;
+                    //Cosine angle of the bounced ray
+                    throughput /= random_direction_pdf;
                 }
                 else
                     next_ray_state = RayState::MISSED;
@@ -155,8 +178,21 @@ void RenderKernel::ray_trace_pixel(int x, int y) const
     m_frame_buffer_access[y * m_width + x] += final_color;
 
     if (m_kernel_iteration == RENDER_KERNEL_ITERATIONS - 1)
+    {
         //Last iteration, computing the average
         m_frame_buffer_access[y * m_width + x] /= RENDER_KERNEL_ITERATIONS;
+
+        const float gamma = 2.2;
+        const float exposure = 1.0f;
+        Color hdrColor = m_frame_buffer_access[y * m_width + x];
+
+        //Exposure tone mapping
+        Color tone_mapped = Color(1.0f, 1.0f, 1.0f) - exp(-hdrColor * exposure);
+        // Gamma correction
+        Color gamma_corrected = pow(tone_mapped, 1.0f / gamma);
+
+        m_frame_buffer_access[y * m_width + x] = gamma_corrected;
+    }
 }
 
 bool RenderKernel::intersect_scene(Ray& ray, HitInfo& closest_hit_info) const
@@ -185,11 +221,11 @@ bool RenderKernel::intersect_scene(Ray& ray, HitInfo& closest_hit_info) const
     return intersection_found;
 }
 
-Point RenderKernel::sample_random_point_on_lights(xorshift32_generator& random_number_generator, float& pdf, int& random_emissive_triangle_index) const
+Point RenderKernel::sample_random_point_on_lights(xorshift32_generator& random_number_generator, float& pdf, LightSourceInformation& light_info) const
 {
-    random_emissive_triangle_index = random_number_generator() * m_emissive_triangle_indices_buffer.size();
-    random_emissive_triangle_index = m_emissive_triangle_indices_buffer[random_emissive_triangle_index];
-    Triangle random_emissive_triangle = m_triangle_buffer_access[random_emissive_triangle_index];
+    light_info.emissive_triangle_index = random_number_generator() * m_emissive_triangle_indices_buffer.size();
+    light_info.emissive_triangle_index = m_emissive_triangle_indices_buffer[light_info.emissive_triangle_index];
+    Triangle random_emissive_triangle = m_triangle_buffer_access[light_info.emissive_triangle_index];
 
     float rand_1 = random_number_generator();
     float rand_2 = random_number_generator();
@@ -203,9 +239,13 @@ Point RenderKernel::sample_random_point_on_lights(xorshift32_generator& random_n
 
     Point random_point_on_triangle = random_emissive_triangle.m_a + AB * u + AC * v;
 
-    float triangle_area = length(cross(AB, AC)) / 2.0f;
-    float nb_triangles = m_emissive_triangle_indices_buffer.size();
-    pdf = 1 / (nb_triangles * triangle_area);
+    Vector normal = cross(AB, AC);
+    float length_normal = length(normal);
+    light_info.light_source_normal = normal / length_normal; //Normalized
+    float triangle_area = length_normal * 0.5f;
+    float nb_emissive_triangles = m_emissive_triangle_indices_buffer.size();
+
+    pdf = 1.0f / (nb_emissive_triangles * triangle_area);
 
     return random_point_on_triangle;
 }
@@ -215,11 +255,8 @@ bool RenderKernel::evaluate_shadow_ray(Ray& ray, float t_max) const
     HitInfo hit_info;
     intersect_scene(ray, hit_info);
     if (hit_info.t + 1.0e-4f < t_max)
-    {
         //There is something in between the light and the origin of the ray
         return true;
-    }
     else
         return false;
-
 }
