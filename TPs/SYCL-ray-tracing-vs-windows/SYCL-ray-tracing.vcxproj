@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\SYCL-ray-tracing\source\bvh.cpp" />
+    <ClCompile Include="..\..\SYCL-ray-tracing\source\camera.cpp" />
+    <ClCompile Include="..\..\SYCL-ray-tracing\source\color.cpp" />
+    <ClCompile Include="..\..\SYCL-ray-tracing\source\flattened_bvh.cpp" />
+    <ClCompile Include="..\..\SYCL-ray-tracing\source\image_io.cpp" />
+    <ClCompile Include="..\..\SYCL-ray-tracing\source\main.cpp" />
+    <ClCompile Include="..\..\SYCL-ray-tracing\source\mat.cpp" />
+    <ClCompile Include="..\..\SYCL-ray-tracing\source\ray.cpp" />
+    <ClCompile Include="..\..\SYCL-ray-tracing\source\tests.cpp" />
+    <ClCompile Include="..\..\SYCL-ray-tracing\source\triangle.cpp" />
+    <ClCompile Include="..\..\SYCL-ray-tracing\source\utils.cpp" />
+    <ClCompile Include="..\..\SYCL-ray-tracing\source\vec.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\SYCL-ray-tracing\include\bvh.h" />
+    <ClInclude Include="..\..\SYCL-ray-tracing\include\bvh_constants.h" />
+    <ClInclude Include="..\..\SYCL-ray-tracing\include\bvh_tests.h" />
+    <ClInclude Include="..\..\SYCL-ray-tracing\include\camera.h" />
+    <ClInclude Include="..\..\SYCL-ray-tracing\include\color.h" />
+    <ClInclude Include="..\..\SYCL-ray-tracing\include\flattened_bvh.h" />
+    <ClInclude Include="..\..\SYCL-ray-tracing\include\hit_info.h" />
+    <ClInclude Include="..\..\SYCL-ray-tracing\include\image.h" />
+    <ClInclude Include="..\..\SYCL-ray-tracing\include\image_io.h" />
+    <ClInclude Include="..\..\SYCL-ray-tracing\include\mat.h" />
+    <ClInclude Include="..\..\SYCL-ray-tracing\include\parsed_obj.h" />
+    <ClInclude Include="..\..\SYCL-ray-tracing\include\ray.h" />
+    <ClInclude Include="..\..\SYCL-ray-tracing\include\render_kernel.h" />
+    <ClInclude Include="..\..\SYCL-ray-tracing\include\simple_material.h" />
+    <ClInclude Include="..\..\SYCL-ray-tracing\include\tests.h" />
+    <ClInclude Include="..\..\SYCL-ray-tracing\include\triangle.h" />
+    <ClInclude Include="..\..\SYCL-ray-tracing\include\utils.h" />
+    <ClInclude Include="..\..\SYCL-ray-tracing\include\vec.h" />
+    <ClInclude Include="..\..\SYCL-ray-tracing\include\xorshift.h" />
+    <ClInclude Include="..\..\SYCL-ray-tracing\rapidobj\rapidobj.hpp" />
+    <ClInclude Include="..\..\SYCL-ray-tracing\stbi\stb_image.h" />
+    <ClInclude Include="..\..\SYCL-ray-tracing\stbi\stb_image_write.h" />
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{8cf2cb8a-5720-410b-9614-13cc46a2e9e1}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>SYCL_ray_tracing</RootNamespace>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>Intel(R) oneAPI DPC++ Compiler 2023</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>Intel(R) oneAPI DPC++ Compiler 2023</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <PrecompiledHeaderFile>
+      </PrecompiledHeaderFile>
+      <SYCLWarningLevel>Level3</SYCLWarningLevel>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>../../SYCL-ray-tracing/include;../../SYCL-ray-tracing/stbi;../../SYCL-ray-tracing/rapidobj</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <PrecompiledHeaderFile>
+      </PrecompiledHeaderFile>
+      <SYCLWarningLevel>Level3</SYCLWarningLevel>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

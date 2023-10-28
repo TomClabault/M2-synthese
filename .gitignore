@@ -8,6 +8,8 @@ build*/
 *.cbp
 *.bak
 extern/
+TPs/SYCL-ray-tracing-vs-windows/x64
+TPs/SYCL-ray-tracing-vs-windows/.vs
 
 *.workspace
 
