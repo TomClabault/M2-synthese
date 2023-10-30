@@ -11,42 +11,45 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\SYCL-ray-tracing\source\bvh.cpp" />
-    <ClCompile Include="..\..\SYCL-ray-tracing\source\camera.cpp" />
-    <ClCompile Include="..\..\SYCL-ray-tracing\source\color.cpp" />
-    <ClCompile Include="..\..\SYCL-ray-tracing\source\flattened_bvh.cpp" />
-    <ClCompile Include="..\..\SYCL-ray-tracing\source\image_io.cpp" />
-    <ClCompile Include="..\..\SYCL-ray-tracing\source\main.cpp" />
-    <ClCompile Include="..\..\SYCL-ray-tracing\source\mat.cpp" />
-    <ClCompile Include="..\..\SYCL-ray-tracing\source\ray.cpp" />
-    <ClCompile Include="..\..\SYCL-ray-tracing\source\tests.cpp" />
-    <ClCompile Include="..\..\SYCL-ray-tracing\source\triangle.cpp" />
-    <ClCompile Include="..\..\SYCL-ray-tracing\source\utils.cpp" />
-    <ClCompile Include="..\..\SYCL-ray-tracing\source\vec.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="..\..\SYCL-ray-tracing\include\bvh.h" />
-    <ClInclude Include="..\..\SYCL-ray-tracing\include\bvh_constants.h" />
-    <ClInclude Include="..\..\SYCL-ray-tracing\include\bvh_tests.h" />
-    <ClInclude Include="..\..\SYCL-ray-tracing\include\camera.h" />
-    <ClInclude Include="..\..\SYCL-ray-tracing\include\color.h" />
-    <ClInclude Include="..\..\SYCL-ray-tracing\include\flattened_bvh.h" />
-    <ClInclude Include="..\..\SYCL-ray-tracing\include\hit_info.h" />
-    <ClInclude Include="..\..\SYCL-ray-tracing\include\image.h" />
-    <ClInclude Include="..\..\SYCL-ray-tracing\include\image_io.h" />
-    <ClInclude Include="..\..\SYCL-ray-tracing\include\mat.h" />
-    <ClInclude Include="..\..\SYCL-ray-tracing\include\parsed_obj.h" />
-    <ClInclude Include="..\..\SYCL-ray-tracing\include\ray.h" />
-    <ClInclude Include="..\..\SYCL-ray-tracing\include\render_kernel.h" />
-    <ClInclude Include="..\..\SYCL-ray-tracing\include\simple_material.h" />
-    <ClInclude Include="..\..\SYCL-ray-tracing\include\tests.h" />
-    <ClInclude Include="..\..\SYCL-ray-tracing\include\triangle.h" />
-    <ClInclude Include="..\..\SYCL-ray-tracing\include\utils.h" />
-    <ClInclude Include="..\..\SYCL-ray-tracing\include\vec.h" />
-    <ClInclude Include="..\..\SYCL-ray-tracing\include\xorshift.h" />
     <ClInclude Include="..\..\SYCL-ray-tracing\rapidobj\rapidobj.hpp" />
     <ClInclude Include="..\..\SYCL-ray-tracing\stbi\stb_image.h" />
     <ClInclude Include="..\..\SYCL-ray-tracing\stbi\stb_image_write.h" />
+    <ClInclude Include="..\SYCL-ray-tracing\include\bounding_volume.h" />
+    <ClInclude Include="..\SYCL-ray-tracing\include\bvh.h" />
+    <ClInclude Include="..\SYCL-ray-tracing\include\bvh_constants.h" />
+    <ClInclude Include="..\SYCL-ray-tracing\include\bvh_tests.h" />
+    <ClInclude Include="..\SYCL-ray-tracing\include\camera.h" />
+    <ClInclude Include="..\SYCL-ray-tracing\include\color.h" />
+    <ClInclude Include="..\SYCL-ray-tracing\include\flattened_bvh.h" />
+    <ClInclude Include="..\SYCL-ray-tracing\include\hit_info.h" />
+    <ClInclude Include="..\SYCL-ray-tracing\include\image.h" />
+    <ClInclude Include="..\SYCL-ray-tracing\include\image_io.h" />
+    <ClInclude Include="..\SYCL-ray-tracing\include\mat.h" />
+    <ClInclude Include="..\SYCL-ray-tracing\include\parsed_obj.h" />
+    <ClInclude Include="..\SYCL-ray-tracing\include\ray.h" />
+    <ClInclude Include="..\SYCL-ray-tracing\include\render_kernel.h" />
+    <ClInclude Include="..\SYCL-ray-tracing\include\simple_material.h" />
+    <ClInclude Include="..\SYCL-ray-tracing\include\sphere.h" />
+    <ClInclude Include="..\SYCL-ray-tracing\include\tests.h" />
+    <ClInclude Include="..\SYCL-ray-tracing\include\triangle.h" />
+    <ClInclude Include="..\SYCL-ray-tracing\include\utils.h" />
+    <ClInclude Include="..\SYCL-ray-tracing\include\vec.h" />
+    <ClInclude Include="..\SYCL-ray-tracing\include\xorshift.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\SYCL-ray-tracing\source\bvh.cpp" />
+    <ClCompile Include="..\SYCL-ray-tracing\source\color.cpp" />
+    <ClCompile Include="..\SYCL-ray-tracing\source\flattened_bvh.cpp" />
+    <ClCompile Include="..\SYCL-ray-tracing\source\image_io.cpp" />
+    <ClCompile Include="..\SYCL-ray-tracing\source\main.cpp" />
+    <ClCompile Include="..\SYCL-ray-tracing\source\mat.cpp" />
+    <ClCompile Include="..\SYCL-ray-tracing\source\ray.cpp" />
+    <ClCompile Include="..\SYCL-ray-tracing\source\render_kernel.cpp" />
+    <ClCompile Include="..\SYCL-ray-tracing\source\sphere.cpp" />
+    <ClCompile Include="..\SYCL-ray-tracing\source\tests.cpp" />
+    <ClCompile Include="..\SYCL-ray-tracing\source\triangle.cpp" />
+    <ClCompile Include="..\SYCL-ray-tracing\source\utils.cpp" />
+    <ClCompile Include="..\SYCL-ray-tracing\source\vec.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{8cf2cb8a-5720-410b-9614-13cc46a2e9e1}</ProjectGuid>
@@ -66,6 +69,7 @@
     <PlatformToolset>Intel(R) oneAPI DPC++ Compiler 2023</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
+    <UseInteloneTBB>true</UseInteloneTBB>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -95,7 +99,8 @@
       <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>../../SYCL-ray-tracing/include;../../SYCL-ray-tracing/stbi;../../SYCL-ray-tracing/rapidobj</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../SYCL-ray-tracing/include;../SYCL-ray-tracing/stbi;../SYCL-ray-tracing/rapidobj</AdditionalIncludeDirectories>
+      <SYCLOptimization>Disabled</SYCLOptimization>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -112,6 +117,8 @@
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>../SYCL-ray-tracing/include;../SYCL-ray-tracing/stbi;../SYCL-ray-tracing/rapidobj</AdditionalIncludeDirectories>
+      <SYCLOptimization>MaxSpeed</SYCLOptimization>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
