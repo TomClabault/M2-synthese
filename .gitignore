@@ -10,6 +10,10 @@ build*/
 extern/
 TPs/SYCL-ray-tracing-vs-windows/x64
 TPs/SYCL-ray-tracing-vs-windows/.vs
+TPs/SYCL-ray-tracing-vs-windows/annotations.advidb2
+TPs/SYCL-ray-tracing-vs-windows/SYCL-ray-tracing-vs-windows.advixeproj
+TPs/SYCL-ray-tracing-vs-windows/config/
+e000/
 
 *.workspace
 
