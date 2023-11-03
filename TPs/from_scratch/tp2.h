@@ -33,7 +33,7 @@ public:
 	void setup_diffuse_color_uniform();
 	void setup_roughness_uniform(const float roughness);
 
-    GLuint create_opengl_texture(std::string& filepath, int GL_tex_format);
+    GLuint create_opengl_texture(std::string& filepath, int GL_tex_format, float anisotropy = 0.0f);
     void load_mesh_textures_thread_function(const Materials& materials);
 
 	void compute_bounding_boxes_of_groups(std::vector<TriangleGroup>& groups);

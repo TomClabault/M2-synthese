@@ -123,7 +123,7 @@ void TP2::update_ambient_uniforms()
     glUniform4f(ambient_color_location, m_application_settings.ambient_color.r, m_application_settings.ambient_color.g, m_application_settings.ambient_color.b, m_application_settings.ambient_color.a);
 }
 
-GLuint TP2::create_opengl_texture(std::string& filepath, int GL_tex_format)
+GLuint TP2::create_opengl_texture(std::string& filepath, int GL_tex_format, float anisotropy)
 {
     ImageData texture_data = read_image_data(filepath.c_str());
 
@@ -139,6 +139,8 @@ GLuint TP2::create_opengl_texture(std::string& filepath, int GL_tex_format)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_REPEAT);
+    if (anisotropy > 1.0f)
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, anisotropy);
 
     glGenerateMipmap(GL_TEXTURE_2D);
 

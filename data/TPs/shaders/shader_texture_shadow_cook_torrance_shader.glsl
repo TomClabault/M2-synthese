@@ -82,8 +82,8 @@ float compute_shadow(vec4 light_space_fragment_position, vec3 normal, vec3 light
     if(scene_projected_depth > 1)
         return 1.0f;
 
-    //Bias with a minimum of 0.005 for perpendicular angles. 0.05 for grazing angles
-    float bias = max((1.0f - dot(normal, light_direction)) * 0.005, 0.001);
+    //Bias with a minimum of 0.001 for perpendicular angles. 0.002 for grazing angles
+    float bias = max((1.0f - dot(normal, light_direction)) * 0.002, 0.001);
     float shadow_map_depth = percentage_closer_filtering(u_shadow_map, projected_point.xy, scene_projected_depth, bias);
 
     return shadow_map_depth;
