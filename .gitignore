@@ -10,6 +10,8 @@ build*/
 extern/
 TPs/SYCL-ray-tracing-vs-windows/x64
 TPs/SYCL-ray-tracing-vs-windows/.vs
+TPs/SYCL-ray-tracingCPU-vs-windows/.vs
+TPs/SYCL-ray-tracingCPU-vs-windows/x64
 TPs/SYCL-ray-tracing-vs-windows/annotations.advidb2
 TPs/SYCL-ray-tracing-vs-windows/SYCL-ray-tracing-vs-windows.advixeproj
 TPs/SYCL-ray-tracing-vs-windows/config/
@@ -29,6 +31,11 @@ irradiance_map_pink*.png
 irradiance_maps_cache/
 bistro-small-export
 bistro-big
+TPs/SYCL-ray-tracing/data/OBJs/Projects/*
+TPs/SYCL-ray-tracing/data/Skyspheres/evening_road_01_puresky_8k.hdr
+TPs/SYCL-ray-tracing/oidn/bin/*
+TPs/SYCL-ray-tracing/oidn/doc/*
+TPs/SYCL-ray-tracing/oidn/lib/*
 
 *.hdr
 TP_RT_output.png
