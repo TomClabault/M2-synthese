@@ -306,7 +306,7 @@ Window create_window( const int w, const int h, const int major, const int minor
 #endif
     
     // creer la fenetre
-    Window window= SDL_CreateWindow("gKit",
+    Window window= SDL_CreateWindow("TP OpenGL",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, w, h,
         SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
     if(window == nullptr)

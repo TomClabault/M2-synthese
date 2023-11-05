@@ -48,6 +48,10 @@ uniform sampler2D u_mesh_normal_map;
 uniform sampler2D u_shadow_map;
 uniform float u_shadow_intensity;
 
+uniform bool u_override_material;
+uniform float u_metalness;
+uniform float u_roughness;
+
 in mat4 vs_model_matrix;
 in vec4 vs_position_light_space;
 in vec3 vs_normal;
@@ -161,7 +165,7 @@ void main()
 {
     vec4 base_color = texture2D(u_mesh_base_color_texture, vs_texcoords);
     vec3 irradiance_map_color;
-    //base_color = vec4(1.0, 0.71, 0.29, 1); //Hardcoded gold color
+    base_color = vec4(1.0, 0.71, 0.29, 1); //Hardcoded gold color
 
     vec3 surface_normal = vs_normal;
     if (u_has_normal_map)
@@ -187,8 +191,11 @@ void main()
             float metalness = texture2D(u_mesh_specular_texture, vs_texcoords).b;
             float roughness = texture2D(u_mesh_specular_texture, vs_texcoords).g;
 
-            //metalness = 1.0f;
-            //roughness = 0.3f;
+            if (u_override_material)
+            {
+                metalness = u_metalness;
+                roughness = u_roughness;
+            }
 
             float alpha = roughness * roughness;
 
@@ -223,7 +230,7 @@ void main()
     }
 
     gl_FragColor += vec4(base_color.rgb * irradiance_map_color, 0);// Ambient lighting
-    gl_FragColor *= compute_shadow(vs_position_light_space, normalize(surface_normal), normalize(u_light_position - vs_position));
+    //gl_FragColor *= compute_shadow(vs_position_light_space, normalize(surface_normal), normalize(u_light_position - vs_position));
     //gl_FragColor.a = 1.0f;
 }
 

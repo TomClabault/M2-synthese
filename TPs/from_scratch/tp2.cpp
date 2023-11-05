@@ -343,9 +343,9 @@ int TP2::init()
 
     //Reading the mesh displayed
     //TIME(m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj"), "Load OBJ Time: ");
-    TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
+    //TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/cube_plane_touching.obj"), "Load OBJ Time: ");
-    //TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
+    TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
     if (m_mesh.positions().size() == 0)
     {
@@ -512,7 +512,7 @@ int TP2::init()
     Point p_min, p_max;
     //TODO ça recalcule tous les bounds alors qu'on les a deja calculees
     m_mesh.bounds(p_min, p_max);
-    //m_camera.lookat(p_min, p_max);
+    m_camera.lookat(p_min, p_max);
 
     if(create_shadow_map() == -1)
         return -1;
@@ -776,7 +776,7 @@ void TP2::draw_lighting_window()
 {
     ImGui::Separator();
     ImGui::Text("Sky & Irradiance");
-    if(ImGui::Checkbox("Use Irradiance Map", &m_application_settings.use_irradiance_map))
+    if (ImGui::Checkbox("Use Irradiance Map", &m_application_settings.use_irradiance_map))
         update_ambient_uniforms();
     ImGui::RadioButton("Use Skybox", &m_application_settings.cubemap_or_skysphere, 1); ImGui::SameLine();
     ImGui::RadioButton("Use Skysphere", &m_application_settings.cubemap_or_skysphere, 0);
@@ -805,12 +805,12 @@ void TP2::draw_lighting_window()
             //Recomputing the irradiance map in a thread to avoid freezing the application
             std::thread recompute_thread([&] {
                 m_recomputed_irradiance_map_data = Utils::precompute_and_load_associated_irradiance(m_application_settings.irradiance_map_file_path.c_str(),
-                                                                                                    m_application_settings.irradiance_map_precomputation_samples,
-                                                                                                    m_application_settings.irradiance_map_precomputation_downscale_factor);
+                m_application_settings.irradiance_map_precomputation_samples,
+                m_application_settings.irradiance_map_precomputation_downscale_factor);
 
-                m_application_state.currently_recomputing_irradiance = false;
-                m_application_state.irradiance_map_freshly_recomputed = true;
-            });
+            m_application_state.currently_recomputing_irradiance = false;
+            m_application_state.irradiance_map_freshly_recomputed = true;
+                });
 
             recompute_thread.detach();
         }
@@ -825,11 +825,18 @@ void TP2::draw_lighting_window()
     }
 }
 
+void TP2::draw_material_window()
+{
+    ImGui::Checkbox("Override material", &m_application_settings.override_material);
+    ImGui::SliderFloat("Roughness", &m_application_settings.mesh_roughness, 0, 1);
+    ImGui::SliderFloat("Metalness", &m_application_settings.mesh_metalness, 0, 1);
+}
+
 void TP2::draw_imgui()
 {
     ImGui_ImplSdlGL3_NewFrame(m_window);
 
-    ImGui::ShowDemoWindow();
+    //ImGui::ShowDemoWindow();
 
     ImGui::Begin("General settings");
     draw_general_settings();
@@ -837,6 +844,10 @@ void TP2::draw_imgui()
 
     ImGui::Begin("Lighting");
     draw_lighting_window();
+    ImGui::End();
+
+    ImGui::Begin("Material");
+    draw_material_window();
     ImGui::End();
 
     ImGui::Render();
@@ -894,8 +905,16 @@ int TP2::render()
     glUniform3f(camera_position_uniform_location, m_camera.position().x, m_camera.position().y, m_camera.position().z);
 
     GLint light_position_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_light_position");
-    //glUniform3f(light_position_uniform_location, m_light_camera.position().x, m_light_camera.position().y, m_light_camera.position().z);
     glUniform3f(light_position_uniform_location, m_light_pos.x, m_light_pos.y, m_light_pos.z);
+
+    GLint override_material_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_override_material");
+    glUniform1i(override_material_uniform_location, m_application_settings.override_material);
+
+    GLint metalness_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_metalness");
+    glUniform1f(metalness_uniform_location, m_application_settings.mesh_metalness);
+
+    GLint roughness_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_roughness");
+    glUniform1f(roughness_uniform_location, m_application_settings.mesh_roughness);
 
     //Setting up the irradiance map
     GLint irradiance_map_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_irradiance_map");

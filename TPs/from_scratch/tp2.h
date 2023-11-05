@@ -59,6 +59,7 @@ public:
 
 	void draw_general_settings();
     void draw_lighting_window();
+	void draw_material_window();
 	void draw_imgui();
 
 	// dessiner une nouvelle image
