@@ -165,11 +165,13 @@ void main()
 {
     vec4 base_color = texture2D(u_mesh_base_color_texture, vs_texcoords);
     vec3 irradiance_map_color;
-    base_color = vec4(1.0, 0.71, 0.29, 1); //Hardcoded gold color
+    //base_color = vec4(1.0, 0.71, 0.29, 1); //Hardcoded gold color
 
     vec3 surface_normal = vs_normal;
     if (u_has_normal_map)
         surface_normal = normal_mapping(vs_texcoords);
+    gl_FragColor = vec4(surface_normal, 0.0f);
+    return;
 
     //Handling transparency on the texture
     if (base_color.a < 0.5)
@@ -230,7 +232,7 @@ void main()
     }
 
     gl_FragColor += vec4(base_color.rgb * irradiance_map_color, 0);// Ambient lighting
-    //gl_FragColor *= compute_shadow(vs_position_light_space, normalize(surface_normal), normalize(u_light_position - vs_position));
+    gl_FragColor *= compute_shadow(vs_position_light_space, normalize(surface_normal), normalize(u_light_position - vs_position));
     //gl_FragColor.a = 1.0f;
 }
 

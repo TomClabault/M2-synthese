@@ -27,9 +27,9 @@ struct ApplicationSettings
     //std::string irradiance_map_file_path = "data/TPs/AllSkyFree_Sky_EpicGloriousPink_Equirect.jpg"; //Non HDR
     //std::string irradiance_map_file_path = "data/TPs/DaySkyHDRI015A_4K-HDR_blurred.hdr";
     //std::string irradiance_map_file_path = "data/TPs/blaubeuren_night_2k.hdr";
-    std::string irradiance_map_file_path = "data/TPs/industrial_sunset_puresky_4k.hdr";
+    //std::string irradiance_map_file_path = "data/TPs/industrial_sunset_puresky_4k.hdr";
     //std::string irradiance_map_file_path = "data/TPs/evening_road_01_puresky_2k.hdr";
-    //std::string irradiance_map_file_path = "data/TPs/meadow_4k.hdr";
+    std::string irradiance_map_file_path = "data/TPs/meadow_4k.hdr";
 
     //Whether or not to use the metalness and roughness here for the material shading
     //If true, these values are going to be used. If false, the values found in
