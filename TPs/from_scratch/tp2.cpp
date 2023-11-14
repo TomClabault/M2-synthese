@@ -20,7 +20,7 @@
 #include <thread>
 
 // constructeur : donner les dimensions de l'image, et eventuellement la version d'openGL.
-TP2::TP2() : AppCamera(1280, 720, 3, 3, 8)
+TP2::TP2() : AppCamera(1280, 720, 4, 3, 8)
 {
     m_app_timer = ApplicationTimer(this);
 }
@@ -330,6 +330,174 @@ bool TP2::rejection_test_bbox_frustum_culling_scene(const BoundingBox& bbox, con
 // creation des objets de l'application
 int TP2::init()
 {
+//    //Initialisation des données sur le CPU
+//    const int N = 32;
+//    std::vector<int> input_data(N);
+//    for (int i= 0; i < N; i++)
+//        input_data[i] = i;
+
+//    GLuint ssbo_input, ssbo_output;
+
+//    glGenBuffers(1, &input_gpu_buffer);
+//    glBindBuffer(GL_SHADER_STORAGE_BUFFER, input_gpu_buffer);
+//    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(int) * N, input_data.data(), GL_STREAM_READ);
+
+//    glGenBuffers(1, &output_gpu_buffer);
+//    glBindBuffer(GL_SHADER_STORAGE_BUFFER, output_gpu_buffer);
+//    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(int) * N, NULL, GL_STREAM_COPY);
+
+//    GLuint compute_shader_program = read_program("data/TPs/shaders/shader_bastien.glsl");
+//    if(program_print_errors(compute_shader_program)) {
+//        exit(EXIT_FAILURE);
+//    }
+
+//    GLuint compute_shader_program = read_program("data/TPs/shaders/occlusion_culling.glsl");
+//    program_print_errors(compute_shader_program);
+//    glUseProgram(compute_shader_program);
+
+//    int nb_groups = N / 32;
+//    nb_groups += (N % 32) ? 1 : 0;
+//    std::cout << "Nb groups: " << nb_groups << std::endl;
+
+//    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo_input);
+//    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo_output);
+//    glUniform1i(glGetUniformLocation(compute_shader_program, "modifier"), 42);
+
+////    GLint location = glGetUniformLocation(compute_shader_program, "u_operand");
+////    std::cout << location << "\n";
+////    glUniform1i(location, 10);
+
+//    glDispatchCompute(nb_groups, 1, 1);
+//    glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
+
+//    std::vector<int> result_data(N);
+//    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_output);
+//    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(int) * N, result_data.data());
+
+//    for (int i = 0; i < N; i++)
+//        std::cout << result_data[i] << ", ";
+
+
+
+
+
+
+
+
+
+
+    // DEFINE
+    std::vector<int> input;
+    std::vector<int> output;
+
+    GLuint computeShader;
+    GLuint ssbo_input;
+    GLuint ssbo_output;
+
+
+    // INIT
+
+    for (size_t i = 0; i < 200; i++)
+    {
+        input.push_back(i + 1);
+    }
+
+    output.resize(input.size());
+
+
+    glGenBuffers(1, &ssbo_input);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo_input);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, input.size() * sizeof(int), input.data(), GL_STREAM_READ);
+
+    glGenBuffers(1, &ssbo_output);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo_output);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, input.size() * sizeof(int), NULL, GL_STREAM_COPY);
+
+    computeShader = read_program("data/TPs/shaders/occlusion_culling.glsl");
+    if(program_print_errors(computeShader)) {
+        exit(EXIT_FAILURE);
+    }
+
+    /// COMPUTE
+
+    glUseProgram(computeShader);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo_input);
+
+    // set unfiform int modifiers to 10
+
+    glUniform1i(glGetUniformLocation(computeShader, "modifier"), 42);
+
+    int groups = (input.size() + 256) / 256;
+
+    glDispatchCompute(groups, 1, 1);
+
+    glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
+
+    // read back
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_output);
+    glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, input.size() * sizeof(int), output.data());
+    for (int i = 0; i < input.size(); i++)
+    {
+        std::cout<<"old value = " << input[i] << " new value = " << output[i] << std::endl;
+    }
+
+//    // DEFINE
+//    std::vector<int> input;
+//    std::vector<int> output;
+
+//    GLuint computeShader;
+//    GLuint ssbo_input;
+//    GLuint ssbo_output;
+
+
+//    // INIT
+
+//    for (size_t i = 0; i < 200; i++)
+//    {
+//        input.push_back(i + 1);
+//    }
+
+//    output.resize(input.size());
+
+//    computeShader = read_program("data/TPs/shaders/shader_bastien.glsl");
+//    if(program_print_errors(computeShader)) {
+//        exit(EXIT_FAILURE);
+//    }
+
+//    glGenBuffers(1, &ssbo_input);
+//    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo_input);
+//    glBufferData(GL_SHADER_STORAGE_BUFFER, input.size() * sizeof(int), input.data(), GL_STREAM_READ);
+
+//    glGenBuffers(1, &ssbo_output);
+//    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo_output);
+//    glBufferData(GL_SHADER_STORAGE_BUFFER, input.size() * sizeof(int), NULL, GL_STREAM_COPY);
+
+
+//    /// COMPUTE
+
+//    glUseProgram(computeShader);
+//    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo_input);
+
+//    // set unfiform int modifiers to 10
+
+//    glUniform1i(glGetUniformLocation(computeShader, "modifier"), 42);
+
+//    int groups = (input.size() + 256) / 256;
+
+//    glDispatchCompute(groups, 1, 1);
+
+//    glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
+
+//    // read back
+//    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_output);
+//    glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, input.size() * sizeof(int), output.data());
+//    for (int i = 0; i < input.size(); i++)
+//    {
+//        std::cout<<"old value = " << input[i] << " new value = " << output[i] << std::endl;
+//    }
+
+    std::exit(0);
+
     //Setting ImGUI up
     ImGui::CreateContext();
 
