@@ -125,8 +125,8 @@
       <AdditionalIncludeDirectories>../SYCL-ray-tracing/include;../SYCL-ray-tracing/stbi;../SYCL-ray-tracing/rapidobj;../SYCL-ray-tracing/oidn/include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <OpenMPSupport>true</OpenMPSupport>
-      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
+      <Optimization>MaxSpeed</Optimization>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
