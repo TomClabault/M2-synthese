@@ -330,50 +330,51 @@ bool TP2::rejection_test_bbox_frustum_culling_scene(const BoundingBox& bbox, con
 // creation des objets de l'application
 int TP2::init()
 {
-    //Initialisation des données sur le CPU
-    const int N = 200;
-    int global_counter_init_value = 0;
-    std::vector<int> input_data(N);
-    for (int i= 0; i < N; i++)
-        input_data[i] = i;
+    //TP4 intro compute shader
+//    //Initialisation des données sur le CPU
+//    const int N = 200;
+//    int global_counter_init_value = 0;
+//    std::vector<int> input_data(N);
+//    for (int i= 0; i < N; i++)
+//        input_data[i] = i;
 
-    GLuint input_gpu_buffer, output_gpu_buffer;
-    glGenBuffers(1, &input_gpu_buffer);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, input_gpu_buffer);
-    //sizeof(int) * (N + 1) because we're allocating memory for the global_counter as well as the input data
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(int) * (N + 1), NULL, GL_STREAM_READ);
-    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(int), &global_counter_init_value);
-    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 1 * sizeof(int), sizeof(int) * N, input_data.data());
+//    GLuint input_gpu_buffer, output_gpu_buffer;
+//    glGenBuffers(1, &input_gpu_buffer);
+//    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, input_gpu_buffer);
+//    //sizeof(int) * (N + 1) because we're allocating memory for the global_counter as well as the input data
+//    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(int) * (N + 1), NULL, GL_STREAM_READ);
+//    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(int), &global_counter_init_value);
+//    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 1 * sizeof(int), sizeof(int) * N, input_data.data());
 
-    glGenBuffers(1, &output_gpu_buffer);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, output_gpu_buffer);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(int) * N, NULL, GL_STREAM_COPY);
+//    glGenBuffers(1, &output_gpu_buffer);
+//    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, output_gpu_buffer);
+//    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(int) * N, NULL, GL_STREAM_COPY);
 
-    GLuint compute_shader_program = read_program("data/TPs/shaders/occlusion_culling.glsl");
-    if (program_print_errors(compute_shader_program)) {
-        exit(EXIT_FAILURE);
-    }
+//    GLuint compute_shader_program = read_program("data/TPs/shaders/occlusion_culling.glsl");
+//    if (program_print_errors(compute_shader_program)) {
+//        exit(EXIT_FAILURE);
+//    }
 
-    glUseProgram(compute_shader_program);
+//    glUseProgram(compute_shader_program);
 
-    int nb_groups = N / 256;
-    nb_groups += (N % 256) ? 1 : 0;
-    std::cout << "Nb groups: " << nb_groups << std::endl;
+//    int nb_groups = N / 256;
+//    nb_groups += (N % 256) ? 1 : 0;
+//    std::cout << "Nb groups: " << nb_groups << std::endl;
 
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, input_gpu_buffer);
-    glUniform1i(glGetUniformLocation(compute_shader_program, "u_operand"), 42);
+//    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, input_gpu_buffer);
+//    glUniform1i(glGetUniformLocation(compute_shader_program, "u_operand"), 0);
 
-    glDispatchCompute(nb_groups, 1, 1);
-    glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
+//    glDispatchCompute(nb_groups, 1, 1);
+//    glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
 
-    std::vector<int> result_data(N);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, output_gpu_buffer);
-    glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(int) * N, result_data.data());
+//    std::vector<int> result_data(N);
+//    glBindBuffer(GL_SHADER_STORAGE_BUFFER, output_gpu_buffer);
+//    glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(int) * N, result_data.data());
 
-    for (int i = 0; i < N; i++)
-        std::cout << result_data[i] << ", ";
+//    for (int i = 0; i < N; i++)
+//        std::cout << result_data[i] << ", ";
 
-    std::exit(0);
+//    std::exit(0);
 
 
 

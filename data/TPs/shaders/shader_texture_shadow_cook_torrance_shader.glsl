@@ -171,6 +171,9 @@ void main()
     if (u_has_normal_map)
         surface_normal = normal_mapping(vs_texcoords);
 
+    vec3 light_direction = normalize(u_light_position - vs_position);
+    light_direction = normalize(vec3(-0.5f, -1.0f, 0.0f));
+
     //Handling transparency on the texture
     if (base_color.a < 0.5)
         discard;
@@ -178,8 +181,6 @@ void main()
     {
         vec3 surface_normal_normalized = normalize(surface_normal);
         vec3 view_direction = normalize(u_camera_position - vs_position);
-        vec3 light_direction = normalize(u_light_position - vs_position);
-        light_direction = normalize(vec3(-0.5f, -1.0f, 0.0f));
         vec3 halfway_vector = normalize(view_direction + light_direction);
 
         float NoV = max(0.0f, dot(surface_normal_normalized, view_direction));
@@ -228,7 +229,7 @@ void main()
     }
 
     gl_FragColor += vec4(base_color.rgb * irradiance_map_color, 0);// Ambient lighting
-    gl_FragColor *= compute_shadow(vs_position_light_space, normalize(surface_normal), normalize(u_light_position - vs_position));
+    gl_FragColor *= compute_shadow(vs_position_light_space, normalize(surface_normal), light_direction);
     gl_FragColor.a = 1.0f;
 }
 
