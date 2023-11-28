@@ -580,8 +580,20 @@ int TP2::init()
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_occlusion_culling_object_buffer);
     glBufferData(GL_DRAW_INDIRECT_BUFFER, sizeof(TP2::CullObject) * m_mesh_triangles_group.size(), m_cull_objects.data(), GL_STATIC_DRAW);
 
+    std::vector<TP2::MultiDrawIndirectParam> indirect_params(m_mesh_triangles_group.size());
+    int index = 0;
+    for (TP2::MultiDrawIndirectParam& param : indirect_params)
+    {
+        param.instance_base = 0;
+        param.instance_count = 1;
+        param.vertex_base = m_mesh_triangles_group[index].first;
+        param.vertex_count = m_mesh_triangles_group[index].n;
+
+        index++;
+    }
+
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_occlusion_culling_indirect_param_buffer);
-    glBufferData(GL_DRAW_INDIRECT_BUFFER, sizeof(TP2::MultiDrawIndirectParam) * m_mesh_triangles_group.size(), m_cull_objects.data(), GL_DYNAMIC_DRAW);
+    glBufferData(GL_DRAW_INDIRECT_BUFFER, sizeof(TP2::MultiDrawIndirectParam) * m_mesh_triangles_group.size(), indirect_params.data(), GL_DYNAMIC_DRAW);
 
     //Cleaning (repositionning the buffers that have been selected to their default value)
     glBindVertexArray(0);
