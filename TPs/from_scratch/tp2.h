@@ -18,6 +18,22 @@ struct BoundingBox
 class TP2 : public AppCamera
 {
 public:
+    struct alignas(16) CullObject
+    {
+        vec3 pMin;
+        unsigned int vertex_base;
+        vec3 pMax;
+        unsigned int vertex_count;
+    };
+
+    struct alignas(4) MultiDrawIndirectParam
+    {
+        unsigned int vertex_count;
+        unsigned int instance_count;
+        unsigned int vertex_base;
+        unsigned int instance_base;
+    };
+
     TP2();
 
 	int get_window_width();
@@ -37,8 +53,8 @@ public:
     void load_mesh_textures_thread_function(const Materials& materials);
 
 	void compute_bounding_boxes_of_groups(std::vector<TriangleGroup>& groups);
-    bool rejection_test_bbox_frustum_culling(const BoundingBox& bbox, const Transform& mvpMatrix);
-    bool rejection_test_bbox_frustum_culling_scene(const BoundingBox& bbox, const Transform& inverse_mvp_matrix);
+    bool rejection_test_bbox_frustum_culling(const CullObject& object, const Transform& mvpMatrix);
+    bool rejection_test_bbox_frustum_culling_scene(const CullObject& object, const Transform& inverse_mvp_matrix);
 
 	// creation des objets de l'application
 	int init();
@@ -56,6 +72,9 @@ public:
     void draw_fullscreen_quad_texture(GLuint texture_to_draw);
     void draw_fullscreen_quad_texture_hdr_exposure(GLuint texture_to_draw);
 	void draw_skysphere();
+    void draw_by_groups_cpu_frustum_culling(const Transform &vp_matrix, const Transform &mvp_matrix_inverse);
+    void draw_multi_draw_indirect();
+    void draw_multi_draw_indirect_gpu_frustum(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse);
 
 	void draw_general_settings();
     void draw_lighting_window();
@@ -89,7 +108,7 @@ protected:
 	//Mesh m_repere;
 	Mesh m_mesh;
     int m_mesh_groups_drawn;
-	std::vector<BoundingBox> m_mesh_groups_bounding_boxes;
+    std::vector<CullObject> m_cull_objects;
     std::vector<TriangleGroup> m_mesh_triangles_group;
     std::vector<GLuint> m_mesh_base_color_textures;
     std::vector<GLuint> m_mesh_specular_textures;
@@ -113,6 +132,10 @@ protected:
 	GLuint m_shadow_map_program;
 	GLuint m_shadow_map_framebuffer;
     GLuint m_shadow_map = 0;
+
+    GLuint m_occlusion_culling_shader;
+    GLuint m_occlusion_culling_indirect_param_buffer;
+    GLuint m_occlusion_culling_object_buffer;
 
     Orbiter m_light_camera;
     Vector m_light_pos = Vector(1.0f, 0.0, -1.0f);

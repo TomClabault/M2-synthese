@@ -78,7 +78,6 @@ float percentage_closer_filtering(sampler2D shadow_map, vec2 texcoords, float sc
 
 float compute_shadow(vec4 light_space_fragment_position, vec3 normal, vec3 light_direction)
 {
-
     vec3 projected_point = light_space_fragment_position.xyz / light_space_fragment_position.w;
     projected_point = projected_point * 0.5 + 0.5;
 
@@ -165,7 +164,7 @@ void main()
 {
     vec4 base_color = texture2D(u_mesh_base_color_texture, vs_texcoords);
     vec3 irradiance_map_color = texture2D(u_irradiance_map, vs_texcoords).rgb;
-    //base_color = vec4(1.0, 0.71, 0.29, 1); //Hardcoded gold color
+    base_color = vec4(1.0, 0.71, 0.29, 1); //Hardcoded gold color
 
     vec3 surface_normal = vs_normal;
     if (u_has_normal_map)

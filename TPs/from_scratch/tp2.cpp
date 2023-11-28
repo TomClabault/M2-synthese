@@ -185,14 +185,14 @@ void TP2::compute_bounding_boxes_of_groups(std::vector<TriangleGroup>& groups)
     vec3 init_min_bbox = vec3(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
     vec3 init_max_bbox = vec3(std::numeric_limits<float>::min(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min());
 
-    m_mesh_groups_bounding_boxes.resize(groups.size());
+    m_cull_objects.resize(groups.size());
 
 #pragma omp parallel for schedule(dynamic)
     for (int group_index = 0; group_index < groups.size(); group_index++)
     {
         TriangleGroup& group = groups.at(group_index);
 
-        BoundingBox bbox {init_min_bbox, init_max_bbox};
+        CullObject cull_object { init_min_bbox, 0, init_max_bbox, 0 };
 
         for (int pos = group.first; pos < group.first + group.n; pos += 3)
         {
@@ -201,24 +201,26 @@ void TP2::compute_bounding_boxes_of_groups(std::vector<TriangleGroup>& groups)
             b = m_mesh.positions()[pos + 1];
             c = m_mesh.positions()[pos + 2];
 
-            bbox.pMin = min(bbox.pMin, a);
-            bbox.pMin = min(bbox.pMin, b);
-            bbox.pMin = min(bbox.pMin, c);
+            cull_object.pMin = min(cull_object.pMin, a);
+            cull_object.pMin = min(cull_object.pMin, b);
+            cull_object.pMin = min(cull_object.pMin, c);
 
-            bbox.pMax = max(bbox.pMax, a);
-            bbox.pMax = max(bbox.pMax, b);
-            bbox.pMax = max(bbox.pMax, c);
+            cull_object.pMax = max(cull_object.pMax, a);
+            cull_object.pMax = max(cull_object.pMax, b);
+            cull_object.pMax = max(cull_object.pMax, c);
         }
 
-        m_mesh_groups_bounding_boxes[group_index] = bbox;
+        cull_object.vertex_base = group.first;
+        cull_object.vertex_count = group.n;
+
+        m_cull_objects[group_index] = cull_object;
     }
 }
 
-bool TP2::rejection_test_bbox_frustum_culling(const BoundingBox& bbox, const Transform& mvpMatrix)
+bool TP2::rejection_test_bbox_frustum_culling(const TP2::CullObject& object, const Transform& mvpMatrix)
 {
     /*
-    *
-    *     6--------7
+          6--------7
          /|       /|
         / |      / |
        2--------3  |
@@ -228,6 +230,8 @@ bool TP2::rejection_test_bbox_frustum_culling(const BoundingBox& bbox, const Tra
        | /      |/
        0--------1
     */
+
+    BoundingBox bbox = { object.pMin, object.pMax };
 
     std::vector<vec4> bbox_points_projective(8);
     bbox_points_projective[0] = mvpMatrix(vec4(bbox.pMin, 1));
@@ -265,7 +269,7 @@ bool TP2::rejection_test_bbox_frustum_culling(const BoundingBox& bbox, const Tra
     return false;
 }
 
-bool TP2::rejection_test_bbox_frustum_culling_scene(const BoundingBox& bbox, const Transform& inverse_mvp_matrix)
+bool TP2::rejection_test_bbox_frustum_culling_scene(const CullObject& object, const Transform& inverse_mvp_matrix)
 {
     /*
     *
@@ -279,6 +283,8 @@ bool TP2::rejection_test_bbox_frustum_culling_scene(const BoundingBox& bbox, con
        | /      |/
        0--------1
     */
+
+    BoundingBox bbox = { object.pMin, object.pMax };
 
     std::array<vec4, 8> frustum_points_projective_space
     {
@@ -567,13 +573,24 @@ int TP2::init()
     m_skysphere = Utils::create_skysphere_texture_hdr(skysphere_image, TP2::SKYSPHERE_UNIT);
     m_irradiance_map = Utils::create_skysphere_texture_hdr(irradiance_map_image, TP2::DIFFUSE_IRRADIANCE_MAP_UNIT);
 
+    // ---------- Preparing buffers for multi-draw indirect: ---------- //
+    glGenBuffers(1, &m_occlusion_culling_object_buffer);
+    glGenBuffers(1, &m_occlusion_culling_indirect_param_buffer);
+
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_occlusion_culling_object_buffer);
+    glBufferData(GL_DRAW_INDIRECT_BUFFER, sizeof(TP2::CullObject) * m_mesh_triangles_group.size(), m_cull_objects.data(), GL_STATIC_DRAW);
+
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_occlusion_culling_indirect_param_buffer);
+    glBufferData(GL_DRAW_INDIRECT_BUFFER, sizeof(TP2::MultiDrawIndirectParam) * m_mesh_triangles_group.size(), m_cull_objects.data(), GL_DYNAMIC_DRAW);
+
     //Cleaning (repositionning the buffers that have been selected to their default value)
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
 
-    Point p_min, p_max;
+    //Point p_min, p_max;
     //TODO ça recalcule tous les bounds alors qu'on les a deja calculees
-    m_mesh.bounds(p_min, p_max);
+    //m_mesh.bounds(p_min, p_max);
     //m_camera.lookat(p_min, p_max);
 
     if(create_shadow_map() == -1)
@@ -683,6 +700,99 @@ void TP2::draw_shadow_map()
     glViewport(0, 0, window_width(), window_height());
     glBindVertexArray(0);
     glCullFace(GL_BACK);
+}
+
+void TP2::draw_by_groups_cpu_frustum_culling(const Transform& vp_matrix, const Transform& mvp_matrix_inverse)
+{
+    GLint has_normal_map_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_has_normal_map");
+    for (TriangleGroup& group : m_mesh_triangles_group)
+    {
+        if (!rejection_test_bbox_frustum_culling(m_cull_objects[group.index], vp_matrix))
+        {
+            if (!rejection_test_bbox_frustum_culling_scene(m_cull_objects[group.index], mvp_matrix_inverse))
+            {
+                int diffuse_texture_index = m_mesh.materials()(group.index).diffuse_texture;
+                int specular_texture_index = m_mesh.materials()(group.index).specular_texture;
+                int normal_map_index = m_mesh.materials()(group.index).normal_map;
+
+                if (diffuse_texture_index != -1)
+                {
+                    GLuint group_base_color_texture_id = m_mesh_base_color_textures[diffuse_texture_index];
+                    glActiveTexture(GL_TEXTURE0 + TP2::TRIANGLE_GROUP_BASE_COLOR_TEXTURE_UNIT); //The textures of the mesh are on unit 3
+                    glBindTexture(GL_TEXTURE_2D, group_base_color_texture_id);
+                }
+                else
+                {
+                    glActiveTexture(GL_TEXTURE0 + TP2::TRIANGLE_GROUP_BASE_COLOR_TEXTURE_UNIT);
+                    glBindTexture(GL_TEXTURE_2D, m_default_texture);
+                }
+
+                if (specular_texture_index != -1)
+                {
+                    GLuint group_specular_texture_id = m_mesh_specular_textures[specular_texture_index];
+                    glActiveTexture(GL_TEXTURE0 + TP2::TRIANGLE_GROUP_SPECULAR_TEXTURE_UNIT);
+                    glBindTexture(GL_TEXTURE_2D, group_specular_texture_id);
+                }
+
+                if (normal_map_index != -1)
+                {
+                    GLuint group_normal_map_id = m_mesh_normal_maps[normal_map_index];
+                    glActiveTexture(GL_TEXTURE0 + TP2::TRIANGLE_GROUP_NORMAL_MAP_UNIT);
+                    glBindTexture(GL_TEXTURE_2D, group_normal_map_id);
+
+                    glUniform1i(has_normal_map_uniform_location, 1);
+                }
+                else
+                    glUniform1i(has_normal_map_uniform_location, 0);
+
+                glDrawArrays(GL_TRIANGLES, group.first, group.n);
+
+                m_mesh_groups_drawn++;
+            }
+        }
+    }
+}
+
+void TP2::draw_multi_draw_indirect()
+{
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_occlusion_culling_indirect_param_buffer);
+    glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_mesh_triangles_group.size(), 0);
+}
+
+void TP2::draw_multi_draw_indirect_gpu_frustum(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
+{
+    glUseProgram(m_occlusion_culling_shader);
+
+    GLint mvp_matrix_uniform_location = glGetUniformLocation(m_occlusion_culling_shader, "u_mvp_matrix");
+    glUniformMatrix4fv(mvp_matrix_uniform_location, 1, GL_FALSE, mvp_matrix.data());
+
+    std::array<vec4, 8> frustum_points_projective_space
+    {
+        vec4(-1, -1, -1, 1),
+        vec4(1, -1, -1, 1),
+        vec4(-1, 1, -1, 1),
+        vec4(1, 1, -1, 1),
+        vec4(-1, -1, 1, 1),
+        vec4(1, -1, 1, 1),
+        vec4(-1, 1, 1, 1),
+        vec4(1, 1, 1, 1)
+    };
+
+    for (int i = 0; i < 8; i++)
+        frustum_points_projective_space[i] = mvp_matrix_inverse(frustum_points_projective_space[i]);
+
+    GLint frustum_world_space_vertices_uniform_location = glGetUniformLocation(m_occlusion_culling_shader, "frustum_world_space_vertices");
+    glUniform3fv(frustum_world_space_vertices_uniform_location, 8, (float*)&frustum_points_projective_space[0]);
+
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_occlusion_culling_indirect_param_buffer);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_occlusion_culling_object_buffer);
+
+    int nb_groups = m_mesh_triangles_group.size() / 256 + (m_mesh_triangles_group.size() % 256 > 0);
+    glDispatchCompute(nb_groups, 1, 1);
+    glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
+
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_occlusion_culling_indirect_param_buffer);
+    glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_mesh_triangles_group.size(), 0);
 }
 
 void TP2::draw_skysphere()
@@ -996,54 +1106,10 @@ int TP2::render()
     //Selecting the VAO of the mesh
     glBindVertexArray(m_mesh_vao);
 
-    //Drawing the mesh group by group
-    GLint has_normal_map_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_has_normal_map");
-    for (TriangleGroup& group : m_mesh_triangles_group)
-    {
-        if (!rejection_test_bbox_frustum_culling(m_mesh_groups_bounding_boxes[group.index], vp_matrix))
-        {
-            if (!rejection_test_bbox_frustum_culling_scene(m_mesh_groups_bounding_boxes[group.index], mvpMatrixInverse))
-            {
-                int diffuse_texture_index = m_mesh.materials()(group.index).diffuse_texture;
-                int specular_texture_index = m_mesh.materials()(group.index).specular_texture;
-                int normal_map_index = m_mesh.materials()(group.index).normal_map;
-
-                if (diffuse_texture_index != -1)
-                {
-                    GLuint group_base_color_texture_id = m_mesh_base_color_textures[diffuse_texture_index];
-                    glActiveTexture(GL_TEXTURE0 + TP2::TRIANGLE_GROUP_BASE_COLOR_TEXTURE_UNIT); //The textures of the mesh are on unit 3
-                    glBindTexture(GL_TEXTURE_2D, group_base_color_texture_id);
-                }
-                else
-                {
-                    glActiveTexture(GL_TEXTURE0 + TP2::TRIANGLE_GROUP_BASE_COLOR_TEXTURE_UNIT);
-                    glBindTexture(GL_TEXTURE_2D, m_default_texture);
-                }
-
-                if (specular_texture_index != -1)
-                {
-                    GLuint group_specular_texture_id = m_mesh_specular_textures[specular_texture_index];
-                    glActiveTexture(GL_TEXTURE0 + TP2::TRIANGLE_GROUP_SPECULAR_TEXTURE_UNIT);
-                    glBindTexture(GL_TEXTURE_2D, group_specular_texture_id);
-                }
-
-                if (normal_map_index != -1)
-                {
-                    GLuint group_normal_map_id = m_mesh_normal_maps[normal_map_index];
-                    glActiveTexture(GL_TEXTURE0 + TP2::TRIANGLE_GROUP_NORMAL_MAP_UNIT);
-                    glBindTexture(GL_TEXTURE_2D, group_normal_map_id);
-
-                    glUniform1i(has_normal_map_uniform_location, 1);
-                }
-                else
-                    glUniform1i(has_normal_map_uniform_location, 0);
-
-                glDrawArrays(GL_TRIANGLES, group.first, group.n);
-
-                m_mesh_groups_drawn++;
-            }
-        }
-    }
+//    //Drawing the mesh group by group
+//    draw_by_groups_cpu_frustum_culling(vp_matrix, mvpMatrixInverse);
+    draw_multi_draw_indirect();
+//    draw_multi_draw_indirect_gpu_frustum(vp_matrix, mvpMatrixInverse);
 
     draw_skysphere();
     draw_light_camera_frustum();
