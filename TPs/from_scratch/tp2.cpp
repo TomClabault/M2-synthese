@@ -432,6 +432,9 @@ int TP2::init()
     glEnable(GL_DEPTH_TEST);                    // activer le ztest
 
 
+    m_occlusion_culling_shader = read_program("data/TPs/shaders/occlusion_culling.glsl");
+    program_print_errors(m_occlusion_culling_shader);
+
     m_fullscreen_quad_texture_shader = read_program("data/TPs/shaders/shader_fullscreen_quad_texture.glsl");
     program_print_errors(m_fullscreen_quad_texture_shader);
 
@@ -573,7 +576,10 @@ int TP2::init()
     m_skysphere = Utils::create_skysphere_texture_hdr(skysphere_image, TP2::SKYSPHERE_UNIT);
     m_irradiance_map = Utils::create_skysphere_texture_hdr(irradiance_map_image, TP2::DIFFUSE_IRRADIANCE_MAP_UNIT);
 
-    // ---------- Preparing buffers for multi-draw indirect: ---------- //
+    // ---------- Preparing for multi-draw indirect: ---------- //
+    m_occlusion_culling_shader = read_program("data/TPs/shaders/occlusion_culling.glsl");
+    program_print_errors(m_occlusion_culling_shader);
+
     glGenBuffers(1, &m_occlusion_culling_object_buffer);
     glGenBuffers(1, &m_occlusion_culling_indirect_param_buffer);
 
@@ -585,7 +591,7 @@ int TP2::init()
     for (TP2::MultiDrawIndirectParam& param : indirect_params)
     {
         param.instance_base = 0;
-        param.instance_count = 1;
+        param.instance_count = 0;
         param.vertex_base = m_mesh_triangles_group[index].first;
         param.vertex_count = m_mesh_triangles_group[index].n;
 
@@ -803,6 +809,7 @@ void TP2::draw_multi_draw_indirect_gpu_frustum(const Transform& mvp_matrix, cons
     glDispatchCompute(nb_groups, 1, 1);
     glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
 
+    glUseProgram(m_texture_shadow_cook_torrance_shader);
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_occlusion_culling_indirect_param_buffer);
     glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_mesh_triangles_group.size(), 0);
 }
@@ -1120,8 +1127,8 @@ int TP2::render()
 
 //    //Drawing the mesh group by group
 //    draw_by_groups_cpu_frustum_culling(vp_matrix, mvpMatrixInverse);
-    draw_multi_draw_indirect();
-//    draw_multi_draw_indirect_gpu_frustum(vp_matrix, mvpMatrixInverse);
+//    draw_multi_draw_indirect();
+    draw_multi_draw_indirect_gpu_frustum(vp_matrix, mvpMatrixInverse);
 
     draw_skysphere();
     draw_light_camera_frustum();

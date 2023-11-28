@@ -5,17 +5,17 @@
 struct CullObject
 {
     vec3 min;
-    unsigned int vertex_count;
+    uint vertex_count;
     vec3 max;
-    unsigned int vertex_base;
+    uint vertex_base;
 };
 
 struct MultiDrawIndirectParam
 {
-    unsigned int vertex_count;
-    unsigned int instance_count;
-    unsigned int vertex_base;
-    unsigned int instance_base;
+    uint vertex_count;
+    uint instance_count;
+    uint vertex_base;
+    uint instance_base;
 };
 
 layout(std430, binding = 0) buffer outputData
@@ -40,13 +40,14 @@ void main()
         return;
 
     //The object will be drawn by default
-    output_data[thread_id].instance_count = 1;
+    output_data[thread_id].instance_count = 0;
+    return;
 
     CullObject cull_object = cull_objects[thread_id];
 
     //Testing the bounding box of the object against the cubic frustum in projective space
-    vec4 object_min_proj_space = u_proj_matrix(vec4(cull_object.min, 1));
-    vec4 object_max_proj_space = u_proj_matrix(vec4(cull_object.max, 1));
+    vec4 object_min_proj_space = u_mvp_matrix * vec4(cull_object.min, 1);
+    vec4 object_max_proj_space = u_mvp_matrix * vec4(cull_object.max, 1);
 
     /*
           6--------7
@@ -80,7 +81,7 @@ void main()
         vec4 object_w_bound_min = vec4(-object_bounds_vertex.w);
         vec4 object_w_bound_max = vec4(object_bounds_vertex.w);
 
-        all_outside &= all(greaterThan(object_bounds_vertex, object_w_bound_max)) && all(lessThan(object_bounds_vertex, object_w_bound_min));
+        all_outside = all_outside && all(greaterThan(object_bounds_vertex, object_w_bound_max)) && all(lessThan(object_bounds_vertex, object_w_bound_min));
         if (!all_outside)
             break; //We found a vertex of the bounding box that isn't separated from the frustum in projective
             //space so we may have to draw this object, we're going to have to do the second test in world space
@@ -97,7 +98,7 @@ void main()
     //Testing the bounding box of the object against the non square frustum in world space
     for (int i = 0; i < 8; i++)
     {
-        all_outside &= all(greaterThan(frustum_world_space_vertices[i], cull_object.max))
+        all_outside = all_outside && all(greaterThan(frustum_world_space_vertices[i], cull_object.max))
                     && all(lessThan(frustum_world_space_vertices[i], cull_object.min));
 
         if (!all_outside)
