@@ -20,9 +20,9 @@ class TP2 : public AppCamera
 public:
     struct alignas(16) CullObject
     {
-        vec3 pMin;
+        vec3 min;
         unsigned int vertex_base;
-        vec3 pMax;
+        vec3 max;
         unsigned int vertex_count;
     };
 

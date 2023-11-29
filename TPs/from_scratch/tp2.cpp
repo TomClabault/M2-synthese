@@ -201,13 +201,13 @@ void TP2::compute_bounding_boxes_of_groups(std::vector<TriangleGroup>& groups)
             b = m_mesh.positions()[pos + 1];
             c = m_mesh.positions()[pos + 2];
 
-            cull_object.pMin = min(cull_object.pMin, a);
-            cull_object.pMin = min(cull_object.pMin, b);
-            cull_object.pMin = min(cull_object.pMin, c);
+            cull_object.min = min(cull_object.min, a);
+            cull_object.min = min(cull_object.min, b);
+            cull_object.min = min(cull_object.min, c);
 
-            cull_object.pMax = max(cull_object.pMax, a);
-            cull_object.pMax = max(cull_object.pMax, b);
-            cull_object.pMax = max(cull_object.pMax, c);
+            cull_object.max = max(cull_object.max, a);
+            cull_object.max = max(cull_object.max, b);
+            cull_object.max = max(cull_object.max, c);
         }
 
         cull_object.vertex_base = group.first;
@@ -231,7 +231,7 @@ bool TP2::rejection_test_bbox_frustum_culling(const TP2::CullObject& object, con
        0--------1
     */
 
-    BoundingBox bbox = { object.pMin, object.pMax };
+    BoundingBox bbox = { object.min, object.max };
 
     std::vector<vec4> bbox_points_projective(8);
     bbox_points_projective[0] = mvpMatrix(vec4(bbox.pMin, 1));
@@ -284,7 +284,7 @@ bool TP2::rejection_test_bbox_frustum_culling_scene(const CullObject& object, co
        0--------1
     */
 
-    BoundingBox bbox = { object.pMin, object.pMax };
+    BoundingBox bbox = { object.min, object.max };
 
     std::array<vec4, 8> frustum_points_projective_space
     {
@@ -411,10 +411,10 @@ int TP2::init()
 
     //Reading the mesh displayed
     //TIME(m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj"), "Load OBJ Time: ");
-    TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
+    //TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/cube_plane_touching.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
-    //TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
+    TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
     if (m_mesh.positions().size() == 0)
     {
         std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -432,8 +432,6 @@ int TP2::init()
     glEnable(GL_DEPTH_TEST);                    // activer le ztest
 
 
-    m_occlusion_culling_shader = read_program("data/TPs/shaders/occlusion_culling.glsl");
-    program_print_errors(m_occlusion_culling_shader);
 
     m_fullscreen_quad_texture_shader = read_program("data/TPs/shaders/shader_fullscreen_quad_texture.glsl");
     program_print_errors(m_fullscreen_quad_texture_shader);
@@ -458,12 +456,16 @@ int TP2::init()
 
     m_shadow_map_program = read_program("data/TPs/shaders/shader_shadow_map.glsl");
     program_print_errors(m_shadow_map_program);
+
     m_cubemap_shader = read_program("data/TPs/shaders/shader_cubemap.glsl");
     program_print_errors(m_cubemap_shader);
 
-    GLint skysphere_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_skysphere");
     //The skysphere is on texture unit 1 so we're using 1 for the value of the uniform
+    GLint skysphere_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_skysphere");
     glUniform1i(skysphere_uniform_location, 1);
+
+    m_occlusion_culling_shader = read_program("data/TPs/shaders/occlusion_culling.glsl");
+    program_print_errors(m_occlusion_culling_shader);
 
 
 
@@ -580,11 +582,13 @@ int TP2::init()
     m_occlusion_culling_shader = read_program("data/TPs/shaders/occlusion_culling.glsl");
     program_print_errors(m_occlusion_culling_shader);
 
-    glGenBuffers(1, &m_occlusion_culling_object_buffer);
     glGenBuffers(1, &m_occlusion_culling_indirect_param_buffer);
+    glGenBuffers(1, &m_occlusion_culling_object_buffer);
 
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_occlusion_culling_object_buffer);
-    glBufferData(GL_DRAW_INDIRECT_BUFFER, sizeof(TP2::CullObject) * m_mesh_triangles_group.size(), m_cull_objects.data(), GL_STATIC_DRAW);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_object_buffer);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int) + sizeof(TP2::CullObject) * m_mesh_triangles_group.size(), nullptr, GL_STATIC_DRAW);
+    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int), 0);
+    glBufferSubData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int), sizeof(TP2::CullObject)* m_mesh_triangles_group.size(), m_cull_objects.data());
 
     std::vector<TP2::MultiDrawIndirectParam> indirect_params(m_mesh_triangles_group.size());
     int index = 0;
@@ -606,10 +610,10 @@ int TP2::init()
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
 
-    //Point p_min, p_max;
+    Point p_min, p_max;
     //TODO ça recalcule tous les bounds alors qu'on les a deja calculees
-    //m_mesh.bounds(p_min, p_max);
-    //m_camera.lookat(p_min, p_max);
+    m_mesh.bounds(p_min, p_max);
+    m_camera.lookat(p_min, p_max);
 
     if(create_shadow_map() == -1)
         return -1;
@@ -722,6 +726,8 @@ void TP2::draw_shadow_map()
 
 void TP2::draw_by_groups_cpu_frustum_culling(const Transform& vp_matrix, const Transform& mvp_matrix_inverse)
 {
+    m_mesh_groups_drawn = 0;
+
     GLint has_normal_map_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_has_normal_map");
     for (TriangleGroup& group : m_mesh_triangles_group)
     {
@@ -777,9 +783,24 @@ void TP2::draw_multi_draw_indirect()
     glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_mesh_triangles_group.size(), 0);
 }
 
+bool all(vec4 a)
+{
+    return a.x && a.y && a.z && a.w;
+}
+
+vec4 lessThan(vec4 a, vec4 b)
+{
+    return vec4(a.x < b.x, a.y < b.y, a.z < b.z, a.w < b.w);
+}
+
+vec4 greaterThan(vec4 a, vec4 b)
+{
+    return vec4(a.x > b.x, a.y > b.y, a.z > b.z, a.w > b.w);
+}
+
 void TP2::draw_multi_draw_indirect_gpu_frustum(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
 {
-    glUseProgram(m_occlusion_culling_shader);
+    /*glUseProgram(m_occlusion_culling_shader);
 
     GLint mvp_matrix_uniform_location = glGetUniformLocation(m_occlusion_culling_shader, "u_mvp_matrix");
     glUniformMatrix4fv(mvp_matrix_uniform_location, 1, GL_FALSE, mvp_matrix.data());
@@ -808,9 +829,113 @@ void TP2::draw_multi_draw_indirect_gpu_frustum(const Transform& mvp_matrix, cons
     int nb_groups = m_mesh_triangles_group.size() / 256 + (m_mesh_triangles_group.size() % 256 > 0);
     glDispatchCompute(nb_groups, 1, 1);
     glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
+    glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int), &m_mesh_groups_drawn);*/
+
+    std::vector<TP2::MultiDrawIndirectParam> params(m_cull_objects.size());
+    m_mesh_groups_drawn = m_cull_objects.size();
+
+    std::array<vec4, 8> frustum_world_space_vertices
+    {
+        vec4(-1, -1, -1, 1),
+        vec4(1, -1, -1, 1),
+        vec4(-1, 1, -1, 1),
+        vec4(1, 1, -1, 1),
+        vec4(-1, -1, 1, 1),
+        vec4(1, -1, 1, 1),
+        vec4(-1, 1, 1, 1),
+        vec4(1, 1, 1, 1)
+    };
+
+    for (int i = 0; i < 8; i++)
+        frustum_world_space_vertices[i] = mvp_matrix_inverse(frustum_world_space_vertices[i]);
+
+    //The object will be drawn by default
+    for (int i = 0; i < m_cull_objects.size(); i++)
+    {
+        params[i].instance_count = 1;
+        params[i].instance_base = 0;
+        params[i].vertex_base = m_cull_objects[i].vertex_base;
+        params[i].vertex_count = m_cull_objects[i].vertex_count;
+    }
+
+    for (int i = 0; i < m_cull_objects.size(); i++)
+    {
+        CullObject cull_object = m_cull_objects[i];
+
+        /*
+              6--------7
+             /|       /|
+            / |      / |
+           2--------3  |
+           |  |     |  |
+           |  4-----|--5
+           |  /     | /
+           | /      |/
+           0--------1
+        */
+        vec4 object_bbox_vertices[8];
+        object_bbox_vertices[0] = vec4(cull_object.min, 1);
+        object_bbox_vertices[1] = vec4(cull_object.max.x, cull_object.min.y, cull_object.min.z, 1);
+        object_bbox_vertices[2] = vec4(cull_object.min.x, cull_object.max.y, cull_object.min.z, 1);
+        object_bbox_vertices[3] = vec4(cull_object.max.x, cull_object.max.y, cull_object.min.z, 1);
+        object_bbox_vertices[4] = vec4(cull_object.min.x, cull_object.min.y, cull_object.max.z, 1);
+        object_bbox_vertices[5] = vec4(cull_object.max.x, cull_object.min.y, cull_object.max.z, 1);
+        object_bbox_vertices[6] = vec4(cull_object.min.x, cull_object.max.y, cull_object.max.z, 1);
+        object_bbox_vertices[7] = vec4(cull_object.max, 1);
+
+        vec4 object_bounds_vertices_projective[8];
+        for (int i = 0; i < 8; i++)
+            object_bounds_vertices_projective[i] = mvp_matrix(object_bbox_vertices[i]);
+
+        bool all_outside = true;
+        for (int i = 0; i < 8; i++)
+        {
+            vec4 object_bounds_vertex = object_bounds_vertices_projective[i];
+            vec4 object_w_bound_min = vec4(-object_bounds_vertex.w, -object_bounds_vertex.w, -object_bounds_vertex.w, -object_bounds_vertex.w);
+            vec4 object_w_bound_max = vec4(object_bounds_vertex.w, object_bounds_vertex.w, object_bounds_vertex.w, object_bounds_vertex.w);
+
+            all_outside = all_outside
+                && (all(greaterThan(object_bounds_vertex, object_w_bound_max))
+                || all(lessThan(object_bounds_vertex, object_w_bound_min)));
+            if (!all_outside)
+                break; //We found a vertex of the bounding box that isn't separated from the frustum in projective
+                //space so we may have to draw this object, we're going to have to do the second test in world space
+        }
+
+        if (all_outside)
+        {
+            //The two bounding boxes are separated, not the drawing the object
+
+            params[i].instance_count = 0;
+            break;
+        }
+        else
+            all_outside = true;
+
+        //Testing the bounding box of the object against the non square frustum in world space
+        for (int i = 0; i < 8; i++)
+        {
+            all_outside = all_outside
+                && (all(greaterThan(frustum_world_space_vertices[i], cull_object.max))
+                ||  all(lessThan(frustum_world_space_vertices[i], cull_object.min)));
+
+            if (!all_outside)
+                break; //We found a vertex of the bounding box of the object that is inside the view frustum in world space
+            //so we're going to have to draw the object
+        }
+
+        if (!all_outside)
+            continue;
+
+        //If we arrived here, the object will not be drawn
+        m_mesh_groups_drawn--;
+
+        params[i].instance_count = 0;
+    }
 
     glUseProgram(m_texture_shadow_cook_torrance_shader);
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_occlusion_culling_indirect_param_buffer);
+    glBufferData(GL_DRAW_INDIRECT_BUFFER, sizeof(TP2::MultiDrawIndirectParam) * m_cull_objects.size(), params.data(), GL_DYNAMIC_DRAW);
     glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_mesh_triangles_group.size(), 0);
 }
 
@@ -1069,8 +1194,6 @@ int TP2::render()
 
         return 1;
     }
-
-    m_mesh_groups_drawn = 0;
 
     glBindFramebuffer(GL_FRAMEBUFFER,  m_hdr_framebuffer);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);

@@ -25,6 +25,7 @@ layout(std430, binding = 0) buffer outputData
 
 layout(std430, binding = 1) buffer inputData
 {
+    uint groups_drawn;
     CullObject cull_objects[];
 };
 
@@ -35,19 +36,16 @@ layout(local_size_x = 256) in;
 void main()
 {
     const uint thread_id = gl_GlobalInvocationID.x;
+    if (thread_id == 0)
+        groups_drawn = cull_objects.length();
 
     if (thread_id >= cull_objects.length())
         return;
 
     //The object will be drawn by default
-    output_data[thread_id].instance_count = 0;
-    return;
+    output_data[thread_id].instance_count = 1;
 
     CullObject cull_object = cull_objects[thread_id];
-
-    //Testing the bounding box of the object against the cubic frustum in projective space
-    vec4 object_min_proj_space = u_mvp_matrix * vec4(cull_object.min, 1);
-    vec4 object_max_proj_space = u_mvp_matrix * vec4(cull_object.max, 1);
 
     /*
           6--------7
@@ -81,7 +79,9 @@ void main()
         vec4 object_w_bound_min = vec4(-object_bounds_vertex.w);
         vec4 object_w_bound_max = vec4(object_bounds_vertex.w);
 
-        all_outside = all_outside && all(greaterThan(object_bounds_vertex, object_w_bound_max)) && all(lessThan(object_bounds_vertex, object_w_bound_min));
+        all_outside = all_outside 
+            && all(greaterThan(object_bounds_vertex, object_w_bound_max)) 
+            && all(lessThan(object_bounds_vertex, object_w_bound_min));
         if (!all_outside)
             break; //We found a vertex of the bounding box that isn't separated from the frustum in projective
             //space so we may have to draw this object, we're going to have to do the second test in world space
@@ -98,8 +98,9 @@ void main()
     //Testing the bounding box of the object against the non square frustum in world space
     for (int i = 0; i < 8; i++)
     {
-        all_outside = all_outside && all(greaterThan(frustum_world_space_vertices[i], cull_object.max))
-                    && all(lessThan(frustum_world_space_vertices[i], cull_object.min));
+        all_outside = all_outside 
+            && all(greaterThan(frustum_world_space_vertices[i], cull_object.max))
+            && all(lessThan(frustum_world_space_vertices[i], cull_object.min));
 
         if (!all_outside)
             return; //We found a vertex of the bounding box of the object that is inside the view frustum in world space
@@ -107,6 +108,7 @@ void main()
     }
 
     //If we arrived here, the object will not be drawn
+    atomicAdd(groups_drawn, -1);
     output_data[thread_id].instance_count = 0;
 }
 
