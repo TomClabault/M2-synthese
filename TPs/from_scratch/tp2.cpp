@@ -783,19 +783,19 @@ void TP2::draw_multi_draw_indirect()
     glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_mesh_triangles_group.size(), 0);
 }
 
-bool all(vec4 a)
+bool all(vec3 a)
 {
-    return a.x && a.y && a.z && a.w;
+    return a.x && a.y && a.z;
 }
 
-vec4 lessThan(vec4 a, vec4 b)
+vec3 lessThan(vec4 a, vec4 b)
 {
-    return vec4(a.x < b.x, a.y < b.y, a.z < b.z, a.w < b.w);
+    return vec3(a.x < b.x, a.y < b.y, a.z < b.z);
 }
 
-vec4 greaterThan(vec4 a, vec4 b)
+vec3 greaterThan(vec4 a, vec4 b)
 {
-    return vec4(a.x > b.x, a.y > b.y, a.z > b.z, a.w > b.w);
+    return vec3(a.x > b.x, a.y > b.y, a.z > b.z);
 }
 
 void TP2::draw_multi_draw_indirect_gpu_frustum(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
@@ -852,7 +852,7 @@ void TP2::draw_multi_draw_indirect_gpu_frustum(const Transform& mvp_matrix, cons
     //The object will be drawn by default
     for (int i = 0; i < m_cull_objects.size(); i++)
     {
-        params[i].instance_count = 1;
+        params[i].instance_count = 0;
         params[i].instance_base = 0;
         params[i].vertex_base = m_cull_objects[i].vertex_base;
         params[i].vertex_count = m_cull_objects[i].vertex_count;
@@ -887,50 +887,48 @@ void TP2::draw_multi_draw_indirect_gpu_frustum(const Transform& mvp_matrix, cons
         for (int i = 0; i < 8; i++)
             object_bounds_vertices_projective[i] = mvp_matrix(object_bbox_vertices[i]);
 
-        bool all_outside = true;
+        bool all_points_outside = true;
         for (int i = 0; i < 8; i++)
         {
             vec4 object_bounds_vertex = object_bounds_vertices_projective[i];
             vec4 object_w_bound_min = vec4(-object_bounds_vertex.w, -object_bounds_vertex.w, -object_bounds_vertex.w, -object_bounds_vertex.w);
             vec4 object_w_bound_max = vec4(object_bounds_vertex.w, object_bounds_vertex.w, object_bounds_vertex.w, object_bounds_vertex.w);
 
-            all_outside = all_outside
-                && (all(greaterThan(object_bounds_vertex, object_w_bound_max))
-                || all(lessThan(object_bounds_vertex, object_w_bound_min)));
-            if (!all_outside)
+            all_points_outside = all_points_outside && !(all(greaterThan(object_bounds_vertex, object_w_bound_min)) && all(lessThan(object_bounds_vertex, object_w_bound_max)));
+            if (!all_points_outside)
                 break; //We found a vertex of the bounding box that isn't separated from the frustum in projective
                 //space so we may have to draw this object, we're going to have to do the second test in world space
         }
 
-        if (all_outside)
+        if (all_points_outside)
         {
             //The two bounding boxes are separated, not the drawing the object
 
-            params[i].instance_count = 0;
-            break;
+            params[i].instance_count = 1;
+            continue;
         }
         else
-            all_outside = true;
+            all_points_outside = true;
 
         //Testing the bounding box of the object against the non square frustum in world space
         for (int i = 0; i < 8; i++)
         {
-            all_outside = all_outside
-                && (all(greaterThan(frustum_world_space_vertices[i], cull_object.max))
-                ||  all(lessThan(frustum_world_space_vertices[i], cull_object.min)));
+            all_points_outside = all_points_outside
+                && !(all(greaterThan(frustum_world_space_vertices[i], cull_object.min))
+                &&   all(lessThan(frustum_world_space_vertices[i], cull_object.max)));
 
-            if (!all_outside)
+            if (!all_points_outside)
                 break; //We found a vertex of the bounding box of the object that is inside the view frustum in world space
             //so we're going to have to draw the object
         }
 
-        if (!all_outside)
+        if (!all_points_outside)
             continue;
 
         //If we arrived here, the object will not be drawn
-        m_mesh_groups_drawn--;
+        m_mesh_groups_drawn++;
 
-        params[i].instance_count = 0;
+        params[i].instance_count = 1;
     }
 
     glUseProgram(m_texture_shadow_cook_torrance_shader);
