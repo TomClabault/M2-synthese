@@ -411,10 +411,10 @@ int TP2::init()
 
     //Reading the mesh displayed
     //TIME(m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj"), "Load OBJ Time: ");
-    //TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
+    TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/cube_plane_touching.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
-    TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
+    //TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
     if (m_mesh.positions().size() == 0)
     {
         std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -583,37 +583,29 @@ int TP2::init()
     program_print_errors(m_occlusion_culling_shader);
 
     glGenBuffers(1, &m_occlusion_culling_indirect_param_buffer);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_indirect_param_buffer);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(TP2::MultiDrawIndirectParam) * m_mesh_triangles_group.size(), nullptr, GL_DYNAMIC_DRAW);
+
     glGenBuffers(1, &m_occlusion_culling_object_buffer);
-
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_object_buffer);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int) + sizeof(TP2::CullObject) * m_mesh_triangles_group.size(), nullptr, GL_STATIC_DRAW);
-    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int), 0);
-    glBufferSubData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int), sizeof(TP2::CullObject)* m_mesh_triangles_group.size(), m_cull_objects.data());
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(TP2::CullObject) * m_mesh_triangles_group.size(), nullptr, GL_STATIC_DRAW);
+    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(TP2::CullObject) * m_cull_objects.size(), m_cull_objects.data());
 
-    std::vector<TP2::MultiDrawIndirectParam> indirect_params(m_mesh_triangles_group.size());
-    int index = 0;
-    for (TP2::MultiDrawIndirectParam& param : indirect_params)
-    {
-        param.instance_base = 0;
-        param.instance_count = 0;
-        param.vertex_base = m_mesh_triangles_group[index].first;
-        param.vertex_count = m_mesh_triangles_group[index].n;
+    glGenBuffers(1, &m_occlusion_culling_parameter_buffer);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_parameter_buffer);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int), nullptr, GL_DYNAMIC_DRAW);
 
-        index++;
-    }
-
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_occlusion_culling_indirect_param_buffer);
-    glBufferData(GL_DRAW_INDIRECT_BUFFER, sizeof(TP2::MultiDrawIndirectParam) * m_mesh_triangles_group.size(), indirect_params.data(), GL_DYNAMIC_DRAW);
 
     //Cleaning (repositionning the buffers that have been selected to their default value)
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
     Point p_min, p_max;
     //TODO ça recalcule tous les bounds alors qu'on les a deja calculees
-    m_mesh.bounds(p_min, p_max);
-    m_camera.lookat(p_min, p_max);
+    //m_mesh.bounds(p_min, p_max);
+    //m_camera.lookat(p_min, p_max);
 
     if(create_shadow_map() == -1)
         return -1;
@@ -805,6 +797,7 @@ void TP2::draw_multi_draw_indirect_gpu_frustum(const Transform& mvp_matrix, cons
     GLint mvp_matrix_uniform_location = glGetUniformLocation(m_occlusion_culling_shader, "u_mvp_matrix");
     glUniformMatrix4fv(mvp_matrix_uniform_location, 1, GL_FALSE, mvp_matrix.data());
 
+    std::array<Vector, 8> frustum_points_world_space;
     std::array<vec4, 8> frustum_points_projective_space
     {
         vec4(-1, -1, -1, 1),
@@ -818,23 +811,37 @@ void TP2::draw_multi_draw_indirect_gpu_frustum(const Transform& mvp_matrix, cons
     };
 
     for (int i = 0; i < 8; i++)
+    {
         frustum_points_projective_space[i] = mvp_matrix_inverse(frustum_points_projective_space[i]);
 
+        if (frustum_points_projective_space[i].w != 0)
+            frustum_points_world_space[i] = Vector(frustum_points_projective_space[i]) / frustum_points_projective_space[i].w;
+    }
+
     GLint frustum_world_space_vertices_uniform_location = glGetUniformLocation(m_occlusion_culling_shader, "frustum_world_space_vertices");
-    glUniform3fv(frustum_world_space_vertices_uniform_location, 8, (float*)&frustum_points_projective_space[0]);
+    glUniform3fv(frustum_world_space_vertices_uniform_location, 8, (float*)&frustum_points_world_space[0]);
 
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_occlusion_culling_indirect_param_buffer);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_occlusion_culling_object_buffer);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_occlusion_culling_parameter_buffer);
+
+    unsigned int zero = 0;
+    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int), &zero);
 
     int nb_groups = m_mesh_triangles_group.size() / 256 + (m_mesh_triangles_group.size() % 256 > 0);
     glDispatchCompute(nb_groups, 1, 1);
     glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
+    
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_parameter_buffer);
     glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int), &m_mesh_groups_drawn);
 
     glUseProgram(m_texture_shadow_cook_torrance_shader);
+
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_occlusion_culling_indirect_param_buffer);
-    //glBufferData(GL_DRAW_INDIRECT_BUFFER, sizeof(TP2::MultiDrawIndirectParam) * m_cull_objects.size(), params.data(), GL_DYNAMIC_DRAW);
     glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_mesh_triangles_group.size(), 0);
+
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 }
 
 void TP2::draw_skysphere()
@@ -1101,13 +1108,13 @@ int TP2::render()
 
     //On update l'uniform mvpMatrix de notre shader
     Transform model_matrix;// = RotationX(90);
-    Transform vp_matrix = m_camera.projection() * m_camera.view();
-    Transform mvpMatrixInverse = vp_matrix.inverse();
+    Transform mvp_matrix = m_camera.projection() * m_camera.view() * model_matrix;
+    Transform mvpMatrixInverse = mvp_matrix.inverse();
     GLint model_matrix_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_model_matrix");
     glUniformMatrix4fv(model_matrix_uniform_location, 1, GL_TRUE, model_matrix.data());
 
     GLint mvp_matrix_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_vp_matrix");
-    glUniformMatrix4fv(mvp_matrix_uniform_location, 1, GL_TRUE, vp_matrix.data());
+    glUniformMatrix4fv(mvp_matrix_uniform_location, 1, GL_TRUE, mvp_matrix.data());
 
     GLint mlp_matrix_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_lp_matrix");
     glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, m_lp_light_transform.data());
@@ -1149,7 +1156,7 @@ int TP2::render()
 //    //Drawing the mesh group by group
 //    draw_by_groups_cpu_frustum_culling(vp_matrix, mvpMatrixInverse);
 //    draw_multi_draw_indirect();
-    draw_multi_draw_indirect_gpu_frustum(vp_matrix, mvpMatrixInverse);
+    draw_multi_draw_indirect_gpu_frustum(mvp_matrix, mvpMatrixInverse);
 
     draw_skysphere();
     draw_light_camera_frustum();

@@ -136,6 +136,7 @@ protected:
     GLuint m_occlusion_culling_shader;
     GLuint m_occlusion_culling_indirect_param_buffer;
     GLuint m_occlusion_culling_object_buffer;
+    GLuint m_occlusion_culling_parameter_buffer;
 
     Orbiter m_light_camera;
     Vector m_light_pos = Vector(1.0f, 0.0, -1.0f);
