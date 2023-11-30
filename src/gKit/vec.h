@@ -179,6 +179,16 @@ struct vec4
     //! cree un vecteur generique a partir des coordonnees du vecteur v, (v.x, v.y, v.z, 0).
     vec4( const Vector& v );    // l'implementation se trouve en fin de fichier.
     
+    vec4& operator /= (float k)
+    {
+        x /= k;
+        y /= k;
+        z /= k;
+        w /= k;
+
+        return *this;
+    }
+
     //! renvoie la ieme composante du vecteur.
     float operator() ( const unsigned int i ) const { return (&x)[i]; }
     float& operator() ( const unsigned int i ) { return (&x)[i]; }
