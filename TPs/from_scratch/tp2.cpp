@@ -464,7 +464,7 @@ int TP2::init()
 	GLint skysphere_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_skysphere");
 	glUniform1i(skysphere_uniform_location, 1);
 
-	m_occlusion_culling_shader = read_program("data/TPs/shaders/occlusion_culling.glsl");
+	m_occlusion_culling_shader = read_program("data/TPs/shaders/TPCG/occlusion_culling.glsl");
 	program_print_errors(m_occlusion_culling_shader);
 
 
@@ -792,7 +792,7 @@ vec3 greaterThanOrEq(vec4 a, vec4 b)
 
 void TP2::cpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
 {
-	std::vector<TP2::MultiDrawIndirectParam> params(m_cull_objects.size());
+	std::vector<TP2::MultiDrawIndirectParam> params;
 	std::array<Vector, 8> frustum_world_space_vertices;
 	std::array<vec4, 8> frustum_points_projective_space
 	{
@@ -814,14 +814,9 @@ void TP2::cpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& 
 	        frustum_world_space_vertices[i] = Vector(frustum_points_projective_space[i]) / frustum_points_projective_space[i].w;
 	}
 
-	m_mesh_groups_drawn = m_cull_objects.size();
+	m_mesh_groups_drawn = 0;
 	for (int object_id = 0; object_id < m_cull_objects.size(); object_id++)
 	{
-	    params[object_id].instance_count = 1;
-	    params[object_id].instance_base = 0;
-	    params[object_id].vertex_base = m_cull_objects[object_id].vertex_base;
-	    params[object_id].vertex_count = m_cull_objects[object_id].vertex_count;
-
 	    CullObject cull_object = m_cull_objects[object_id];
 
 	    vec4 bbox_points_projective[8];
@@ -857,8 +852,6 @@ void TP2::cpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& 
 	        //If all the points are on the same side
 	        if (all_points_outside)
 	        {
-	            params[object_id].instance_count = 0;
-	            m_mesh_groups_drawn--;
 	            next_object = true;
 
 	            break;
@@ -888,13 +881,19 @@ void TP2::cpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& 
 	        }
 
 	        if (all_points_outside)
-	        {
-	            params[object_id].instance_count = 0;
-	            m_mesh_groups_drawn--;
-
 	            break;
-	        }
 	    }
+
+		m_mesh_groups_drawn++;
+
+		//The object has not been culled, we're going to push the params
+		//for the object to be drawn by the future MDI call
+		TP2::MultiDrawIndirectParam object_draw_params;
+		object_draw_params.instance_base = 0;
+		object_draw_params.instance_count = 1;
+		object_draw_params.vertex_base = m_cull_objects[object_id].vertex_base;
+		object_draw_params.vertex_count = m_cull_objects[object_id].vertex_count;
+		params.push_back(object_draw_params);
 	}
 
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_indirect_param_buffer);
@@ -951,13 +950,13 @@ void TP2::gpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& 
 
 void TP2::draw_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
 {
-	gpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
-	//cpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
+	//gpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
+	cpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
 
 	glUseProgram(m_texture_shadow_cook_torrance_shader);
 
 	glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_occlusion_culling_indirect_param_buffer);
-	glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_mesh_triangles_group.size(), 0);
+	glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_mesh_groups_drawn, 0);
 
 	glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);

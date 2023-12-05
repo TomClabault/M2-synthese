@@ -41,7 +41,7 @@ void main()
 {
     const uint thread_id = gl_GlobalInvocationID.x;
     if (thread_id == 0)
-        groups_drawn = cull_objects.length();
+        groups_drawn = 0;
 
     if (thread_id >= cull_objects.length())
         return;
@@ -84,12 +84,7 @@ void main()
 
         //If all the points are on the same side
         if (all_points_outside)
-        {
-            output_data[thread_id].instance_count = 0;
-            atomicAdd(groups_drawn, -1);
-
             return;
-        }
     }
 
     for (int coord_index = 0; coord_index < 6; coord_index++)
@@ -112,13 +107,15 @@ void main()
         }
 
         if (all_points_outside)
-        {
-            output_data[thread_id].instance_count = 0;
-            atomicAdd(groups_drawn, -1);
-
             return;
-        }
     }
+
+    uint index = atomicAdd(groups_drawn, 1);
+
+    output_data[index].vertex_count = cull_object[thread_id].vertex_count;
+    output_data[index].vertex_base = cull_object[thread_id].vertex_base;
+    output_data[index].instance_count = 1;
+    output_data[index].instance_base = 0;
 }
 
 #endif
