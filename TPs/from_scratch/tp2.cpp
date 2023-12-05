@@ -411,10 +411,11 @@ int TP2::init()
 
 	//Reading the mesh displayed
 	//TIME(m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj"), "Load OBJ Time: ");
-	TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
+    //TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
 	//TIME(m_mesh = read_mesh("data/cube_plane_touching.obj"), "Load OBJ Time: ");
 	//TIME(m_mesh = rgpu_ead_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
 	//TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
+    TIME(m_mesh = read_mesh("data/TPs/cube_occlusion_culling.obj"), "Load OBJ Time: ");
 	if (m_mesh.positions().size() == 0)
 	{
 		std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -604,8 +605,8 @@ int TP2::init()
 
 	Point p_min, p_max;
 	//TODO ça recalcule tous les bounds alors qu'on les a deja calculees
-	//m_mesh.bounds(p_min, p_max);
-	//m_camera.lookat(p_min, p_max);
+    m_mesh.bounds(p_min, p_max);
+    m_camera.lookat(p_min, p_max);
 
 	if (create_shadow_map() == -1)
 		return -1;
@@ -950,8 +951,8 @@ void TP2::gpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& 
 
 void TP2::draw_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
 {
-	//gpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
-	cpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
+    gpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
+    //cpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
 
 	glUseProgram(m_texture_shadow_cook_torrance_shader);
 

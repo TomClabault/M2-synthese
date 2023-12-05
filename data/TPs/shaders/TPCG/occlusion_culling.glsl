@@ -46,11 +46,6 @@ void main()
     if (thread_id >= cull_objects.length())
         return;
 
-    output_data[thread_id].instance_count = 1;
-    output_data[thread_id].instance_base = 0;
-    output_data[thread_id].vertex_base = cull_objects[thread_id].vertex_base;
-    output_data[thread_id].vertex_count = cull_objects[thread_id].vertex_count;
-
     CullObject cull_object = cull_objects[thread_id];
 
     vec4 bbox_points_projective[8];
@@ -112,8 +107,8 @@ void main()
 
     uint index = atomicAdd(groups_drawn, 1);
 
-    output_data[index].vertex_count = cull_object[thread_id].vertex_count;
-    output_data[index].vertex_base = cull_object[thread_id].vertex_base;
+    output_data[index].vertex_count = cull_objects[thread_id].vertex_count;
+    output_data[index].vertex_base = cull_objects[thread_id].vertex_base;
     output_data[index].instance_count = 1;
     output_data[index].instance_base = 0;
 }
