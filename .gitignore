@@ -4,6 +4,7 @@ bin/*.pdb
 bin/
 obj/
 build*/
+*.pfm
 *.make
 *.cbp
 *.bak

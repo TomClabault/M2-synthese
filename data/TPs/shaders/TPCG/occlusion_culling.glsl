@@ -18,17 +18,22 @@ struct MultiDrawIndirectParam
     uint instance_base;
 };
 
-layout(std430, binding = 0) buffer outputData
+layout(std430, binding = 0) buffer outputDrawParams
 {
-    MultiDrawIndirectParam output_data[];
+    MultiDrawIndirectParam output_draw_params[];
 };
 
-layout(std430, binding = 1) buffer inputData
+layout(std430, binding = 1) buffer outputDrawnObjects
+{
+    uint output_objects_drawn_id[];
+};
+
+layout(std430, binding = 2) buffer inputData
 {
     CullObject cull_objects[];
 };
 
-layout(std430, binding = 2) buffer parameters
+layout(std430, binding = 3) buffer parameters
 {
     uint groups_drawn;
 };
@@ -107,10 +112,12 @@ void main()
 
     uint index = atomicAdd(groups_drawn, 1);
 
-    output_data[index].vertex_count = cull_objects[thread_id].vertex_count;
-    output_data[index].vertex_base = cull_objects[thread_id].vertex_base;
-    output_data[index].instance_count = 1;
-    output_data[index].instance_base = 0;
+    output_draw_params[index].vertex_count = cull_objects[thread_id].vertex_count;
+    output_draw_params[index].vertex_base = cull_objects[thread_id].vertex_base;
+    output_draw_params[index].instance_count = 1;
+    output_draw_params[index].instance_base = 0;
+
+    output_objects_drawn_id[index] = thread_id;
 }
 
 #endif

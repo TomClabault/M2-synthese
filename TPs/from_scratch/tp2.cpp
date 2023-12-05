@@ -4,8 +4,9 @@
 #include "wavefront.h"
 #include "texture.h"
 
-#include "app_camera.h"        // classe Application a deriver
+#include "app_camera.h"
 #include "draw.h"
+#include "image_hdr.h"
 #include "orbiter.h"
 #include "text.h"
 #include "uniforms.h"
@@ -413,7 +414,7 @@ int TP2::init()
 	//TIME(m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
 	//TIME(m_mesh = read_mesh("data/cube_plane_touching.obj"), "Load OBJ Time: ");
-	//TIME(m_mesh = rgpu_ead_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
+    //TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
 	//TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
     TIME(m_mesh = read_mesh("data/TPs/cube_occlusion_culling.obj"), "Load OBJ Time: ");
 	if (m_mesh.positions().size() == 0)
@@ -458,15 +459,15 @@ int TP2::init()
 	m_shadow_map_program = read_program("data/TPs/shaders/shader_shadow_map.glsl");
 	program_print_errors(m_shadow_map_program);
 
-	m_cubemap_shader = read_program("data/TPs/shaders/shader_cubemap.glsl");
+    m_cubemap_shader = read_program("data/TPs/shaders/shader_cubemap.glsl");
 	program_print_errors(m_cubemap_shader);
 
 	//The skysphere is on texture unit 1 so we're using 1 for the value of the uniform
 	GLint skysphere_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_skysphere");
 	glUniform1i(skysphere_uniform_location, 1);
 
-	m_occlusion_culling_shader = read_program("data/TPs/shaders/TPCG/occlusion_culling.glsl");
-	program_print_errors(m_occlusion_culling_shader);
+    m_occlusion_culling_shader = read_program("data/TPs/shaders/TPCG/occlusion_culling.glsl");
+    program_print_errors(m_occlusion_culling_shader);
 
 
 
@@ -580,12 +581,15 @@ int TP2::init()
 	m_irradiance_map = Utils::create_skysphere_texture_hdr(irradiance_map_image, TP2::DIFFUSE_IRRADIANCE_MAP_UNIT);
 
 	// ---------- Preparing for multi-draw indirect: ---------- //
-	m_occlusion_culling_shader = read_program("data/TPs/shaders/occlusion_culling.glsl");
-	program_print_errors(m_occlusion_culling_shader);
+    glUseProgram(m_occlusion_culling_shader);
 
-	glGenBuffers(1, &m_occlusion_culling_indirect_param_buffer);
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_indirect_param_buffer);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(TP2::MultiDrawIndirectParam) * m_mesh_triangles_group.size(), nullptr, GL_DYNAMIC_DRAW);
+    glGenBuffers(1, &m_occlusion_culling_output_buffer);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_output_buffer);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(TP2::MultiDrawIndirectParam) * m_mesh_triangles_group.size(), nullptr, GL_DYNAMIC_DRAW);
+
+    glGenBuffers(1, &m_occlusion_culling_drawn_objects_id);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_drawn_objects_id);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int) * m_mesh_triangles_group.size(), nullptr, GL_DYNAMIC_DRAW);
 
 	glGenBuffers(1, &m_occlusion_culling_object_buffer);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_object_buffer);
@@ -596,6 +600,11 @@ int TP2::init()
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_parameter_buffer);
 	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int), nullptr, GL_DYNAMIC_DRAW);
 
+    //Setting this parameter for the occlusion culling
+    //Because it is initially set to -1, we're going to try to draw
+    //every objects on the first frame
+    m_nb_objects_drawn_last_frame = -1;
+    m_debug_z_buffer = read_image_pfm("data/TPs/zbuffer_color.pfm");
 
 	//Cleaning (repositionning the buffers that have been selected to their default value)
 	glBindVertexArray(0);
@@ -604,7 +613,6 @@ int TP2::init()
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
 	Point p_min, p_max;
-	//TODO ça recalcule tous les bounds alors qu'on les a deja calculees
     m_mesh.bounds(p_min, p_max);
     m_camera.lookat(p_min, p_max);
 
@@ -772,7 +780,7 @@ void TP2::draw_by_groups_cpu_frustum_culling(const Transform& vp_matrix, const T
 
 void TP2::draw_multi_draw_indirect()
 {
-	glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_occlusion_culling_indirect_param_buffer);
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_occlusion_culling_output_buffer);
 	glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_mesh_triangles_group.size(), 0);
 }
 
@@ -794,6 +802,8 @@ vec3 greaterThanOrEq(vec4 a, vec4 b)
 void TP2::cpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
 {
 	std::vector<TP2::MultiDrawIndirectParam> params;
+    std::vector<unsigned int> objects_drawn_id;
+
 	std::array<Vector, 8> frustum_world_space_vertices;
 	std::array<vec4, 8> frustum_points_projective_space
 	{
@@ -894,11 +904,17 @@ void TP2::cpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& 
 		object_draw_params.instance_count = 1;
 		object_draw_params.vertex_base = m_cull_objects[object_id].vertex_base;
 		object_draw_params.vertex_count = m_cull_objects[object_id].vertex_count;
-		params.push_back(object_draw_params);
+
+        params.push_back(object_draw_params);
+        objects_drawn_id.push_back(object_id);
 	}
 
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_indirect_param_buffer);
-	glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(TP2::MultiDrawIndirectParam) * m_cull_objects.size(), params.data());
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_output_buffer);
+    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(TP2::MultiDrawIndirectParam) * m_cull_objects.size(), params.data());
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_drawn_objects_id);
+    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int) * objects_drawn_id.size(), objects_drawn_id.data());
+    glBindBuffer(GL_PARAMETER_BUFFER_ARB, m_occlusion_culling_parameter_buffer);
+    glBufferSubData(GL_PARAMETER_BUFFER_ARB, 0, sizeof(unsigned int), &m_mesh_groups_drawn);
 }
 
 void TP2::gpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
@@ -932,35 +948,74 @@ void TP2::gpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& 
 	GLint frustum_world_space_vertices_uniform_location = glGetUniformLocation(m_occlusion_culling_shader, "frustum_world_space_vertices");
 	glUniform3fv(frustum_world_space_vertices_uniform_location, 8, (float*)frustum_points_world_space.data());
 
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_occlusion_culling_indirect_param_buffer);
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_occlusion_culling_object_buffer);
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_occlusion_culling_parameter_buffer);
+    //TODO besoin d'utiliser base ?
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_occlusion_culling_output_buffer);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_occlusion_culling_drawn_objects_id);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_occlusion_culling_object_buffer);
 
 	unsigned int zero = 0;
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, m_occlusion_culling_parameter_buffer);
 	glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int), &zero);
 
 	int nb_groups = m_mesh_triangles_group.size() / 256 + (m_mesh_triangles_group.size() % 256 > 0);
 	glDispatchCompute(nb_groups, 1, 1);
 	glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
 
+    //Getting the number of groups drawn for displaying with ImGui
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_parameter_buffer);
 	glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int), &m_mesh_groups_drawn);
-
-	return;
 }
 
 void TP2::draw_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
 {
-    gpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
-    //cpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
+    if (m_application_settings.gpu_frustum_culling)
+        gpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
+    else
+        cpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
 
 	glUseProgram(m_texture_shadow_cook_torrance_shader);
 
-	glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_occlusion_culling_indirect_param_buffer);
-	glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_mesh_groups_drawn, 0);
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_occlusion_culling_output_buffer);
+    glBindBuffer(GL_PARAMETER_BUFFER_ARB, m_occlusion_culling_parameter_buffer);
+    glMultiDrawArraysIndirectCountARB(GL_TRIANGLES, 0, 0, m_cull_objects.size(), 0);
 
 	glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+}
+
+void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
+{
+    if(m_nb_objects_drawn_last_frame == -1)
+    {
+        //We're going to try to draw every objects
+        cpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
+        m_nb_objects_drawn_last_frame = m_mesh_groups_drawn;
+    }
+    else
+    {
+        //draw_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
+        //cpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
+
+//        std::vector<int> drawn_objects_id(m_cull_objects.size());
+//        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_output_buffer);
+//        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, sizeof(TP2::MultiDrawIndirectParam) * m_cull_objects.size(), sizeof(int) * m_cull_objects.size(), drawn_objects_id.data());
+
+//        for (int i = 0; i < m_nb_objects_drawn_last_frame; i++)
+//        {
+//            ;
+//        }
+    }
+
+    cpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
+
+    glUseProgram(m_texture_shadow_cook_torrance_shader);
+
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_occlusion_culling_output_buffer);
+    glBindBuffer(GL_PARAMETER_BUFFER_ARB, m_occlusion_culling_parameter_buffer);
+    glMultiDrawArraysIndirectCountARB(GL_TRIANGLES, 0, 0, m_cull_objects.size(), 0);
+
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 }
 
 void TP2::draw_skysphere()
@@ -1006,41 +1061,41 @@ void TP2::draw_skysphere()
 
 Mesh make_frustum()
 {
-	glLineWidth(2);
-	Mesh camera = Mesh(GL_LINES);
+    glLineWidth(2);
+    Mesh camera = Mesh(GL_LINES);
 
-	camera.color(Yellow());
-	// face avant
-	camera.vertex(-1, -1, -1);
-	camera.vertex(-1, 1, -1);
-	camera.vertex(-1, 1, -1);
-	camera.vertex(1, 1, -1);
-	camera.vertex(1, 1, -1);
-	camera.vertex(1, -1, -1);
-	camera.vertex(1, -1, -1);
-	camera.vertex(-1, -1, -1);
+    camera.color(Yellow());
+    // face avant
+    camera.vertex(-1, -1, -1);
+    camera.vertex(-1, 1, -1);
+    camera.vertex(-1, 1, -1);
+    camera.vertex(1, 1, -1);
+    camera.vertex(1, 1, -1);
+    camera.vertex(1, -1, -1);
+    camera.vertex(1, -1, -1);
+    camera.vertex(-1, -1, -1);
 
-	// face arriere
-	camera.vertex(-1, -1, 1);
-	camera.vertex(-1, 1, 1);
-	camera.vertex(-1, 1, 1);
-	camera.vertex(1, 1, 1);
-	camera.vertex(1, 1, 1);
-	camera.vertex(1, -1, 1);
-	camera.vertex(1, -1, 1);
-	camera.vertex(-1, -1, 1);
+    // face arriere
+    camera.vertex(-1, -1, 1);
+    camera.vertex(-1, 1, 1);
+    camera.vertex(-1, 1, 1);
+    camera.vertex(1, 1, 1);
+    camera.vertex(1, 1, 1);
+    camera.vertex(1, -1, 1);
+    camera.vertex(1, -1, 1);
+    camera.vertex(-1, -1, 1);
 
-	// aretes
-	camera.vertex(-1, -1, -1);
-	camera.vertex(-1, -1, 1);
-	camera.vertex(-1, 1, -1);
-	camera.vertex(-1, 1, 1);
-	camera.vertex(1, 1, -1);
-	camera.vertex(1, 1, 1);
-	camera.vertex(1, -1, -1);
-	camera.vertex(1, -1, 1);
+    // aretes
+    camera.vertex(-1, -1, -1);
+    camera.vertex(-1, -1, 1);
+    camera.vertex(-1, 1, -1);
+    camera.vertex(-1, 1, 1);
+    camera.vertex(1, 1, -1);
+    camera.vertex(1, 1, 1);
+    camera.vertex(1, -1, -1);
+    camera.vertex(1, -1, 1);
 
-	return camera;
+    return camera;
 }
 
 void TP2::draw_light_camera_frustum()
@@ -1095,6 +1150,11 @@ void TP2::draw_general_settings()
 		else
 			vsync_on();
 	}
+
+    ImGui::Separator();
+    ImGui::Text("Frustum Culling");
+    ImGui::RadioButton("CPU Frustum Culling", &m_application_settings.gpu_frustum_culling, 0); ImGui::SameLine();
+    ImGui::RadioButton("GPU Frustum Culling", &m_application_settings.gpu_frustum_culling, 1);
 }
 
 void TP2::update_recomputed_irradiance_map()
@@ -1228,7 +1288,7 @@ int TP2::render()
 	//On update l'uniform mvpMatrix de notre shader
 	Transform model_matrix;// = RotationX(90);
 	Transform mvp_matrix = m_camera.projection() * m_camera.view() * model_matrix;
-	Transform mvpMatrixInverse = mvp_matrix.inverse();
+    Transform mvp_matrix_inverse = mvp_matrix.inverse();
 	GLint model_matrix_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_model_matrix");
 	glUniformMatrix4fv(model_matrix_uniform_location, 1, GL_TRUE, model_matrix.data());
 
@@ -1272,10 +1332,12 @@ int TP2::render()
 	//Selecting the VAO of the mesh
 	glBindVertexArray(m_mesh_vao);
 
-	//    //Drawing the mesh group by group
-	//    draw_by_groups_cpu_frustum_culling(vp_matrix, mvpMatrixInverse);
-	//    draw_multi_draw_indirect();
-	draw_mdi_frustum_culling(mvp_matrix, mvpMatrixInverse);
+//    //Drawing the mesh group by group
+//    draw_by_groups_cpu_frustum_culling(vp_matrix, mvpMatrixInverse);
+//    draw_multi_draw_indirect();
+//    draw_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
+    draw_mdi_occlusion_culling(mvp_matrix, mvp_matrix_inverse);
+
 
 	draw_skysphere();
 	draw_light_camera_frustum();

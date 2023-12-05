@@ -75,6 +75,7 @@ public:
     void draw_by_groups_cpu_frustum_culling(const Transform &vp_matrix, const Transform &mvp_matrix_inverse);
     void draw_multi_draw_indirect();
     void draw_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse);
+    void draw_mdi_occlusion_culling(const Transform &mvp_matrix, const Transform &mvp_matrix_inverse);
     void gpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse);
     void cpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse);
 
@@ -110,6 +111,9 @@ protected:
 	//Mesh m_repere;
 	Mesh m_mesh;
     int m_mesh_groups_drawn;
+    Image m_debug_z_buffer;
+    int m_nb_objects_drawn_last_frame;
+    std::vector<int> m_objects_drawn_last_frame;
     std::vector<CullObject> m_cull_objects;
     std::vector<TriangleGroup> m_mesh_triangles_group;
     std::vector<GLuint> m_mesh_base_color_textures;
@@ -136,7 +140,8 @@ protected:
     GLuint m_shadow_map = 0;
 
     GLuint m_occlusion_culling_shader;
-    GLuint m_occlusion_culling_indirect_param_buffer;
+    GLuint m_occlusion_culling_output_buffer;
+    GLuint m_occlusion_culling_drawn_objects_id;
     GLuint m_occlusion_culling_object_buffer;
     GLuint m_occlusion_culling_parameter_buffer;
 
