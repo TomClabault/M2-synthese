@@ -415,7 +415,7 @@ int TP2::init()
     //TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
 	//TIME(m_mesh = read_mesh("data/cube_plane_touching.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
-	//TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
+    //TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
     TIME(m_mesh = read_mesh("data/TPs/cube_occlusion_culling.obj"), "Load OBJ Time: ");
 	if (m_mesh.positions().size() == 0)
 	{
@@ -983,6 +983,27 @@ void TP2::draw_mdi_frustum_culling(const Transform& mvp_matrix, const Transform&
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 }
 
+void get_object_screen_space_bounding_box(const Transform& model_to_viewport_matrix, const TP2::CullObject& object, Point& out_bbox_min, Point& out_bbox_max)
+{
+    Point object_screen_space_bbox_points[8];
+    object_screen_space_bbox_points[0] = model_to_viewport_matrix(Point(object.min));
+    object_screen_space_bbox_points[1] = model_to_viewport_matrix(Point(object.max.x, object.min.y, object.min.z));
+    object_screen_space_bbox_points[2] = model_to_viewport_matrix(Point(object.min.x, object.max.y, object.min.z));
+    object_screen_space_bbox_points[3] = model_to_viewport_matrix(Point(object.max.x, object.max.y, object.min.z));
+    object_screen_space_bbox_points[4] = model_to_viewport_matrix(Point(object.min.x, object.min.y, object.max.z));
+    object_screen_space_bbox_points[5] = model_to_viewport_matrix(Point(object.max.x, object.min.y, object.max.z));
+    object_screen_space_bbox_points[6] = model_to_viewport_matrix(Point(object.min.x, object.max.y, object.max.z));
+    object_screen_space_bbox_points[7] = model_to_viewport_matrix(Point(object.max));
+
+    out_bbox_min = Point(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
+    out_bbox_max = Point(std::numeric_limits<float>::min(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min());
+    for (int i = 0; i < 8; i++)
+    {
+        out_bbox_min = min(out_bbox_min, object_screen_space_bbox_points[i]);
+        out_bbox_max = max(out_bbox_max, object_screen_space_bbox_points[i]);
+    }
+}
+
 void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
 {
     if(m_nb_objects_drawn_last_frame == -1)
@@ -993,20 +1014,59 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
     }
     else
     {
-        //draw_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
-        //cpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
+        Image debug_image(window_width(), window_height());
 
-//        std::vector<int> drawn_objects_id(m_cull_objects.size());
-//        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_output_buffer);
-//        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, sizeof(TP2::MultiDrawIndirectParam) * m_cull_objects.size(), sizeof(int) * m_cull_objects.size(), drawn_objects_id.data());
+        std::vector<int> drawn_objects_id(m_nb_objects_drawn_last_frame);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_drawn_objects_id);
+        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int) * m_nb_objects_drawn_last_frame, drawn_objects_id.data());
 
-//        for (int i = 0; i < m_nb_objects_drawn_last_frame; i++)
-//        {
-//            ;
-//        }
+        for (int i = 0; i < m_nb_objects_drawn_last_frame; i++)
+        {
+            CullObject object = m_cull_objects[drawn_objects_id[i]];
+
+            Point screen_space_bbox_min, screen_space_bbox_max;
+            get_object_screen_space_bounding_box(m_camera.viewport() * mvp_matrix, object, screen_space_bbox_min, screen_space_bbox_max);
+
+            std::cout << screen_space_bbox_min << ", " << screen_space_bbox_max << std::endl;
+
+            //Clamping the points to the image limits
+            screen_space_bbox_min = max(screen_space_bbox_min, Point(0, 0, std::numeric_limits<float>::min()));
+            screen_space_bbox_max = min(screen_space_bbox_max, Point(window_width() - 1, window_height() - 1, std::numeric_limits<float>::max()));
+
+//            bool one_pixel_occluded = false;
+//            bool one_pixel_visible = true;
+//            for (int y = projected_min.y; y < projected_max.y; y++)
+//            {
+//                for (int x = projected_min.x; x < projected_max.x; x++)
+//                {
+//                    if (m_debug_z_buffer)
+//                }
+//            }
+
+            {
+                for (int x = screen_space_bbox_min.x; x < screen_space_bbox_max.x; x++)
+                {
+                    debug_image(x, screen_space_bbox_min.y) = Color(1.0f, 0, 0);
+                    debug_image(x, screen_space_bbox_max.y) = Color(1.0f, 0, 0);
+                }
+
+                for (int y = screen_space_bbox_min.y; y < screen_space_bbox_max.y; y++)
+                {
+                    debug_image(screen_space_bbox_min.x, y) = Color(1.0f, 0, 0);
+                    debug_image(screen_space_bbox_max.x, y) = Color(1.0f, 0, 0);
+                }
+            }
+        }
+        std::cout << std::endl;
+
+        cpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
+        m_nb_objects_drawn_last_frame = m_mesh_groups_drawn;
+
+        auto& imgui_io = ImGui::GetIO();
+        if (!imgui_io.WantCaptureKeyboard)
+            if (key_state('d'))
+                write_image(debug_image, "debug_image.png");
     }
-
-    cpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
 
     glUseProgram(m_texture_shadow_cook_torrance_shader);
 
