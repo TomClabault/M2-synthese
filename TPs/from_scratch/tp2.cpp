@@ -482,11 +482,9 @@ int TP2::init()
 	//Reading the mesh displayed
 	//TIME(m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
-	//TIME(m_mesh = read_mesh("data/cube_plane_touching.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
     TIME(m_mesh = read_mesh("data/TPs/cube_occlusion_culling.obj"), "Load OBJ Time: ");
-    //TIME(m_mesh = read_mesh("data/cube.obj"), "Load OBJ Time: ");
 	if (m_mesh.positions().size() == 0)
 	{
 		std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -676,7 +674,7 @@ int TP2::init()
     //Because it is initially set to -1, we're going to try to draw
     //every objects on the first frame
     m_nb_objects_drawn_last_frame = -1;
-    m_debug_z_buffer = read_image_pfm("data/TPs/zbuffer_color.pfm");
+    m_debug_z_buffer = read_image_pfm("data/TPs/zbuffer_viewport.pfm");
 
 	//Cleaning (repositionning the buffers that have been selected to their default value)
 	glBindVertexArray(0);
@@ -687,6 +685,7 @@ int TP2::init()
 	Point p_min, p_max;
     m_mesh.bounds(p_min, p_max);
     m_camera.lookat(p_min, p_max);
+    m_camera.read_orbiter("data/TPs/zbuffer_orbiter.txt");
 
 	if (create_shadow_map() == -1)
 		return -1;
@@ -1055,7 +1054,7 @@ void TP2::draw_mdi_frustum_culling(const Transform& mvp_matrix, const Transform&
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 }
 
-void get_object_screen_space_bounding_box(const Transform& model_to_viewport_matrix, const TP2::CullObject& object, Point& out_bbox_min, Point& out_bbox_max)
+void get_object_screen_space_bounding_box(const Transform& model_to_viewport_matrix, const Transform& view_matrix, const TP2::CullObject& object, Point& out_bbox_min, Point& out_bbox_max)
 {
     Point object_screen_space_bbox_points[8];
     object_screen_space_bbox_points[0] = model_to_viewport_matrix(Point(object.min));
@@ -1074,6 +1073,38 @@ void get_object_screen_space_bounding_box(const Transform& model_to_viewport_mat
         out_bbox_min = min(out_bbox_min, object_screen_space_bbox_points[i]);
         out_bbox_max = max(out_bbox_max, object_screen_space_bbox_points[i]);
     }
+}
+
+int get_visibility_of_object_from_camera(const Transform& view_matrix, const TP2::CullObject& object)
+{
+    Point view_space_points[8];
+
+    //TODO we only need the z coordinate so the whole matrix-point multiplication isn't needed, too slow
+    view_space_points[0] = view_matrix(Point(object.min));
+    view_space_points[1] = view_matrix(Point(object.max.x, object.min.y, object.min.z));
+    view_space_points[2] = view_matrix(Point(object.min.x, object.max.y, object.min.z));
+    view_space_points[3] = view_matrix(Point(object.max.x, object.max.y, object.min.z));
+    view_space_points[4] = view_matrix(Point(object.min.x, object.min.y, object.max.z));
+    view_space_points[5] = view_matrix(Point(object.max.x, object.min.y, object.max.z));
+    view_space_points[6] = view_matrix(Point(object.min.x, object.max.y, object.max.z));
+    view_space_points[7] = view_matrix(Point(object.max));
+
+    bool all_behind = true;
+    bool all_in_front = true;
+    for (int i = 0; i < 8; i++)
+    {
+        bool point_behind = view_space_points[i].z > 0;
+
+        all_behind &= point_behind;
+        all_in_front &= !point_behind;
+    }
+
+    if (all_behind)
+        return 0;
+    else if (all_in_front)
+        return 1;
+    else
+        return 2;
 }
 
 void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
@@ -1097,37 +1128,55 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
             CullObject object = m_cull_objects[drawn_objects_id[i]];
 
             Point screen_space_bbox_min, screen_space_bbox_max;
-            get_object_screen_space_bounding_box(m_camera.viewport() * mvp_matrix, object, screen_space_bbox_min, screen_space_bbox_max);
+
+            int visibility = get_visibility_of_object_from_camera(m_camera.view(), object);
+            if (visibility == 2) //Partially visible, we're going to assume
+            //that the bounding box of the object
+            //spans the whole image
+            {
+                screen_space_bbox_min = Point(0, 0, 0);
+                screen_space_bbox_max = Point(window_width() - 1, window_height() - 1, 0);
+            }
+            else if (visibility == 1) //Entirely visible
+            {
+                get_object_screen_space_bounding_box(m_camera.viewport() * mvp_matrix, m_camera.view(), object, screen_space_bbox_min, screen_space_bbox_max);
+
+                //Clamping the points to the image limits
+                screen_space_bbox_min = max(screen_space_bbox_min, Point(0, 0, -std::numeric_limits<float>::max()));
+                screen_space_bbox_max = min(screen_space_bbox_max, Point(window_width() - 1, window_height() - 1, std::numeric_limits<float>::max()));
+            }
+            else //Not visible
+                continue;
 
 
-            //Clamping the points to the image limits
-            screen_space_bbox_min = max(screen_space_bbox_min, Point(0, 0, -std::numeric_limits<float>::max()));
-            screen_space_bbox_max = min(screen_space_bbox_max, Point(window_width() - 1, window_height() - 1, std::numeric_limits<float>::max()));
 
-            std::cout << screen_space_bbox_min << ", " << screen_space_bbox_max << std::endl;
-//            bool one_pixel_occluded = false;
-//            bool one_pixel_visible = true;
-//            for (int y = projected_min.y; y < projected_max.y; y++)
-//            {
-//                for (int x = projected_min.x; x < projected_max.x; x++)
-//                {
-//                    if (m_debug_z_buffer)
-//                }
-//            }
+            //std::cout << screen_space_bbox_min << ", " << screen_space_bbox_max << std::endl;
 
+            bool one_pixel_occluded = false;
+            bool one_pixel_visible = true;
+            for (int y = screen_space_bbox_min.y; y < screen_space_bbox_max.y; y++)
             {
                 for (int x = screen_space_bbox_min.x; x < screen_space_bbox_max.x; x++)
                 {
-                    debug_image(x, screen_space_bbox_min.y) = Color(1.0f, 0, 0);
-                    debug_image(x, screen_space_bbox_max.y) = Color(1.0f, 0, 0);
-                }
-
-                for (int y = screen_space_bbox_min.y; y < screen_space_bbox_max.y; y++)
-                {
-                    debug_image(screen_space_bbox_min.x, y) = Color(1.0f, 0, 0);
-                    debug_image(screen_space_bbox_max.x, y) = Color(1.0f, 0, 0);
+                    if (m_debug_z_buffer(x, y).r > )
+                        ;
                 }
             }
+
+            //TODO remove, debug only
+//            {
+//                for (int x = screen_space_bbox_min.x; x < screen_space_bbox_max.x; x++)
+//                {
+//                    debug_image(x, screen_space_bbox_min.y) = Color(1.0f, 0, 0);
+//                    debug_image(x, screen_space_bbox_max.y) = Color(1.0f, 0, 0);
+//                }
+
+//                for (int y = screen_space_bbox_min.y; y < screen_space_bbox_max.y; y++)
+//                {
+//                    debug_image(screen_space_bbox_min.x, y) = Color(1.0f, 0, 0);
+//                    debug_image(screen_space_bbox_max.x, y) = Color(1.0f, 0, 0);
+//                }
+//            }
         }
 
         std::cout << std::endl;
