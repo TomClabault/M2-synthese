@@ -2,6 +2,7 @@
 #include "application_settings.h"
 #include "application_state.h"
 #include "application_timer.h"
+#include "line.h"
 #include "image_io.h"
 #include "imgui.h"
 #include "imgui_impl_sdl_gl3.h"
@@ -53,6 +54,7 @@ public:
     void load_mesh_textures_thread_function(const Materials& materials);
 
 	void compute_bounding_boxes_of_groups(std::vector<TriangleGroup>& groups);
+    void compute_bounding_boxes_lines();
     bool rejection_test_bbox_frustum_culling(const CullObject& object, const Transform& mvpMatrix);
     bool rejection_test_bbox_frustum_culling_scene(const CullObject& object, const Transform& inverse_mvp_matrix);
 
@@ -111,7 +113,9 @@ protected:
 	//Mesh m_repere;
 	Mesh m_mesh;
     int m_mesh_groups_drawn;
-    Image m_debug_z_buffer;
+    Lines m_bbox_lines;
+
+    Image m_debug_z_buffer;//TODO remove
     int m_nb_objects_drawn_last_frame;
     std::vector<int> m_objects_drawn_last_frame;
     std::vector<CullObject> m_cull_objects;

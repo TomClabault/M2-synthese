@@ -9,6 +9,7 @@ struct ApplicationSettings
 {
 	bool enable_vsync = true;
     int gpu_frustum_culling = 1;
+    bool draw_mesh_bboxes = false;
 
     bool use_irradiance_map = true;
 

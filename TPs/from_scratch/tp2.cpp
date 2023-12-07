@@ -184,7 +184,7 @@ void TP2::load_mesh_textures_thread_function(const Materials& materials)
 void TP2::compute_bounding_boxes_of_groups(std::vector<TriangleGroup>& groups)
 {
 	vec3 init_min_bbox = vec3(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
-	vec3 init_max_bbox = vec3(std::numeric_limits<float>::min(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min());
+    vec3 init_max_bbox = vec3(-std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(), -std::numeric_limits<float>::max());
 
 	m_cull_objects.resize(groups.size());
 
@@ -216,6 +216,75 @@ void TP2::compute_bounding_boxes_of_groups(std::vector<TriangleGroup>& groups)
 
 		m_cull_objects[group_index] = cull_object;
 	}
+}
+
+void TP2::compute_bounding_boxes_lines()
+{
+    std::vector<Point> lines_points;
+    lines_points.reserve(m_cull_objects.size() * 12 * 2);
+
+    for (const CullObject& cull_object : m_cull_objects)
+    {
+        std::vector<Point> bbox_points(8);
+        bbox_points[0] = Point(cull_object.min);
+        bbox_points[1] = Point(cull_object.max.x, cull_object.min.y, cull_object.min.z);
+        bbox_points[2] = Point(cull_object.min.x, cull_object.max.y, cull_object.min.z);
+        bbox_points[3] = Point(cull_object.max.x, cull_object.max.y, cull_object.min.z);
+        bbox_points[4] = Point(cull_object.min.x, cull_object.min.y, cull_object.max.z);
+        bbox_points[5] = Point(cull_object.max.x, cull_object.min.y, cull_object.max.z);
+        bbox_points[6] = Point(cull_object.min.x, cull_object.max.y, cull_object.max.z);
+        bbox_points[7] = Point(cull_object.max);
+
+        /*
+              6--------7
+             /|       /|
+            / |      / |
+           2--------3  |
+           |  |     |  |
+           |  4-----|--5
+           |  /     | /
+           | /      |/
+           0--------1
+        */
+
+        lines_points.push_back(bbox_points[0]);
+        lines_points.push_back(bbox_points[1]);
+
+        lines_points.push_back(bbox_points[0]);
+        lines_points.push_back(bbox_points[4]);
+
+        lines_points.push_back(bbox_points[1]);
+        lines_points.push_back(bbox_points[5]);
+
+        lines_points.push_back(bbox_points[4]);
+        lines_points.push_back(bbox_points[5]);
+
+        lines_points.push_back(bbox_points[2]);
+        lines_points.push_back(bbox_points[3]);
+
+        lines_points.push_back(bbox_points[2]);
+        lines_points.push_back(bbox_points[6]);
+
+        lines_points.push_back(bbox_points[7]);
+        lines_points.push_back(bbox_points[3]);
+
+        lines_points.push_back(bbox_points[6]);
+        lines_points.push_back(bbox_points[7]);
+
+        lines_points.push_back(bbox_points[0]);
+        lines_points.push_back(bbox_points[2]);
+
+        lines_points.push_back(bbox_points[1]);
+        lines_points.push_back(bbox_points[3]);
+
+        lines_points.push_back(bbox_points[4]);
+        lines_points.push_back(bbox_points[6]);
+
+        lines_points.push_back(bbox_points[5]);
+        lines_points.push_back(bbox_points[7]);
+    }
+
+    m_bbox_lines = Lines(lines_points);
 }
 
 bool TP2::rejection_test_bbox_frustum_culling(const TP2::CullObject& object, const Transform& mvpMatrix)
@@ -417,6 +486,7 @@ int TP2::init()
     //TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
     TIME(m_mesh = read_mesh("data/TPs/cube_occlusion_culling.obj"), "Load OBJ Time: ");
+    //TIME(m_mesh = read_mesh("data/cube.obj"), "Load OBJ Time: ");
 	if (m_mesh.positions().size() == 0)
 	{
 		std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -564,6 +634,8 @@ int TP2::init()
 
 	//TODO sur un thread
 	compute_bounding_boxes_of_groups(m_mesh_triangles_group);
+    //TODO sur un thread
+    //compute_bounding_boxes_lines();//TODO lines not drawing
 
 	//Reading the faces of the skybox and creating the OpenGL Cubemap
 	std::vector<ImageData> cubemap_data;
@@ -996,7 +1068,7 @@ void get_object_screen_space_bounding_box(const Transform& model_to_viewport_mat
     object_screen_space_bbox_points[7] = model_to_viewport_matrix(Point(object.max));
 
     out_bbox_min = Point(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
-    out_bbox_max = Point(std::numeric_limits<float>::min(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min());
+    out_bbox_max = Point(-std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(), -std::numeric_limits<float>::max());
     for (int i = 0; i < 8; i++)
     {
         out_bbox_min = min(out_bbox_min, object_screen_space_bbox_points[i]);
@@ -1027,12 +1099,12 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
             Point screen_space_bbox_min, screen_space_bbox_max;
             get_object_screen_space_bounding_box(m_camera.viewport() * mvp_matrix, object, screen_space_bbox_min, screen_space_bbox_max);
 
-            std::cout << screen_space_bbox_min << ", " << screen_space_bbox_max << std::endl;
 
             //Clamping the points to the image limits
-            screen_space_bbox_min = max(screen_space_bbox_min, Point(0, 0, std::numeric_limits<float>::min()));
+            screen_space_bbox_min = max(screen_space_bbox_min, Point(0, 0, -std::numeric_limits<float>::max()));
             screen_space_bbox_max = min(screen_space_bbox_max, Point(window_width() - 1, window_height() - 1, std::numeric_limits<float>::max()));
 
+            std::cout << screen_space_bbox_min << ", " << screen_space_bbox_max << std::endl;
 //            bool one_pixel_occluded = false;
 //            bool one_pixel_visible = true;
 //            for (int y = projected_min.y; y < projected_max.y; y++)
@@ -1057,6 +1129,7 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                 }
             }
         }
+
         std::cout << std::endl;
 
         cpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
