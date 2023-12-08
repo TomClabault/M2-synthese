@@ -674,7 +674,7 @@ int TP2::init()
     //Because it is initially set to -1, we're going to try to draw
     //every objects on the first frame
     m_nb_objects_drawn_last_frame = -1;
-    m_debug_z_buffer = read_image_pfm("data/TPs/zbuffer_viewport.pfm");
+    m_debug_z_buffer = read_image_pfm("../../gkit2light/zbuffer_viewport.pfm");
 
 	//Cleaning (repositionning the buffers that have been selected to their default value)
 	glBindVertexArray(0);
@@ -685,7 +685,7 @@ int TP2::init()
 	Point p_min, p_max;
     m_mesh.bounds(p_min, p_max);
     m_camera.lookat(p_min, p_max);
-    m_camera.read_orbiter("data/TPs/zbuffer_orbiter.txt");
+    m_camera.read_orbiter("../../gkit2light/orbiter.txt");
 
 	if (create_shadow_map() == -1)
 		return -1;
@@ -1128,6 +1128,7 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
             CullObject object = m_cull_objects[drawn_objects_id[i]];
 
             Point screen_space_bbox_min, screen_space_bbox_max;
+            float nearest_depth;
 
             int visibility = get_visibility_of_object_from_camera(m_camera.view(), object);
             if (visibility == 2) //Partially visible, we're going to assume
@@ -1148,20 +1149,35 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
             else //Not visible
                 continue;
 
+            //std::cout << Point(object.min) << ", " << Point(object.max) << " ----- " << screen_space_bbox_min << ", " << screen_space_bbox_max << std::endl;
+            //We're going to consider that all the pixels of the object are at the same depth,
+            //this depth because the closest one to the camera
+            //Because the closest depth is the biggest z, we're querrying the max point of the bbox
+            nearest_depth = screen_space_bbox_max.z;
 
-
-            //std::cout << screen_space_bbox_min << ", " << screen_space_bbox_max << std::endl;
-
-            bool one_pixel_occluded = false;
-            bool one_pixel_visible = true;
+            bool one_pixel_visible = false;
             for (int y = screen_space_bbox_min.y; y < screen_space_bbox_max.y; y++)
             {
                 for (int x = screen_space_bbox_min.x; x < screen_space_bbox_max.x; x++)
                 {
-                    if (m_debug_z_buffer(x, y).r > )
-                        ;
+                    float depth_buffer_depth = m_debug_z_buffer(x, y).r;
+                    if (depth_buffer_depth >= nearest_depth)
+                    {
+                        //The object needs to be rendered, we can stop here
+                        one_pixel_visible = true;
+
+                        break;
+                    }
                 }
+
+                if (one_pixel_visible)
+                    break;
             }
+
+            if (one_pixel_visible)
+                std::cout << "visible" << std::endl;
+            else
+                std::cout << "hidden" << std::endl;
 
             //TODO remove, debug only
 //            {
@@ -1183,11 +1199,6 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
 
         cpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
         m_nb_objects_drawn_last_frame = m_mesh_groups_drawn;
-
-        auto& imgui_io = ImGui::GetIO();
-        if (!imgui_io.WantCaptureKeyboard)
-            if (key_state('d'))
-                write_image(debug_image, "debug_image.png");
     }
 
     glUseProgram(m_texture_shadow_cook_torrance_shader);
@@ -1534,6 +1545,23 @@ int TP2::render()
 	glBindTexture(GL_TEXTURE_2D, 0);
 	glUseProgram(0);
 	glBindVertexArray(0);
+
+//    auto& imgui_io = ImGui::GetIO();
+//    if (!imgui_io.WantCaptureKeyboard)
+//        if (key_state('d'))
+//        {
+//            Image image(window_width(), window_height());
+//            std::vector<float> tmp(image.width() * image.height());
+
+//            glReadBuffer(GL_BACK);
+//            glReadPixels(0, 0, image.width(), image.height(), GL_DEPTH_COMPONENT, GL_FLOAT, tmp.data());
+
+//            // conversion en image
+//            for(unsigned i= 0; i < image.size(); i++)
+//                image(i)= Color(tmp[i]);
+
+//            write_image_pfm(image, "debug_zbuffer.pfm");
+//        }
 
 	return 1;
 }
