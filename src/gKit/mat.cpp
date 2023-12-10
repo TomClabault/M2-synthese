@@ -353,7 +353,6 @@ Transform Ortho( const float left, const float right, const float bottom, const 
         0,                                       0,                     0, 1);
 }
 
-
 Transform Viewport( const float width, const float height )
 {
     float w= width / 2.f;
