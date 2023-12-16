@@ -685,7 +685,7 @@ int TP2::init()
 	Point p_min, p_max;
     m_mesh.bounds(p_min, p_max);
     m_camera.lookat(p_min, p_max);
-    //m_camera.read_orbiter("app_orbiter.txt");
+    m_camera.read_orbiter("app_orbiter.txt");
 
 	if (create_shadow_map() == -1)
 		return -1;
@@ -1116,7 +1116,7 @@ std::vector<Image> compute_mipmaps(const Image& input_image)
     int height = input_image.height();
 
     int level = 0;
-    while (width > 4 || height > 4)//Stop at a 4*4 mipmap
+    while (width > 4 && height > 4)//Stop at a 4*4 mipmap
     {
         int new_width = std::max(1, width / 2);
         int new_height = std::max(1, height / 2);
@@ -1182,7 +1182,7 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
             }
             else if (visibility == 1) //Entirely visible
             {
-                get_object_screen_space_bounding_box(mvp_matrix, m_camera.viewport(), object, screen_space_bbox_min, screen_space_bbox_max);
+                get_object_screen_space_bounding_box(mvp_matrix, Viewport(window_width(), window_height()), object, screen_space_bbox_min, screen_space_bbox_max);
 
                 //Clamping the points to the image limits
                 screen_space_bbox_min = max(screen_space_bbox_min, Point(0, 0, -std::numeric_limits<float>::max()));
@@ -1251,7 +1251,7 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                     debug_bboxes_zbuffer_mipmap_image = mipmap;//Bboxes drawn on top of zbuffer
                     debug_bboxes_mipmap_image = Image(mipmap.width(), mipmap.height());
 
-                    for (int x = min_x; x < max_x; x++)
+                    for (int x = min_x; x <= max_x; x++)
                     {
                         debug_bboxes_mipmap_image(x, min_y) = Color(1.0f, 0, 0);
                         debug_bboxes_mipmap_image(x, max_y) = Color(1.0f, 0, 0);
@@ -1260,7 +1260,7 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                         debug_bboxes_zbuffer_mipmap_image(x, max_y) = Color(1.0f, 0, 0);
                     }
 
-                    for (int y = min_y; y < max_y; y++)
+                    for (int y = min_y; y <= max_y; y++)
                     {
                         debug_bboxes_mipmap_image(min_x, y) = Color(1.0f, 0, 0);
                         debug_bboxes_mipmap_image(max_x, y) = Color(1.0f, 0, 0);
@@ -1278,13 +1278,13 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                         int min_x = std::ceil(screen_space_bbox_min.x * reduction_factor_inverse);
                         int max_x = std::ceil(screen_space_bbox_max.x * reduction_factor_inverse);
 
-                        for (int x = min_x; x < max_x; x++)
+                        for (int x = min_x; x <= max_x; x++)
                         {
                             mipmaps_with_bboxes[i](x, min_y) = Color(1.0f, 0, 0);
                             mipmaps_with_bboxes[i](x, max_y) = Color(1.0f, 0, 0);
                         }
 
-                        for (int y = min_y; y < max_y; y++)
+                        for (int y = min_y; y <= max_y; y++)
                         {
                             mipmaps_with_bboxes[i](min_x, y) = Color(1.0f, 0, 0);
                             mipmaps_with_bboxes[i](max_x, y) = Color(1.0f, 0, 0);
@@ -1293,13 +1293,13 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                 }
 
 
-                for (int x = screen_space_bbox_min.x; x < screen_space_bbox_max.x; x++)
+                for (int x = screen_space_bbox_min.x; x <= screen_space_bbox_max.x; x++)
                 {
                     debug_bboxes_image(x, screen_space_bbox_min.y) = Color(1.0f, 0, 0);
                     debug_bboxes_image(x, screen_space_bbox_max.y) = Color(1.0f, 0, 0);
                 }
 
-                for (int y = screen_space_bbox_min.y; y < screen_space_bbox_max.y; y++)
+                for (int y = screen_space_bbox_min.y; y <= screen_space_bbox_max.y; y++)
                 {
                     debug_bboxes_image(screen_space_bbox_min.x, y) = Color(1.0f, 0, 0);
                     debug_bboxes_image(screen_space_bbox_max.x, y) = Color(1.0f, 0, 0);
