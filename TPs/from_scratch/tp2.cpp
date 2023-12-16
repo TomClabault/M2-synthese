@@ -405,10 +405,11 @@ int TP2::init()
 
     //Reading the mesh displayed
     //TIME(m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj"), "Load OBJ Time: ");
-    TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
+    //TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
+    //TIME(m_mesh = read_mesh("data/TPs/stanford_bunny_smooth.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/cube_plane_touching.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
-    //TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
+    TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
     if (m_mesh.positions().size() == 0)
     {
         std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -574,7 +575,8 @@ int TP2::init()
     Point p_min, p_max;
     //TODO ça recalcule tous les bounds alors qu'on les a deja calculees
     m_mesh.bounds(p_min, p_max);
-    //m_camera.lookat(p_min, p_max);
+    m_camera.lookat(p_min, p_max);
+    m_camera.rotation(145, 0);
 
     if(create_shadow_map() == -1)
         return -1;
@@ -847,7 +849,7 @@ void TP2::draw_lighting_window()
     ImGui::Checkbox("Bind Light Camera to Camera", &m_application_settings.bind_light_camera_to_camera);
     ImGui::Checkbox("Show Light Camera Frustum", &m_application_settings.draw_light_camera_frustum);
     ImGui::Separator();
-    ImGui::SliderFloat3("Light Position", (float*)&m_light_pos, -100.0f, 100.0f);
+    ImGui::SliderFloat3("Light Direction", (float*)&m_light_direction, -1.0f, 1.0f);
     ImGui::PushItemWidth(256);
     ImGui::SliderFloat("Shadows Intensity", &m_application_settings.shadow_intensity, 0.0f, 1.0f);
     ImGui::SliderFloat("HDR Tone Mapping Exposure", &m_application_settings.hdr_exposure, 0.0f, 10.0f);
@@ -966,8 +968,8 @@ int TP2::render()
     GLint camera_position_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_camera_position");
     glUniform3f(camera_position_uniform_location, m_camera.position().x, m_camera.position().y, m_camera.position().z);
 
-    GLint light_position_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_light_position");
-    glUniform3f(light_position_uniform_location, m_light_pos.x, m_light_pos.y, m_light_pos.z);
+    GLint light_direction_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_light_direction");
+    glUniform3f(light_direction_uniform_location, m_light_direction.x, m_light_direction.y, m_light_direction.z);
 
     GLint override_material_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_override_material");
     glUniform1i(override_material_uniform_location, m_application_settings.override_material);

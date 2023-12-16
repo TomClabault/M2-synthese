@@ -115,7 +115,7 @@ protected:
     GLuint m_shadow_map = 0;
 
     Orbiter m_light_camera;
-    Vector m_light_pos = Vector(1.0f, 0.0, -1.0f);
+    Vector m_light_direction = Vector(0.406596f, 0.87462f, 0.264046f);
 	Transform m_lp_light_transform;
 
     Transform m_debug_current_projection;

@@ -36,7 +36,7 @@ void main()
 const float M_PI = 3.1415926535897932384626433832795f;
 
 uniform vec3 u_camera_position;
-uniform vec3 u_light_position;
+uniform vec3 u_light_direction;
 
 uniform bool u_use_irradiance_map;
 uniform bool u_has_normal_map;
@@ -86,8 +86,8 @@ float compute_shadow(vec4 light_space_fragment_position, vec3 normal, vec3 light
     if(scene_projected_depth > 1)
         return 1.0f;
 
-    //Bias with a minimum of 0.001 for perpendicular angles. 0.002 for grazing angles
-    float bias = max((1.0f - dot(normal, light_direction)) * 0.002, 0.001);
+    //Bias with a minimum of 0.0005 for perpendicular angles. 0.001 for grazing angles
+    float bias = max((1.0f - dot(normal, light_direction)) * 0.0005, 0.001);
     float shadow_map_depth = percentage_closer_filtering(u_shadow_map, projected_point.xy, scene_projected_depth, bias);
 
     return shadow_map_depth;
@@ -171,8 +171,7 @@ void main()
     if (u_has_normal_map)
         surface_normal = normal_mapping(vs_texcoords);
 
-    vec3 light_direction = normalize(u_light_position - vs_position);
-    light_direction = normalize(vec3(-0.5f, -1.0f, 0.0f));
+    vec3 light_direction = normalize(u_light_direction);
 
     //Handling transparency on the texture
     if (base_color.a < 0.5)
@@ -228,8 +227,8 @@ void main()
             gl_FragColor = vec4(0, 0, 0, 1);
     }
 
-    gl_FragColor += vec4(base_color.rgb * irradiance_map_color, 0);// Ambient lighting
-    gl_FragColor *= compute_shadow(vs_position_light_space, normalize(surface_normal), light_direction);
+    gl_FragColor = vec4(base_color.rgb * irradiance_map_color, 0);// Ambient lighting
+    //gl_FragColor *= compute_shadow(vs_position_light_space, normalize(surface_normal), light_direction);
     gl_FragColor.a = 1.0f;
 }
 
