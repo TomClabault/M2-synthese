@@ -1125,9 +1125,13 @@ std::vector<Image> compute_mipmaps(const Image& input_image)
 
         const Image& previous_level = mipmaps[level];
         Image& mipmap = mipmaps[level + 1];
-        for (int y = 0; y < height; y += 2)
-            for (int x = 0; x < width; x += 2)
-                mipmap(x / 2, y / 2) = Color(std::max(previous_level(x, y).r, std::max(previous_level(x + 1, y).r, std::max(previous_level(x, y  + 1).r, previous_level(x + 1, y + 1).r))));
+        for (int y = 0; y < new_height; y++)
+            for (int x = 0; x < new_width; x++)
+                mipmap(x, y) = Color(std::max(previous_level(x * 2, y * 2).r, std::max(previous_level(x * 2 + 1, y * 2).r, std::max(previous_level(x * 2, y * 2 + 1).r, previous_level(x * 2 + 1, y * 2 + 1).r))));
+
+//        for (int y = 0; y < height; y += 2)
+//            for (int x = 0; x < width; x += 2)
+//                mipmap(x / 2, y / 2) = Color(std::max(previous_level(x, y).r, std::max(previous_level(x + 1, y).r, std::max(previous_level(x, y  + 1).r, previous_level(x + 1, y + 1).r))));
 
         width = new_width;
         height = new_height;
@@ -1143,7 +1147,7 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
     Image debug_bboxes_mipmap_image;
     Image debug_bboxes_zbuffer_mipmap_image;
     Image debug_zbuffer_mipmap_image;
-    std::vector<Image> mipmaps_with_bboxes;
+    std::vector<Image> debug_mipmaps_with_bboxes;
 
     std::vector<Image> mipmaps;
 
@@ -1163,7 +1167,7 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         mipmaps = compute_mipmaps(m_debug_z_buffer);
 
         //TODO remove debug
-        mipmaps_with_bboxes = mipmaps;
+        debug_mipmaps_with_bboxes = mipmaps;
 
         for (int i = 0; i < m_nb_objects_drawn_last_frame; i++)
         {
@@ -1201,6 +1205,11 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
             int mipmap_level = 0;
             //Getting the biggest axis of the screen space bounding rectangle of the object
             int largest_extent = std::max(screen_space_bbox_max.x - screen_space_bbox_min.x, screen_space_bbox_max.y - screen_space_bbox_min.y);
+//            while (largest_extent > 4)
+//            {
+//                largest_extent = std::ceil(largest_extent / 2.0f);
+//                mipmap_level++;
+//            }
             if (largest_extent > 4)
                 //Computing the factor needed for the largest extent to be 16 pixels
                 mipmap_level = std::log2(std::ceil(largest_extent / 4.0f));
@@ -1209,13 +1218,17 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
             int reduction_factor = std::pow(2, mipmap_level);
             float reduction_factor_inverse = 1.0f / reduction_factor;
 
+//            if (i == 0)
+//                std::cout << mipmap_level << std::endl;
+
             const Image& mipmap = mipmaps[mipmap_level];
 
             bool one_pixel_visible = false;
-            int min_y = std::ceil(screen_space_bbox_min.y * reduction_factor_inverse);
+            int min_y = std::floor(screen_space_bbox_min.y * reduction_factor_inverse);
             int max_y = std::ceil(screen_space_bbox_max.y * reduction_factor_inverse);
-            int min_x = std::ceil(screen_space_bbox_min.x * reduction_factor_inverse);
+            int min_x = std::floor(screen_space_bbox_min.x * reduction_factor_inverse);
             int max_x = std::ceil(screen_space_bbox_max.x * reduction_factor_inverse);
+
             for (int y = min_y; y <= max_y; y++)
             {
                 for (int x = min_x; x <= max_x; x++)
@@ -1235,7 +1248,7 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
             }
 
             //TODO remove, debug only
-            if (debug_counter % 8 == 0)
+            if (debug_counter % 4 == 0)
             {
                 if (one_pixel_visible)
                     std::cout << Point(object.min) << ", " << Point(object.max) << ", " << "visible --- near depth: " << nearest_depth << std::endl;
@@ -1253,8 +1266,8 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
 
                     for (int x = min_x; x <= max_x; x++)
                     {
-                        debug_bboxes_mipmap_image(x, min_y) = Color(1.0f, 0, 0);
-                        debug_bboxes_mipmap_image(x, max_y) = Color(1.0f, 0, 0);
+                        //debug_bboxes_mipmap_image(x, min_y) = Color(1.0f, 0, 0);
+                        //debug_bboxes_mipmap_image(x, max_y) = Color(1.0f, 0, 0);
 
                         debug_bboxes_zbuffer_mipmap_image(x, min_y) = Color(1.0f, 0, 0);
                         debug_bboxes_zbuffer_mipmap_image(x, max_y) = Color(1.0f, 0, 0);
@@ -1262,8 +1275,8 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
 
                     for (int y = min_y; y <= max_y; y++)
                     {
-                        debug_bboxes_mipmap_image(min_x, y) = Color(1.0f, 0, 0);
-                        debug_bboxes_mipmap_image(max_x, y) = Color(1.0f, 0, 0);
+                        //debug_bboxes_mipmap_image(min_x, y) = Color(1.0f, 0, 0);
+                        //debug_bboxes_mipmap_image(max_x, y) = Color(1.0f, 0, 0);
 
                         debug_bboxes_zbuffer_mipmap_image(min_x, y) = Color(1.0f, 0, 0);
                         debug_bboxes_zbuffer_mipmap_image(max_x, y) = Color(1.0f, 0, 0);
@@ -1273,21 +1286,21 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                     {
                         int reduction_factor = std::pow(2, i);
                         float reduction_factor_inverse = 1.0f  / reduction_factor;
-                        int min_y = std::ceil(screen_space_bbox_min.y * reduction_factor_inverse);
+                        int min_y = std::floor(screen_space_bbox_min.y * reduction_factor_inverse);
                         int max_y = std::ceil(screen_space_bbox_max.y * reduction_factor_inverse);
-                        int min_x = std::ceil(screen_space_bbox_min.x * reduction_factor_inverse);
+                        int min_x = std::floor(screen_space_bbox_min.x * reduction_factor_inverse);
                         int max_x = std::ceil(screen_space_bbox_max.x * reduction_factor_inverse);
 
                         for (int x = min_x; x <= max_x; x++)
                         {
-                            mipmaps_with_bboxes[i](x, min_y) = Color(1.0f, 0, 0);
-                            mipmaps_with_bboxes[i](x, max_y) = Color(1.0f, 0, 0);
+                            debug_mipmaps_with_bboxes[i](x, min_y) = Color(1.0f, 0, 0);
+                            debug_mipmaps_with_bboxes[i](x, max_y) = Color(1.0f, 0, 0);
                         }
 
                         for (int y = min_y; y <= max_y; y++)
                         {
-                            mipmaps_with_bboxes[i](min_x, y) = Color(1.0f, 0, 0);
-                            mipmaps_with_bboxes[i](max_x, y) = Color(1.0f, 0, 0);
+                            debug_mipmaps_with_bboxes[i](min_x, y) = Color(1.0f, 0, 0);
+                            debug_mipmaps_with_bboxes[i](max_x, y) = Color(1.0f, 0, 0);
                         }
                     }
                 }
@@ -1308,7 +1321,7 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         }
 
         //TODO remove debug
-        if (debug_counter % 8 == 0)
+        if (debug_counter % 4 == 0)
             std::cout << std::endl;
 
         cpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
@@ -1352,7 +1365,7 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                     write_image(mipmaps[i], std::string(std::string("debug_z_buffer_mipmap") + std::to_string(i) + std::string(".png")).c_str());
 
                 for (int i = 0; i < mipmaps.size(); i++)
-                    write_image(mipmaps_with_bboxes[i], std::string(std::string("debug_z_buffer_bboxes_mipmap") + std::to_string(i) + std::string(".png")).c_str());
+                    write_image(debug_mipmaps_with_bboxes[i], std::string(std::string("debug_z_buffer_bboxes_mipmap") + std::to_string(i) + std::string(".png")).c_str());
             }
     }
 }
