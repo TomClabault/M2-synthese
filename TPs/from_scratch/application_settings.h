@@ -14,12 +14,12 @@ struct ApplicationSettings
 	//1 for cubemap, 0 for skysphere
 	int cubemap_or_skysphere = 0;
 
-    float shadow_intensity = 0.3;
+    float shadow_intensity = 0.1f;
     bool draw_shadow_map = false;
     bool bind_light_camera_to_camera = false;
     bool draw_light_camera_frustum = false;
 
-    float hdr_exposure = 0.9f;
+    float hdr_exposure = 1.0f;
 
 	bool currently_recomputing_irradiance = false;
 
@@ -41,6 +41,7 @@ struct ApplicationSettings
     bool override_material = false;
 	float mesh_roughness = 0.3f;
     float mesh_metalness = 1.0f;
+    bool do_normal_mapping = 1;
 	Color ambient_color = Color(0.1, 0.1, 0.1, 0);
 };
 

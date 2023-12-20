@@ -405,11 +405,11 @@ int TP2::init()
 
     //Reading the mesh displayed
     //TIME(m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj"), "Load OBJ Time: ");
-    //TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
+    TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/TPs/stanford_bunny_smooth.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/cube_plane_touching.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
-    TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
+    //TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
     if (m_mesh.positions().size() == 0)
     {
         std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -575,8 +575,8 @@ int TP2::init()
     Point p_min, p_max;
     //TODO ça recalcule tous les bounds alors qu'on les a deja calculees
     m_mesh.bounds(p_min, p_max);
-    m_camera.lookat(p_min, p_max);
-    m_camera.rotation(145, 0);
+    //m_camera.lookat(p_min, p_max);
+    //m_camera.rotation(145, 0);
 
     if(create_shadow_map() == -1)
         return -1;
@@ -839,9 +839,6 @@ void TP2::update_recomputed_irradiance_map()
 void TP2::draw_lighting_window()
 {
     ImGui::Separator();
-    ImGui::Text("Sky & Irradiance");
-    if (ImGui::Checkbox("Use Irradiance Map", &m_application_settings.use_irradiance_map))
-        update_ambient_uniforms();
     ImGui::RadioButton("Use Skybox", &m_application_settings.cubemap_or_skysphere, 1); ImGui::SameLine();
     ImGui::RadioButton("Use Skysphere", &m_application_settings.cubemap_or_skysphere, 0);
     ImGui::Separator();
@@ -850,12 +847,16 @@ void TP2::draw_lighting_window()
     ImGui::Checkbox("Show Light Camera Frustum", &m_application_settings.draw_light_camera_frustum);
     ImGui::Separator();
     ImGui::SliderFloat3("Light Direction", (float*)&m_light_direction, -1.0f, 1.0f);
+    ImGui::SliderFloat3("Light Intensity", (float*)&m_light_intensity, 7.5f, 20.0f);
     ImGui::PushItemWidth(256);
+    ImGui::Checkbox("Normal mapping", &m_application_settings.do_normal_mapping);
     ImGui::SliderFloat("Shadows Intensity", &m_application_settings.shadow_intensity, 0.0f, 1.0f);
     ImGui::SliderFloat("HDR Tone Mapping Exposure", &m_application_settings.hdr_exposure, 0.0f, 10.0f);
     ImGui::PopItemWidth();
     ImGui::Separator();
     ImGui::Text("Irradiance map");
+    if (ImGui::Checkbox("Use Irradiance Map", &m_application_settings.use_irradiance_map))
+        update_ambient_uniforms();
     ImGui::PushItemWidth(128);
     ImGui::DragInt("Irradiance Map Precomputation Samples", &m_application_settings.irradiance_map_precomputation_samples, 1.0f, 1, 2048);
     ImGui::DragInt("Irradiance Map Downscale Factor", &m_application_settings.irradiance_map_precomputation_downscale_factor, 1.0f, 1, 8);
@@ -971,6 +972,9 @@ int TP2::render()
     GLint light_direction_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_light_direction");
     glUniform3f(light_direction_uniform_location, m_light_direction.x, m_light_direction.y, m_light_direction.z);
 
+    GLint light_intensity_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_light_intensity");
+    glUniform3f(light_intensity_uniform_location, m_light_intensity.x, m_light_intensity.y, m_light_intensity.z);
+
     GLint override_material_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_override_material");
     glUniform1i(override_material_uniform_location, m_application_settings.override_material);
 
@@ -979,6 +983,9 @@ int TP2::render()
 
     GLint roughness_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_roughness");
     glUniform1f(roughness_uniform_location, m_application_settings.mesh_roughness);
+
+    GLint do_normal_mapping_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_do_normal_mapping");
+    glUniform1f(do_normal_mapping_uniform_location, m_application_settings.do_normal_mapping);
 
     //Setting up the irradiance map
     GLint irradiance_map_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_irradiance_map");
