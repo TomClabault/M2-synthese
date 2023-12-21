@@ -188,12 +188,12 @@ void main()
         // Sampling the irradiance map with the microfacet normal
         irradiance_map_color = sample_irradiance_map(halfway_vector);
 
-        float NoV = max(0.0f, dot(surface_normal_normalized, view_direction));
+        float NoV = max(0.0001f, dot(surface_normal_normalized, view_direction));
         float NoL = max(0.0f, dot(surface_normal_normalized, to_light_direction));
         float NoH = max(0.0f, dot(surface_normal_normalized, halfway_vector));
         float VoH = max(0.0f, dot(halfway_vector, view_direction));
 
-        if (NoV > 0 && NoL > 0 && NoH > 0)
+        if (NoL > 0 && NoH > 0)
         {
             float metalness = texture2D(u_mesh_specular_texture, vs_texcoords).b;
             float roughness = texture2D(u_mesh_specular_texture, vs_texcoords).g;
