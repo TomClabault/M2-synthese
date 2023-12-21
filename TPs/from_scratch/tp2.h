@@ -76,10 +76,12 @@ public:
 	void draw_skysphere();
     void draw_by_groups_cpu_frustum_culling(const Transform &vp_matrix, const Transform &mvp_matrix_inverse);
     void draw_multi_draw_indirect();
+    void draw_multi_draw_indirect_from_ids(const std::vector<int>& object_ids);
     void draw_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse);
     void draw_mdi_occlusion_culling(const Transform &mvp_matrix, const Transform &mvp_matrix_inverse);
     void gpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse);
     void cpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse);
+    void cpu_mdi_selective_frustum_culling(const std::vector<int>& objects_id, const Transform& mvp_matrix, const Transform& mvp_matrix_inverse);
 
 	void draw_general_settings();
     void draw_lighting_window();
@@ -115,8 +117,7 @@ protected:
     int m_mesh_groups_drawn;
     Lines m_bbox_lines;
 
-    Image m_debug_z_buffer;//TODO remove
-    int m_nb_objects_drawn_last_frame;
+    std::vector<float> m_debug_z_buffer;//TODO remove
     std::vector<int> m_objects_drawn_last_frame;
     std::vector<CullObject> m_cull_objects;
     std::vector<TriangleGroup> m_mesh_triangles_group;
@@ -144,9 +145,9 @@ protected:
     GLuint m_shadow_map = 0;
 
     GLuint m_occlusion_culling_shader;
-    GLuint m_occlusion_culling_output_buffer;
+    GLuint m_mdi_draw_params_buffer;
     GLuint m_occlusion_culling_drawn_objects_id;
-    GLuint m_occlusion_culling_object_buffer;
+    GLuint m_occlusion_culling_input_object_buffer;
     GLuint m_occlusion_culling_parameter_buffer;
 
     Orbiter m_light_camera;

@@ -34,6 +34,9 @@ public:
     static Image read_skysphere_image(const char* filename);
     static GLuint create_skysphere_texture_hdr(Image& skysphere_image, int texture_unit);
 	static GLuint create_skysphere_texture_from_path(const char* filename, int texture_unit);
+
+    static std::vector<std::vector<float>> compute_mipmaps(const std::vector<float> &input_image, int width, int height);
+    static std::vector<float> get_z_buffer(int window_width, int window_height);
 };
 
 #endif

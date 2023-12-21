@@ -11,6 +11,7 @@
 #include <iostream>
 #include <string>
 #include <omp.h>
+#include <vector>
 
 /* The state must be initialized to non-zero */
 uint32_t Utils::xorshift32(struct Utils::xorshift32_state* state)
@@ -312,4 +313,41 @@ void Utils::downscale_image(const Image& input_image, Image& downscaled_output, 
             downscaled_output(x, y) = average;
         }
     }
+}
+
+std::vector<std::vector<float>> Utils::compute_mipmaps(const std::vector<float>& input_image, int width, int height)
+{
+    std::vector<std::vector<float>> mipmaps;
+    mipmaps.push_back(input_image);
+
+    int level = 0;
+    while (width > 4 && height > 4)//Stop at a 4*4 mipmap
+    {
+        int new_width = std::max(1, width / 2);
+        int new_height = std::max(1, height / 2);
+
+        mipmaps.push_back(std::vector<float>(new_width * new_height));
+
+        const std::vector<float>& previous_level = mipmaps[level];
+        std::vector<float>& mipmap = mipmaps[level + 1];
+        for (int y = 0; y < new_height; y++)
+            for (int x = 0; x < new_width; x++)
+                mipmap[y * new_width + x] = std::max(previous_level[x * 2 + y * 2 * width], std::max(previous_level[x * 2 + 1 + y * 2 * width], std::max(previous_level[x * 2 + (y * 2 + 1) * width], previous_level[x * 2 + 1 + (y * 2 + 1) * width])));
+
+        width = new_width;
+        height = new_height;
+        level++;
+    }
+
+    return mipmaps;
+}
+
+std::vector<float> Utils::get_z_buffer(int window_width, int window_height)
+{
+    std::vector<float> tmp(window_width * window_height);
+
+    glReadBuffer(GL_BACK);
+    glReadPixels(0, 0, window_width, window_height, GL_DEPTH_COMPONENT, GL_FLOAT, tmp.data());
+
+    return tmp;
 }

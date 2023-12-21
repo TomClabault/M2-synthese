@@ -426,7 +426,7 @@ int TP2::init()
 //    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, output_gpu_buffer);
 //    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(int) * N, NULL, GL_STREAM_COPY);
 
-//    GLuint compute_shader_program = read_program("data/TPs/shaders/occlusion_culling.glsl");
+//    GLuint compute_shader_program = read_program("data/TPs/shaders/frustum_culling.glsl");
 //    if (program_print_errors(compute_shader_program)) {
 //        exit(EXIT_FAILURE);
 //    }
@@ -534,7 +534,7 @@ int TP2::init()
 	GLint skysphere_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_skysphere");
 	glUniform1i(skysphere_uniform_location, 1);
 
-    m_occlusion_culling_shader = read_program("data/TPs/shaders/TPCG/occlusion_culling.glsl");
+    m_occlusion_culling_shader = read_program("data/TPs/shaders/TPCG/frustum_culling.glsl");
     program_print_errors(m_occlusion_culling_shader);
 
 
@@ -653,17 +653,17 @@ int TP2::init()
 	// ---------- Preparing for multi-draw indirect: ---------- //
     glUseProgram(m_occlusion_culling_shader);
 
-    glGenBuffers(1, &m_occlusion_culling_output_buffer);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_output_buffer);
+    glGenBuffers(1, &m_mdi_draw_params_buffer);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_mdi_draw_params_buffer);
     glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(TP2::MultiDrawIndirectParam) * m_mesh_triangles_group.size(), nullptr, GL_DYNAMIC_DRAW);
 
     glGenBuffers(1, &m_occlusion_culling_drawn_objects_id);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_drawn_objects_id);
     glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int) * m_mesh_triangles_group.size(), nullptr, GL_DYNAMIC_DRAW);
 
-	glGenBuffers(1, &m_occlusion_culling_object_buffer);
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_object_buffer);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(TP2::CullObject) * m_mesh_triangles_group.size(), nullptr, GL_STATIC_DRAW);
+    glGenBuffers(1, &m_occlusion_culling_input_object_buffer);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_input_object_buffer);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(TP2::CullObject) * m_cull_objects.size(), nullptr, GL_STATIC_DRAW);
 	glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(TP2::CullObject) * m_cull_objects.size(), m_cull_objects.data());
 
 	glGenBuffers(1, &m_occlusion_culling_parameter_buffer);
@@ -673,8 +673,8 @@ int TP2::init()
     //Setting this parameter for the occlusion culling
     //Because it is initially set to -1, we're going to try to draw
     //every objects on the first frame
-    m_nb_objects_drawn_last_frame = -1;
-    m_debug_z_buffer = Image(1280, 720);//read_image_pfm("../../gkit2light/zbuffer_viewport.pfm");
+    std::cout << window_width() << ", " << window_height() << std::endl;
+    m_debug_z_buffer = std::vector<float>(1280 * 720);
 
 	//Cleaning (repositionning the buffers that have been selected to their default value)
 	glBindVertexArray(0);
@@ -851,8 +851,34 @@ void TP2::draw_by_groups_cpu_frustum_culling(const Transform& vp_matrix, const T
 
 void TP2::draw_multi_draw_indirect()
 {
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_occlusion_culling_output_buffer);
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_mdi_draw_params_buffer);
 	glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_mesh_triangles_group.size(), 0);
+}
+
+void TP2::draw_multi_draw_indirect_from_ids(const std::vector<int>& object_ids)
+{
+    //Preparing the multi draw indirect buffer
+    std::vector<TP2::MultiDrawIndirectParam> draw_params;
+    draw_params.reserve(object_ids.size());
+
+    for (int object_id : object_ids)
+    {
+        TP2::MultiDrawIndirectParam draw_param;
+        draw_param.instance_base = 0;
+        draw_param.instance_count = 1;
+        draw_param.vertex_base = m_cull_objects[object_id].vertex_base;
+        draw_param.vertex_count = m_cull_objects[object_id].vertex_count;
+
+        draw_params.push_back(draw_param);
+    }
+
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_mdi_draw_params_buffer);
+    glBufferData(GL_DRAW_INDIRECT_BUFFER, sizeof(TP2::MultiDrawIndirectParam) * draw_params.size(), draw_params.data(), GL_DYNAMIC_DRAW);
+
+    int nb_draw_params = draw_params.size();
+    glBindBuffer(GL_PARAMETER_BUFFER_ARB, m_occlusion_culling_parameter_buffer);
+    glBufferSubData(GL_PARAMETER_BUFFER_ARB, 0, sizeof(unsigned int), &nb_draw_params);
+    glMultiDrawArraysIndirectCountARB(GL_TRIANGLES, 0, 0, draw_params.size(), 0);
 }
 
 bool all(vec3 a)
@@ -870,121 +896,133 @@ vec3 greaterThanOrEq(vec4 a, vec4 b)
 	return vec3(a.x >= b.x, a.y >= b.y, a.z >= b.z);
 }
 
-void TP2::cpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
+void TP2::cpu_mdi_selective_frustum_culling(const std::vector<int>& objects_id, const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
 {
     std::vector<TP2::MultiDrawIndirectParam> params;
 
-	std::array<Vector, 8> frustum_world_space_vertices;
-	std::array<vec4, 8> frustum_points_projective_space
-	{
-	    vec4(-1, -1, -1, 1),
-	    vec4(1, -1, -1, 1),
-	    vec4(-1, 1, -1, 1),
-	    vec4(1, 1, -1, 1),
-	    vec4(-1, -1, 1, 1),
-	    vec4(1, -1, 1, 1),
-	    vec4(-1, 1, 1, 1),
-	    vec4(1, 1, 1, 1)
-	};
+    std::array<Vector, 8> frustum_world_space_vertices;
+    std::array<vec4, 8> frustum_points_projective_space
+    {
+        vec4(-1, -1, -1, 1),
+        vec4(1, -1, -1, 1),
+        vec4(-1, 1, -1, 1),
+        vec4(1, 1, -1, 1),
+        vec4(-1, -1, 1, 1),
+        vec4(1, -1, 1, 1),
+        vec4(-1, 1, 1, 1),
+        vec4(1, 1, 1, 1)
+    };
 
-	for (int i = 0; i < 8; i++)
-	{
-	    frustum_points_projective_space[i] = mvp_matrix_inverse(frustum_points_projective_space[i]);
+    for (int i = 0; i < 8; i++)
+    {
+        frustum_points_projective_space[i] = mvp_matrix_inverse(frustum_points_projective_space[i]);
 
-	    if (frustum_points_projective_space[i].w != 0)
-	        frustum_world_space_vertices[i] = Vector(frustum_points_projective_space[i]) / frustum_points_projective_space[i].w;
-	}
+        if (frustum_points_projective_space[i].w != 0)
+            frustum_world_space_vertices[i] = Vector(frustum_points_projective_space[i]) / frustum_points_projective_space[i].w;
+    }
 
-	m_mesh_groups_drawn = 0;
-	for (int object_id = 0; object_id < m_cull_objects.size(); object_id++)
-	{
-	    CullObject cull_object = m_cull_objects[object_id];
+    m_objects_drawn_last_frame.clear();
+    m_mesh_groups_drawn = 0;
+    for (int object_id : objects_id)
+    {
+        CullObject cull_object = m_cull_objects[object_id];
 
-	    vec4 bbox_points_projective[8];
-	    bbox_points_projective[0] = mvp_matrix(vec4(cull_object.min, 1));
-	    bbox_points_projective[1] = mvp_matrix(vec4(cull_object.max.x, cull_object.min.y, cull_object.min.z, 1));
-	    bbox_points_projective[2] = mvp_matrix(vec4(cull_object.min.x, cull_object.max.y, cull_object.min.z, 1));
-	    bbox_points_projective[3] = mvp_matrix(vec4(cull_object.max.x, cull_object.max.y, cull_object.min.z, 1));
-	    bbox_points_projective[4] = mvp_matrix(vec4(cull_object.min.x, cull_object.min.y, cull_object.max.z, 1));
-	    bbox_points_projective[5] = mvp_matrix(vec4(cull_object.max.x, cull_object.min.y, cull_object.max.z, 1));
-	    bbox_points_projective[6] = mvp_matrix(vec4(cull_object.min.x, cull_object.max.y, cull_object.max.z, 1));
-	    bbox_points_projective[7] = mvp_matrix(vec4(cull_object.max, 1));
+        vec4 bbox_points_projective[8];
+        bbox_points_projective[0] = mvp_matrix(vec4(cull_object.min, 1));
+        bbox_points_projective[1] = mvp_matrix(vec4(cull_object.max.x, cull_object.min.y, cull_object.min.z, 1));
+        bbox_points_projective[2] = mvp_matrix(vec4(cull_object.min.x, cull_object.max.y, cull_object.min.z, 1));
+        bbox_points_projective[3] = mvp_matrix(vec4(cull_object.max.x, cull_object.max.y, cull_object.min.z, 1));
+        bbox_points_projective[4] = mvp_matrix(vec4(cull_object.min.x, cull_object.min.y, cull_object.max.z, 1));
+        bbox_points_projective[5] = mvp_matrix(vec4(cull_object.max.x, cull_object.min.y, cull_object.max.z, 1));
+        bbox_points_projective[6] = mvp_matrix(vec4(cull_object.min.x, cull_object.max.y, cull_object.max.z, 1));
+        bbox_points_projective[7] = mvp_matrix(vec4(cull_object.max, 1));
 
-	    bool next_object = false;
-	    for (int coord_index = 0; coord_index < 6; coord_index++)
-	    {
-	        bool all_points_outside = true;
+        bool next_object = false;
+        for (int coord_index = 0; coord_index < 6; coord_index++)
+        {
+            bool all_points_outside = true;
 
-	        for (int i = 0; i < 8; i++)
-	        {
-	            vec4 bbox_point = bbox_points_projective[i];
+            for (int i = 0; i < 8; i++)
+            {
+                vec4 bbox_point = bbox_points_projective[i];
 
-	            int test_negative_plane = coord_index & 1;
+                int test_negative_plane = coord_index & 1;
 
-	            if (test_negative_plane == 1)
-	                all_points_outside = all_points_outside && (bbox_point(coord_index / 2) < -bbox_point.w);
-	            else
-	                all_points_outside = all_points_outside && (bbox_point(coord_index / 2) > bbox_point.w);
+                if (test_negative_plane == 1)
+                    all_points_outside = all_points_outside && (bbox_point(coord_index / 2) < -bbox_point.w);
+                else
+                    all_points_outside = all_points_outside && (bbox_point(coord_index / 2) > bbox_point.w);
 
-	            if (!all_points_outside)
-	                break;
-	        }
+                if (!all_points_outside)
+                    break;
+            }
 
-	        //If all the points are on the same side
-	        if (all_points_outside)
-	        {
-	            next_object = true;
+            //If all the points are on the same side
+            if (all_points_outside)
+            {
+                next_object = true;
 
-	            break;
-	        }
-	    }
+                break;
+            }
+        }
 
-	    if (next_object)
-	        continue;
+        if (next_object)
+            continue;
 
-	    for (int coord_index = 0; coord_index < 6; coord_index++)
-	    {
-	        bool all_points_outside = true;
-	        for (int i = 0; i < 8; i++)
-	        {
-	            vec3 frustum_point = frustum_world_space_vertices[i];
+        for (int coord_index = 0; coord_index < 6; coord_index++)
+        {
+            bool all_points_outside = true;
+            for (int i = 0; i < 8; i++)
+            {
+                vec3 frustum_point = frustum_world_space_vertices[i];
 
-	            int test_negative = coord_index & 1;
+                int test_negative = coord_index & 1;
 
-	            if (test_negative == 1)
-	                all_points_outside = all_points_outside && (frustum_point(coord_index / 2) < cull_object.min(coord_index / 2));
-	            else
-	                all_points_outside = all_points_outside && (frustum_point(coord_index / 2) > cull_object.max(coord_index / 2));
+                if (test_negative == 1)
+                    all_points_outside = all_points_outside && (frustum_point(coord_index / 2) < cull_object.min(coord_index / 2));
+                else
+                    all_points_outside = all_points_outside && (frustum_point(coord_index / 2) > cull_object.max(coord_index / 2));
 
-	            //If all the points are not on the same side
-	            if (!all_points_outside)
-	                break;
-	        }
+                //If all the points are not on the same side
+                if (!all_points_outside)
+                    break;
+            }
 
-	        if (all_points_outside)
-	            break;
-	    }
+            if (all_points_outside)
+                break;
+        }
 
-		m_mesh_groups_drawn++;
+        m_mesh_groups_drawn++;
 
-		//The object has not been culled, we're going to push the params
-		//for the object to be drawn by the future MDI call
-		TP2::MultiDrawIndirectParam object_draw_params;
-		object_draw_params.instance_base = 0;
-		object_draw_params.instance_count = 1;
-		object_draw_params.vertex_base = m_cull_objects[object_id].vertex_base;
-		object_draw_params.vertex_count = m_cull_objects[object_id].vertex_count;
+        //The object has not been culled, we're going to push the params
+        //for the object to be drawn by the future MDI call
+        TP2::MultiDrawIndirectParam object_draw_params;
+        object_draw_params.instance_base = 0;
+        object_draw_params.instance_count = 1;
+        object_draw_params.vertex_base = m_cull_objects[object_id].vertex_base;
+        object_draw_params.vertex_count = m_cull_objects[object_id].vertex_count;
 
         params.push_back(object_draw_params);
         m_objects_drawn_last_frame.push_back(object_id);
-	}
+    }
 
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_output_buffer);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_mdi_draw_params_buffer);
     glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(TP2::MultiDrawIndirectParam) * m_cull_objects.size(), params.data());
+
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_drawn_objects_id);
     glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int) * m_objects_drawn_last_frame.size(), m_objects_drawn_last_frame.data());
+
     glBindBuffer(GL_PARAMETER_BUFFER_ARB, m_occlusion_culling_parameter_buffer);
     glBufferSubData(GL_PARAMETER_BUFFER_ARB, 0, sizeof(unsigned int), &m_mesh_groups_drawn);
+}
+
+void TP2::cpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
+{
+    std::vector<int> objects_id(m_cull_objects.size());
+    for (int i = 0; i < m_cull_objects.size(); i++)
+        objects_id[i] = i;
+
+    cpu_mdi_selective_frustum_culling(objects_id, mvp_matrix, mvp_matrix_inverse);
 }
 
 void TP2::gpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
@@ -1018,13 +1056,12 @@ void TP2::gpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& 
 	GLint frustum_world_space_vertices_uniform_location = glGetUniformLocation(m_occlusion_culling_shader, "frustum_world_space_vertices");
 	glUniform3fv(frustum_world_space_vertices_uniform_location, 8, (float*)frustum_points_world_space.data());
 
-    //TODO besoin d'utiliser base ?
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_occlusion_culling_output_buffer);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_occlusion_culling_drawn_objects_id);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_occlusion_culling_object_buffer);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_mdi_draw_params_buffer); //Out buffer
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_occlusion_culling_drawn_objects_id); //Out buffer
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_occlusion_culling_input_object_buffer); //In buffer
 
 	unsigned int zero = 0;
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, m_occlusion_culling_parameter_buffer);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, m_occlusion_culling_parameter_buffer); //Out buffer
 	glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int), &zero);
 
 	int nb_groups = m_mesh_triangles_group.size() / 256 + (m_mesh_triangles_group.size() % 256 > 0);
@@ -1045,7 +1082,7 @@ void TP2::draw_mdi_frustum_culling(const Transform& mvp_matrix, const Transform&
 
 	glUseProgram(m_texture_shadow_cook_torrance_shader);
 
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_occlusion_culling_output_buffer);
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_mdi_draw_params_buffer);
     glBindBuffer(GL_PARAMETER_BUFFER_ARB, m_occlusion_culling_parameter_buffer);
     glMultiDrawArraysIndirectCountARB(GL_TRIANGLES, 0, 0, m_cull_objects.size(), 0);
 
@@ -1106,40 +1143,6 @@ int get_visibility_of_object_from_camera(const Transform& view_matrix, const TP2
         return 2;
 }
 
-std::vector<Image> compute_mipmaps(const Image& input_image)
-{
-    std::vector<Image> mipmaps;
-    mipmaps.push_back(input_image);
-
-    int width = input_image.width();
-    int height = input_image.height();
-
-    int level = 0;
-    while (width > 4 && height > 4)//Stop at a 4*4 mipmap
-    {
-        int new_width = std::max(1, width / 2);
-        int new_height = std::max(1, height / 2);
-
-        mipmaps.push_back(Image(new_width, new_height));
-
-        const Image& previous_level = mipmaps[level];
-        Image& mipmap = mipmaps[level + 1];
-        for (int y = 0; y < new_height; y++)
-            for (int x = 0; x < new_width; x++)
-                mipmap(x, y) = Color(std::max(previous_level(x * 2, y * 2).r, std::max(previous_level(x * 2 + 1, y * 2).r, std::max(previous_level(x * 2, y * 2 + 1).r, previous_level(x * 2 + 1, y * 2 + 1).r))));
-
-//        for (int y = 0; y < height; y += 2)
-//            for (int x = 0; x < width; x += 2)
-//                mipmap(x / 2, y / 2) = Color(std::max(previous_level(x, y).r, std::max(previous_level(x + 1, y).r, std::max(previous_level(x, y  + 1).r, previous_level(x + 1, y + 1).r))));
-
-        width = new_width;
-        height = new_height;
-        level++;
-    }
-
-    return mipmaps;
-}
-
 void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
 {
     Image debug_bboxes_image(window_width(), window_height());
@@ -1148,29 +1151,47 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
     Image debug_zbuffer_mipmap_image;
     std::vector<Image> debug_mipmaps_with_bboxes;
 
-    std::vector<Image> mipmaps;
+    std::vector<std::vector<float>> z_buffer_mipmaps;
 
-    static int debug_counter = 0;
-    if(m_nb_objects_drawn_last_frame == -1)
+    static int debug_counterr = 0;
+    if(m_objects_drawn_last_frame.size() == 0)
     {
-        //We're going to try to draw every objects
-        cpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
-        m_nb_objects_drawn_last_frame = m_mesh_groups_drawn;
+        //Drawing every object
+        //This function fills the m_mesh_groups_drawn variable
+        gpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
+
+        m_objects_drawn_last_frame.resize(m_mesh_groups_drawn);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_drawn_objects_id);
+        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int) * m_mesh_groups_drawn, m_objects_drawn_last_frame.data());
     }
     else
     {
-        std::vector<int> drawn_objects_id(m_nb_objects_drawn_last_frame);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_drawn_objects_id);
-        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int) * m_nb_objects_drawn_last_frame, drawn_objects_id.data());
+        //Running every object of the scene through the frustum culling
+        gpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
 
-        mipmaps = compute_mipmaps(m_debug_z_buffer);
+        //Getting the ids of the object that have been drawn
+        m_objects_drawn_last_frame.resize(m_mesh_groups_drawn);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_drawn_objects_id);
+        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int) * m_mesh_groups_drawn, m_objects_drawn_last_frame.data());
+
+        //Filling the z-buffer with the objects from last frame
+        draw_multi_draw_indirect_from_ids(m_objects_drawn_last_frame);
+
+        int depth_buffer_width = window_width();
+        int depth_buffer_height = window_height();
+        m_debug_z_buffer = Utils::get_z_buffer(depth_buffer_width, depth_buffer_height);
+
+        z_buffer_mipmaps = Utils::compute_mipmaps(m_debug_z_buffer, depth_buffer_width, depth_buffer_height);
 
 //        //TODO remove debug
 //        debug_mipmaps_with_bboxes = mipmaps;
 
-        for (int i = 0; i < m_nb_objects_drawn_last_frame; i++)
+        //Vector of the ids of the object that are visible according to the occlusion culling
+        std::vector<int> occlusion_culling_result;
+        for (int i = 0; i < m_objects_drawn_last_frame.size(); i++)
         {
-            CullObject object = m_cull_objects[drawn_objects_id[i]];
+            int object_id = m_objects_drawn_last_frame[i];
+            CullObject object = m_cull_objects[object_id];
 
             Point screen_space_bbox_min, screen_space_bbox_max;
             float nearest_depth;
@@ -1181,15 +1202,15 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
             //spans the whole image
             {
                 screen_space_bbox_min = Point(0, 0, 0);
-                screen_space_bbox_max = Point(window_width() - 1, window_height() - 1, 0);
+                screen_space_bbox_max = Point(depth_buffer_width - 1, depth_buffer_height - 1, 0);
             }
             else if (visibility == 1) //Entirely visible
             {
-                get_object_screen_space_bounding_box(mvp_matrix, Viewport(window_width(), window_height()), object, screen_space_bbox_min, screen_space_bbox_max);
+                get_object_screen_space_bounding_box(mvp_matrix, Viewport(depth_buffer_width, depth_buffer_height), object, screen_space_bbox_min, screen_space_bbox_max);
 
                 //Clamping the points to the image limits
                 screen_space_bbox_min = max(screen_space_bbox_min, Point(0, 0, -std::numeric_limits<float>::max()));
-                screen_space_bbox_max = min(screen_space_bbox_max, Point(window_width() - 1, window_height() - 1, std::numeric_limits<float>::max()));
+                screen_space_bbox_max = min(screen_space_bbox_max, Point(depth_buffer_width - 1, depth_buffer_height - 1, std::numeric_limits<float>::max()));
             }
             else //Not visible
                 continue;
@@ -1212,7 +1233,7 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
             int reduction_factor = std::pow(2, mipmap_level);
             float reduction_factor_inverse = 1.0f / reduction_factor;
 
-            const Image& mipmap = mipmaps[mipmap_level];
+            const std::vector<float>& mipmap = z_buffer_mipmaps[mipmap_level];
 
             bool one_pixel_visible = false;
             int min_y = std::floor(screen_space_bbox_min.y * reduction_factor_inverse);
@@ -1224,7 +1245,7 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
             {
                 for (int x = min_x; x <= max_x; x++)
                 {
-                    float depth_buffer_depth = mipmap(x, y).r;
+                    float depth_buffer_depth = mipmap[x + y * depth_buffer_width];
                     if (depth_buffer_depth >= nearest_depth)
                     {
                         //The object needs to be rendered, we can stop here
@@ -1238,14 +1259,8 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                     break;
             }
 
-//            //TODO remove, debug only
-//            if (debug_counter % 4 == 0)
-//            {
-//                if (one_pixel_visible)
-//                    std::cout << Point(object.min) << ", " << Point(object.max) << ", " << "visible --- near depth: " << nearest_depth << std::endl;
-//                else
-//                    std::cout << Point(object.min) << ", " << Point(object.max) << ", " << "hidden --- near depth: " << nearest_depth << std::endl;
-//            }
+            if (one_pixel_visible)
+                occlusion_culling_result.push_back(object_id);
 
 //            //TODO remove, debug only
 //            {
@@ -1314,29 +1329,27 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
 //        if (debug_counter % 4 == 0)
 //            std::cout << std::endl;
 
-        cpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
-        m_nb_objects_drawn_last_frame = m_mesh_groups_drawn;
+//        cpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
+//        m_nb_objects_drawn_last_frame = m_mesh_groups_drawn;
+
+        if (debug_counterr % 4 == 0)
+        {
+            for (int object_to_draw : occlusion_culling_result)
+                std::cout << object_to_draw << std::endl;
+            std::cout << std::endl;
+        }
     }
 
-    debug_counter++;
+    debug_counterr++;
 
     glUseProgram(m_texture_shadow_cook_torrance_shader);
 
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_occlusion_culling_output_buffer);
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_mdi_draw_params_buffer);
     glBindBuffer(GL_PARAMETER_BUFFER_ARB, m_occlusion_culling_parameter_buffer);
     glMultiDrawArraysIndirectCountARB(GL_TRIANGLES, 0, 0, m_cull_objects.size(), 0);
 
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-
-    std::vector<float> tmp(m_debug_z_buffer.width() * m_debug_z_buffer.height());
-
-    glReadBuffer(GL_BACK);
-    glReadPixels(0, 0, m_debug_z_buffer.width(), m_debug_z_buffer.height(), GL_DEPTH_COMPONENT, GL_FLOAT, tmp.data());
-
-    // conversion en image
-    for(unsigned i= 0; i < m_debug_z_buffer.size(); i++)
-        m_debug_z_buffer(i)= Color(tmp[i]);
 
     //TODO remove debug
     {
@@ -1349,12 +1362,17 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                 write_image(debug_zbuffer_mipmap_image, "debug_zbuffer_mipmap.png");
                 write_image(debug_bboxes_zbuffer_mipmap_image, "debug_zbuffer_bboxes_mipmap.png");
 
-                write_image(m_debug_z_buffer, "debug_z_buffer.png");
+                Image depth_buffer_image(window_width(), window_height());
+                for (int y = 0; y < window_height(); y++)
+                    for (int x = 0; x < window_width(); x++)
+                        depth_buffer_image(x, y) = Color(m_debug_z_buffer[x + y * window_width()]);
 
-                for (int i = 0; i < mipmaps.size(); i++)
-                    write_image(mipmaps[i], std::string(std::string("debug_z_buffer_mipmap") + std::to_string(i) + std::string(".png")).c_str());
+                write_image(depth_buffer_image, "debug_z_buffer.png");
 
-                for (int i = 0; i < mipmaps.size(); i++)
+                for (int i = 0; i < z_buffer_mipmaps.size(); i++)
+                    write_image(z_buffer_mipmaps[i], std::string(std::string("debug_z_buffer_mipmap") + std::to_string(i) + std::string(".png")).c_str());
+
+                for (int i = 0; i < z_buffer_mipmaps.size(); i++)
                     write_image(debug_mipmaps_with_bboxes[i], std::string(std::string("debug_z_buffer_bboxes_mipmap") + std::to_string(i) + std::string(".png")).c_str());
             }
     }
