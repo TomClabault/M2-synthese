@@ -79,7 +79,7 @@ public:
     void draw_multi_draw_indirect_from_ids(const std::vector<int>& object_ids);
     void draw_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse);
     void draw_mdi_occlusion_culling(const Transform &mvp_matrix, const Transform &mvp_matrix_inverse);
-    void gpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse);
+    int gpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse);
     void cpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse);
     void cpu_mdi_selective_frustum_culling(const std::vector<int>& objects_id, const Transform& mvp_matrix, const Transform& mvp_matrix_inverse);
 
@@ -108,7 +108,7 @@ public:
 protected:
 	ApplicationTimer m_app_timer;
 
-
+    int m_frame_number = 0;
 
 
 
@@ -146,7 +146,7 @@ protected:
 
     GLuint m_occlusion_culling_shader;
     GLuint m_mdi_draw_params_buffer;
-    GLuint m_occlusion_culling_drawn_objects_id;
+    GLuint m_occlusion_culling_objects_id_to_draw;
     GLuint m_occlusion_culling_input_object_buffer;
     GLuint m_occlusion_culling_parameter_buffer;
 

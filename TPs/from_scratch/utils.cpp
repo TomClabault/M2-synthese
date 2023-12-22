@@ -344,10 +344,18 @@ std::vector<std::vector<float>> Utils::compute_mipmaps(const std::vector<float>&
 
 std::vector<float> Utils::get_z_buffer(int window_width, int window_height)
 {
+    int previous_framebuffer;
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previous_framebuffer);
+
+    //We want to read the depth buffer from the default framebuffer
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
     std::vector<float> tmp(window_width * window_height);
 
     glReadBuffer(GL_BACK);
     glReadPixels(0, 0, window_width, window_height, GL_DEPTH_COMPONENT, GL_FLOAT, tmp.data());
+
+    glBindFramebuffer(GL_FRAMEBUFFER, previous_framebuffer);
 
     return tmp;
 }

@@ -657,8 +657,8 @@ int TP2::init()
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_mdi_draw_params_buffer);
     glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(TP2::MultiDrawIndirectParam) * m_mesh_triangles_group.size(), nullptr, GL_DYNAMIC_DRAW);
 
-    glGenBuffers(1, &m_occlusion_culling_drawn_objects_id);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_drawn_objects_id);
+    glGenBuffers(1, &m_occlusion_culling_objects_id_to_draw);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_objects_id_to_draw);
     glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int) * m_mesh_triangles_group.size(), nullptr, GL_DYNAMIC_DRAW);
 
     glGenBuffers(1, &m_occlusion_culling_input_object_buffer);
@@ -673,7 +673,6 @@ int TP2::init()
     //Setting this parameter for the occlusion culling
     //Because it is initially set to -1, we're going to try to draw
     //every objects on the first frame
-    std::cout << window_width() << ", " << window_height() << std::endl;
     m_debug_z_buffer = std::vector<float>(1280 * 720);
 
 	//Cleaning (repositionning the buffers that have been selected to their default value)
@@ -857,7 +856,7 @@ void TP2::draw_multi_draw_indirect()
 
 void TP2::draw_multi_draw_indirect_from_ids(const std::vector<int>& object_ids)
 {
-    //Preparing the multi draw indirect buffer
+    //Preparing the multi draw indirect params
     std::vector<TP2::MultiDrawIndirectParam> draw_params;
     draw_params.reserve(object_ids.size());
 
@@ -874,11 +873,7 @@ void TP2::draw_multi_draw_indirect_from_ids(const std::vector<int>& object_ids)
 
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_mdi_draw_params_buffer);
     glBufferData(GL_DRAW_INDIRECT_BUFFER, sizeof(TP2::MultiDrawIndirectParam) * draw_params.size(), draw_params.data(), GL_DYNAMIC_DRAW);
-
-    int nb_draw_params = draw_params.size();
-    glBindBuffer(GL_PARAMETER_BUFFER_ARB, m_occlusion_culling_parameter_buffer);
-    glBufferSubData(GL_PARAMETER_BUFFER_ARB, 0, sizeof(unsigned int), &nb_draw_params);
-    glMultiDrawArraysIndirectCountARB(GL_TRIANGLES, 0, 0, draw_params.size(), 0);
+    glMultiDrawArraysIndirect(GL_TRIANGLES, 0, draw_params.size(), 0);
 }
 
 bool all(vec3 a)
@@ -1009,7 +1004,7 @@ void TP2::cpu_mdi_selective_frustum_culling(const std::vector<int>& objects_id, 
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_mdi_draw_params_buffer);
     glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(TP2::MultiDrawIndirectParam) * m_cull_objects.size(), params.data());
 
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_drawn_objects_id);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_objects_id_to_draw);
     glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int) * m_objects_drawn_last_frame.size(), m_objects_drawn_last_frame.data());
 
     glBindBuffer(GL_PARAMETER_BUFFER_ARB, m_occlusion_culling_parameter_buffer);
@@ -1025,7 +1020,7 @@ void TP2::cpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& 
     cpu_mdi_selective_frustum_culling(objects_id, mvp_matrix, mvp_matrix_inverse);
 }
 
-void TP2::gpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
+int TP2::gpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
 {
 	glUseProgram(m_occlusion_culling_shader);
 
@@ -1057,7 +1052,7 @@ void TP2::gpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& 
 	glUniform3fv(frustum_world_space_vertices_uniform_location, 8, (float*)frustum_points_world_space.data());
 
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_mdi_draw_params_buffer); //Out buffer
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_occlusion_culling_drawn_objects_id); //Out buffer
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_occlusion_culling_objects_id_to_draw); //Out buffer
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_occlusion_culling_input_object_buffer); //In buffer
 
 	unsigned int zero = 0;
@@ -1071,6 +1066,8 @@ void TP2::gpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& 
     //Getting the number of groups drawn for displaying with ImGui
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_parameter_buffer);
 	glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int), &m_mesh_groups_drawn);
+
+    return m_mesh_groups_drawn;
 }
 
 void TP2::draw_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
@@ -1154,43 +1151,87 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
     std::vector<std::vector<float>> z_buffer_mipmaps;
 
     static int debug_counterr = 0;
-    if(m_objects_drawn_last_frame.size() == 0)
+    if(m_frame_number == 0)
     {
         //Drawing every object
         //This function fills the m_mesh_groups_drawn variable
         gpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
 
         m_objects_drawn_last_frame.resize(m_mesh_groups_drawn);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_drawn_objects_id);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_objects_id_to_draw);
         glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int) * m_mesh_groups_drawn, m_objects_drawn_last_frame.data());
     }
     else
     {
         //Running every object of the scene through the frustum culling
-        gpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
+        int nb_accepted_objects = gpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
+        int nb_objects_drawn_last_frame = m_objects_drawn_last_frame.size();
 
-        //Getting the ids of the object that have been drawn
-        m_objects_drawn_last_frame.resize(m_mesh_groups_drawn);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_drawn_objects_id);
-        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int) * m_mesh_groups_drawn, m_objects_drawn_last_frame.data());
+        //Getting the ids of the object that are in the frustum this frame
+        std::vector<int> objects_visible_this_frame(nb_accepted_objects);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_objects_id_to_draw);
+        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int) * nb_accepted_objects, objects_visible_this_frame.data());
 
-        //Filling the z-buffer with the objects from last frame
-        draw_multi_draw_indirect_from_ids(m_objects_drawn_last_frame);
+        //We're going to find the objects from last frame that are still visible this frame
+        //and that thus need to be drawn to fill the z buffer
+        std::vector<int> visible_objects_from_last_frame;
+        visible_objects_from_last_frame.reserve(m_objects_drawn_last_frame.size());
+        for (int object_id_visible_last_frame : m_objects_drawn_last_frame)
+            if (std::find(objects_visible_this_frame.begin(), objects_visible_this_frame.end(), object_id_visible_last_frame) != objects_visible_this_frame.end())
+                visible_objects_from_last_frame.push_back(object_id_visible_last_frame);
+        draw_multi_draw_indirect_from_ids(visible_objects_from_last_frame);
+
+        //Starting the construction of the visible objects of this current frame that will be used
+        //in the next frame
+        m_objects_drawn_last_frame.clear();
+        m_objects_drawn_last_frame.reserve(visible_objects_from_last_frame.size());
+        std::copy(visible_objects_from_last_frame.begin(), visible_objects_from_last_frame.end(), m_objects_drawn_last_frame.begin());
 
         int depth_buffer_width = window_width();
         int depth_buffer_height = window_height();
-        m_debug_z_buffer = Utils::get_z_buffer(depth_buffer_width, depth_buffer_height);
 
+        //Getting the z-buffer and computing the hierarchy
+        m_debug_z_buffer = Utils::get_z_buffer(depth_buffer_width, depth_buffer_height);
         z_buffer_mipmaps = Utils::compute_mipmaps(m_debug_z_buffer, depth_buffer_width, depth_buffer_height);
 
 //        //TODO remove debug
 //        debug_mipmaps_with_bboxes = mipmaps;
 
+        int nb_occlusion_culling_objects = nb_accepted_objects - nb_objects_drawn_last_frame;
+        //This vector contains the ids of the object that have to be tested with occlusion culling.
+        //We have nb_accepted_objects potential objects to draw and have m_objects_drawn_last_frame.size()
+        //have alredy been drawn to fill the z buffer
+        std::vector<int> occlusion_culling_objects;
+        occlusion_culling_objects.reserve(nb_occlusion_culling_objects);
+
+        //Simple variable renaming for clarity
+        const std::vector<int>& already_drawn_objects = visible_objects_from_last_frame;
+        //We're looking for all the objects that are visible this frame and that we haven't already drawn
+        //(because we have alraedy drawn some objects to fill the z buffer)
+        for (int potential_culling_object : objects_visible_this_frame)
+            if (std::find(already_drawn_objects.begin(), already_drawn_objects.end(), potential_culling_object) == already_drawn_objects.end())
+                occlusion_culling_objects.push_back(potential_culling_object);
+        if (m_frame_number == 1)
+        {
+            //On the second frame, we're going to have to test the occlusion of
+            //every objects because:
+            //- The first frame, everyone is drawn
+            //- The second frame, we're going to draw every objects
+            //  that was drawn in the first frame. Let's say the camera
+            //  didn't move. If it didn't move, we're going to draw the exact same
+            //  objects that were drawn in the first frame to fill the z buffer
+            //  but this means that we're also going to draw objects that are potentially
+            //  behind other objects (occluded) even though we have the z-buffer to test
+            //  their occlusion so we could have tested these objects for occlusion
+            //  against the zbuffer of the first frame and not drawn them
+            //  To counteract this issue, on the second frame, we're going to use the
+            //  zbuffer from the first frame to see which object is occluded
+        }
+
         //Vector of the ids of the object that are visible according to the occlusion culling
         std::vector<int> occlusion_culling_result;
-        for (int i = 0; i < m_objects_drawn_last_frame.size(); i++)
+        for (int object_id : occlusion_culling_objects)
         {
-            int object_id = m_objects_drawn_last_frame[i];
             CullObject object = m_cull_objects[object_id];
 
             Point screen_space_bbox_min, screen_space_bbox_max;
@@ -1335,7 +1376,7 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         if (debug_counterr % 4 == 0)
         {
             for (int object_to_draw : occlusion_culling_result)
-                std::cout << object_to_draw << std::endl;
+                std::cout << object_to_draw << ", ";
             std::cout << std::endl;
         }
     }
@@ -1343,6 +1384,20 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
     debug_counterr++;
 
     glUseProgram(m_texture_shadow_cook_torrance_shader);
+
+    //TODO remove debug only
+//    int temp;
+//    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_parameter_buffer);
+//    glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(int), &temp);
+
+//    std::vector<TP2::MultiDrawIndirectParam> params(temp);
+//    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_mdi_draw_params_buffer);
+//    glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(TP2::MultiDrawIndirectParam) * temp, params.data());
+
+//    for (TP2::MultiDrawIndirectParam param : params)
+//    {
+//        std::cout << param.vertex_count << std::endl;
+//    }
 
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_mdi_draw_params_buffer);
     glBindBuffer(GL_PARAMETER_BUFFER_ARB, m_occlusion_culling_parameter_buffer);
@@ -1358,9 +1413,9 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
             if (key_state('d'))
             {
                 write_image(debug_bboxes_image, "debug_bboxes.png");
-                write_image(debug_bboxes_mipmap_image, "debug_bboxes_mipmap.png");
-                write_image(debug_zbuffer_mipmap_image, "debug_zbuffer_mipmap.png");
-                write_image(debug_bboxes_zbuffer_mipmap_image, "debug_zbuffer_bboxes_mipmap.png");
+                //write_image(debug_bboxes_mipmap_image, "debug_bboxes_mipmap.png");
+                //write_image(debug_zbuffer_mipmap_image, "debug_zbuffer_mipmap.png");
+                //write_image(debug_bboxes_zbuffer_mipmap_image, "debug_zbuffer_bboxes_mipmap.png");
 
                 Image depth_buffer_image(window_width(), window_height());
                 for (int y = 0; y < window_height(); y++)
@@ -1370,10 +1425,17 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                 write_image(depth_buffer_image, "debug_z_buffer.png");
 
                 for (int i = 0; i < z_buffer_mipmaps.size(); i++)
-                    write_image(z_buffer_mipmaps[i], std::string(std::string("debug_z_buffer_mipmap") + std::to_string(i) + std::string(".png")).c_str());
+                {
+                    Image temp(window_width(), window_height());
+                    for (int y = 0; y < window_height(); y++)
+                        for (int x = 0; x < window_width(); x++)
+                            temp(x, y) = Color(z_buffer_mipmaps[i][x + y * window_width()]);
 
-                for (int i = 0; i < z_buffer_mipmaps.size(); i++)
-                    write_image(debug_mipmaps_with_bboxes[i], std::string(std::string("debug_z_buffer_bboxes_mipmap") + std::to_string(i) + std::string(".png")).c_str());
+                    write_image(temp, std::string(std::string("debug_z_buffer_mipmap") + std::to_string(i) + std::string(".png")).c_str());
+                }
+
+//                for (int i = 0; i < z_buffer_mipmaps.size(); i++)
+//                    write_image(debug_mipmaps_with_bboxes[i], std::string(std::string("debug_z_buffer_bboxes_mipmap") + std::to_string(i) + std::string(".png")).c_str());
             }
     }
 }
@@ -1696,8 +1758,8 @@ int TP2::render()
 //    draw_by_groups_cpu_frustum_culling(vp_matrix, mvpMatrixInverse);
 //    draw_multi_draw_indirect();
 //    draw_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
-    draw_mdi_occlusion_culling(mvp_matrix, mvp_matrix_inverse);
 
+    draw_mdi_occlusion_culling(mvp_matrix, mvp_matrix_inverse);
     draw_skysphere();
     draw_light_camera_frustum();
     draw_fullscreen_quad_texture_hdr_exposure(m_hdr_shader_output_texture);
@@ -1712,6 +1774,7 @@ int TP2::render()
 	glUseProgram(0);
 	glBindVertexArray(0);
 
+    m_frame_number++;
 
 	return 1;
 }
