@@ -37,9 +37,11 @@ const float M_PI = 3.1415926535897932384626433832795f;
 
 uniform vec3 u_camera_position;
 uniform vec3 u_light_direction;
+uniform vec3 u_light_intensity;
 
 uniform bool u_use_irradiance_map;
 uniform bool u_has_normal_map;
+uniform bool u_do_normal_mapping;
 
 uniform sampler2D u_irradiance_map;
 uniform sampler2D u_mesh_base_color_texture;
@@ -76,7 +78,7 @@ float percentage_closer_filtering(sampler2D shadow_map, vec2 texcoords, float sc
     return shadow_sum / 9.0f;
 }
 
-float compute_shadow(vec4 light_space_fragment_position, vec3 normal, vec3 light_direction)
+float compute_shadow(vec4 light_space_fragment_position, vec3 normal, vec3 to_light_direction)
 {
 
     vec3 projected_point = light_space_fragment_position.xyz / light_space_fragment_position.w;
@@ -87,7 +89,7 @@ float compute_shadow(vec4 light_space_fragment_position, vec3 normal, vec3 light
         return 1.0f;
 
     //Bias with a minimum of 0.0005 for perpendicular angles. 0.001 for grazing angles
-    float bias = max((1.0f - dot(normal, light_direction)) * 0.0005, 0.001);
+    float bias = max((1.0f - dot(normal, to_light_direction)) * 0.0005, 0.001);
     float shadow_map_depth = percentage_closer_filtering(u_shadow_map, projected_point.xy, scene_projected_depth, bias);
 
     return shadow_map_depth;
@@ -102,8 +104,8 @@ float GGX_normal_distribution(float alpha, float NoH)
 {
     float alpha2 = alpha * alpha;
     float NoH2 = NoH * NoH;
-    float b = (NoH2 * (alpha2 - 1.0) + 1.0);
-    return alpha2 * (1 / M_PI) / (b * b);
+    float b = (NoH2 * (alpha2 - 1.0f) + 1.0f);
+    return alpha2 * (1.0f / M_PI) / (b * b);
 }
 
 float G1_schlick_ggx(float k, float dot_prod)
@@ -113,7 +115,7 @@ float G1_schlick_ggx(float k, float dot_prod)
 
 float GGX_smith_masking_shadowing(float roughness_squared, float NoV, float NoL)
 {
-    float k = roughness_squared / 2;
+    float k = roughness_squared / 2.0f;
 
     return G1_schlick_ggx(k, NoL) * G1_schlick_ggx(k, NoV);
 }
@@ -157,21 +159,22 @@ vec3 normal_mapping(vec2 normal_map_uv)
                     normalize(bitangent),
                     normalize(vs_normal));
 
-    vec3 texture_normal = normalize(texture2D(u_mesh_normal_map, normal_map_uv).rgb * 2.0f - 1.0f);
-    return ONB * texture_normal;
+    vec3 texture_normal = texture2D(u_mesh_normal_map, normal_map_uv).rgb * 2.0f - 1.0f;
+    return normalize(ONB * texture_normal);
 }
 
 void main()
 {
-    vec4 base_color = texture2D(u_mesh_base_color_texture, vs_texcoords);
-    vec3 irradiance_map_color = texture2D(u_irradiance_map, vs_texcoords).rgb;
-    //base_color = vec4(1.0, 0.71, 0.29, 1); //Hardcoded gold color
-
     vec3 surface_normal = vs_normal;
-    if (u_has_normal_map)
+    if (u_has_normal_map && u_do_normal_mapping)
         surface_normal = normal_mapping(vs_texcoords);
 
     vec3 light_direction = normalize(u_light_direction);
+    vec3 to_light_direction = -light_direction;
+
+    vec3 irradiance_map_color = vec3(0.0f);
+    vec4 base_color = texture2D(u_mesh_base_color_texture, vs_texcoords);
+    //base_color = vec4(1.0, 0.71, 0.29, 1); //Hardcoded gold color
 
     //Handling transparency on the texture
     if (base_color.a < 0.5)
@@ -180,14 +183,17 @@ void main()
     {
         vec3 surface_normal_normalized = normalize(surface_normal);
         vec3 view_direction = normalize(u_camera_position - vs_position);
-        vec3 halfway_vector = normalize(view_direction + light_direction);
+        vec3 halfway_vector = normalize(view_direction + to_light_direction);
 
-        float NoV = max(0.0f, dot(surface_normal_normalized, view_direction));
-        float NoL = max(0.0f, dot(surface_normal_normalized, light_direction));
+        // Sampling the irradiance map with the microfacet normal
+        irradiance_map_color = sample_irradiance_map(halfway_vector);
+
+        float NoV = max(0.0001f, dot(surface_normal_normalized, view_direction));
+        float NoL = max(0.0f, dot(surface_normal_normalized, to_light_direction));
         float NoH = max(0.0f, dot(surface_normal_normalized, halfway_vector));
         float VoH = max(0.0f, dot(halfway_vector, view_direction));
 
-        if (NoV > 0 && NoL > 0 && NoH > 0)
+        if (NoL > 0 && NoH > 0)
         {
             float metalness = texture2D(u_mesh_specular_texture, vs_texcoords).b;
             float roughness = texture2D(u_mesh_specular_texture, vs_texcoords).g;
@@ -218,17 +224,14 @@ void main()
             vec3 diffuse_part = kD * base_color.rgb / M_PI;
             vec3 specular_part = (F * D * G) / (4.0f * NoV * NoL);
 
-            gl_FragColor = vec4(diffuse_part + specular_part, 1);
-
-            // Sampling the irradiance map with the microfacet normal
-            irradiance_map_color = sample_irradiance_map(halfway_vector);
+            gl_FragColor = vec4((diffuse_part + specular_part) * u_light_intensity * NoL, 1.0f);
         }
         else
             gl_FragColor = vec4(0, 0, 0, 1);
     }
 
-    gl_FragColor = vec4(base_color.rgb * irradiance_map_color, 0);// Ambient lighting
-    //gl_FragColor *= compute_shadow(vs_position_light_space, normalize(surface_normal), light_direction);
+    gl_FragColor += vec4(irradiance_map_color * base_color.rgb, 0.0f);
+    gl_FragColor *= compute_shadow(vs_position_light_space, normalize(surface_normal), light_direction);
     gl_FragColor.a = 1.0f;
 }
 
