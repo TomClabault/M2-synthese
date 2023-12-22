@@ -1,23 +1,6 @@
 #include "application_timer.h"
 
-#include "tp.h"
 #include "tp2.h"
-
-ApplicationTimer::ApplicationTimer(TP* main_app) : m_tp1(main_app)
-{
-    m_frame = 0;
-    glGenQueries(MAX_FRAMES, m_time_query);
-
-    // initialise les queries, plus simple pour demarrer
-    for (int i = 0; i < MAX_FRAMES; i++)
-    {
-        glBeginQuery(GL_TIME_ELAPSED, m_time_query[i]);
-        glEndQuery(GL_TIME_ELAPSED);
-    }
-
-    // affichage du temps  dans la fenetre
-    m_console = create_text();
-}
 
 ApplicationTimer::ApplicationTimer(TP2* main_app)
 {

@@ -20,7 +20,7 @@
 #include <thread>
 
 // constructeur : donner les dimensions de l'image, et eventuellement la version d'openGL.
-TP2::TP2() : AppCamera(1280, 720, 4, 3, 8)
+TP2::TP2(const CommandlineArguments& commandline_arguments) : AppCamera(1280, 720, 4, 3, 8), m_commandline_arguments(commandline_arguments)
 {
     m_app_timer = ApplicationTimer(this);
 }
@@ -111,16 +111,218 @@ int TP2::postrender()
     return 0;
 }
 
+#define TIME(x, message) { auto __start_timer = std::chrono::high_resolution_clock::now(); x; auto __stop_timer = std::chrono::high_resolution_clock::now(); std::cout << message << std::chrono::duration_cast<std::chrono::milliseconds>(__stop_timer - __start_timer).count() << "ms" << std::endl;}
+
+int TP2::init()
+{
+    //Setting ImGUI up
+    ImGui::CreateContext();
+
+    m_imgui_io = ImGui::GetIO();
+    ImGui_ImplSdlGL3_Init(m_window);
+
+    //Positioning the camera to a default state
+    if(m_camera.read_orbiter(m_commandline_arguments.camera_orbiter_file_path.c_str()) == -1)
+    {
+        std::cout << "Error while loading the orbiter at " << m_commandline_arguments.camera_orbiter_file_path << std::endl;
+
+        std::exit(-1);
+    }
+
+    if(m_light_camera.read_orbiter("data/light_camera_bistro.txt") == -1)
+    {
+        std::cout << "Error while loading the orbiter at data/light_camera_bistro.txt" << std::endl;
+
+        std::exit(-1);
+    }
+    m_lp_light_transform = TP2::LIGHT_CAMERA_ORTHO_PROJ_BISTRO * m_light_camera.view();
+
+    //Reading the mesh displayed
+    TIME(m_mesh = read_mesh(m_commandline_arguments.obj_file_path.c_str()), "Load OBJ Time: ");
+    if (m_mesh.positions().size() == 0)
+    {
+        std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
+        std::cout << "The mesh path was: " << m_commandline_arguments.obj_file_path << std::endl;
+
+        std::exit(-1);
+    }
+
+
+
+    // etat openGL par defaut
+    glClearColor(0.2f, 0.2f, 0.2f, 1.f);        // couleur par defaut de la fenetre
+    glClearDepth(1.f);                          // profondeur par defaut
+
+    glDepthFunc(GL_LEQUAL);                       // ztest, conserver l'intersection la plus proche de la camera
+    glEnable(GL_DEPTH_TEST);                    // activer le ztest
+
+
+    m_fullscreen_quad_texture_shader = read_program("data/shaders/shader_fullscreen_quad_texture.glsl");
+    program_print_errors(m_fullscreen_quad_texture_shader);
+
+    m_fullscreen_quad_texture_hdr_exposure_shader = read_program("data/shaders/shader_fullscreen_quad_texture_hdr_exposure.glsl");
+    program_print_errors(m_fullscreen_quad_texture_hdr_exposure_shader);
+
+    m_texture_shadow_cook_torrance_shader = read_program("data/shaders/shader_texture_shadow_cook_torrance_shader.glsl");
+    program_print_errors(m_texture_shadow_cook_torrance_shader);
+
+    GLint use_irradiance_map_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_use_irradiance_map");
+    glUniform1i(use_irradiance_map_location, m_application_settings.use_irradiance_map);
+
+    GLint base_color_texture_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_mesh_base_color_texture");
+    glUniform1i(base_color_texture_uniform_location, TP2::TRIANGLE_GROUP_BASE_COLOR_TEXTURE_UNIT);
+
+    GLint specular_texture_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_mesh_specular_texture");
+    glUniform1i(specular_texture_uniform_location, TP2::TRIANGLE_GROUP_SPECULAR_TEXTURE_UNIT);
+
+    GLint normal_map_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_mesh_normal_map");
+    glUniform1i(normal_map_uniform_location, TP2::TRIANGLE_GROUP_NORMAL_MAP_UNIT);
+
+    m_shadow_map_program = read_program("data/shaders/shader_shadow_map.glsl");
+    program_print_errors(m_shadow_map_program);
+    m_cubemap_shader = read_program("data/shaders/shader_cubemap.glsl");
+    program_print_errors(m_cubemap_shader);
+
+    GLint skysphere_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_skysphere");
+    //The skysphere is on texture unit 1 so we're using 1 for the value of the uniform
+    glUniform1i(skysphere_uniform_location, 1);
+
+
+
+
+
+    //Loading the textures on another thread
+    //std::thread texture_thread(&TP2::load_mesh_textures_thread_function, this, std::ref(m_mesh.materials()));
+
+    //TODO sur un thread
+    auto start = std::chrono::high_resolution_clock::now();
+    m_mesh_triangles_group = m_mesh.groups();
+    m_mesh_base_color_textures.resize(m_mesh.materials().filename_count());
+    m_mesh_specular_textures.resize(m_mesh.materials().filename_count());
+    m_mesh_normal_maps.resize(m_mesh.materials().filename_count());
+    for (Material& mat : m_mesh.materials().materials)
+    {
+        int diffuse_texture_index = mat.diffuse_texture;
+        int specular_texture_index = mat.specular_texture;
+        int normal_map_index = mat.normal_map;
+
+        if (diffuse_texture_index != -1)
+        {
+            GLuint texture_id = create_opengl_texture(m_mesh.materials().texture_filenames[diffuse_texture_index], GL_SRGB_ALPHA);
+            m_mesh_base_color_textures[diffuse_texture_index] = texture_id;
+        }
+
+        if (specular_texture_index != -1)
+        {
+            GLuint texture_id = create_opengl_texture(m_mesh.materials().texture_filenames[specular_texture_index], GL_RGB);
+            m_mesh_specular_textures[specular_texture_index] = texture_id;
+        }
+
+        if (normal_map_index != -1)
+        {
+            GLuint texture_id = create_opengl_texture(m_mesh.materials().texture_filenames[normal_map_index], GL_RGB);
+            m_mesh_normal_maps[normal_map_index] = texture_id;
+        }
+    }
+    auto stop = std::chrono::high_resolution_clock::now();
+    std::cout << "Texture loading time: " << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << "ms" << std::endl;
+
+    //Generating the default textures that the triangle groups that don't have texture will use
+    unsigned char default_texture_data[3] = {255, 255, 255};
+    glGenTextures(1, &m_default_texture);
+    glBindTexture(GL_TEXTURE_2D, m_default_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGB, GL_UNSIGNED_BYTE, default_texture_data);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_REPEAT);
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    //Creating the VAO for the mesh that will be displayed
+    glGenVertexArrays(1, &m_mesh_vao);
+    //Selecting the VAO that we're going to configure
+    glBindVertexArray(m_mesh_vao);
+
+    //Creation du position buffer
+    GLuint mesh_buffer;
+    glGenBuffers(1, &mesh_buffer);
+    //On selectionne le position buffer
+    glBindBuffer(GL_ARRAY_BUFFER, mesh_buffer);
+    size_t total_size = m_mesh.normal_buffer_size() + m_mesh.positions().size() * sizeof(vec3) + m_mesh.texcoord_buffer_size();
+    //On definit la taille du buffer selectionne (le position buffer)
+    glBufferData(GL_ARRAY_BUFFER, total_size, nullptr, GL_STATIC_DRAW);
+
+    //Envoie des positions
+    glBufferSubData(GL_ARRAY_BUFFER, 0, m_mesh.positions().size() * sizeof(vec3), m_mesh.positions().data());
+    size_t position_size = m_mesh.positions().size() * sizeof(vec3);
+
+    //Envoie des normales
+    glBufferSubData(GL_ARRAY_BUFFER, position_size, m_mesh.normal_buffer_size(), m_mesh.normal_buffer());
+    size_t normal_size = m_mesh.normal_buffer_size();
+
+    //Envoie des texcoords
+    glBufferSubData(GL_ARRAY_BUFFER, position_size + normal_size, m_mesh.texcoord_buffer_size(), m_mesh.texcoord_buffer());
+
+
+    glUseProgram(m_texture_shadow_cook_torrance_shader);
+    //Setting the id of the attributes (set using layout in the shader)
+    GLint position_attribute = 0;//glGetAttribLocation(m_diffuse_texture_shader, "position");
+    GLint normal_attribute = 1;//glGetAttribLocation(m_diffuse_texture_shader, "normal");
+    GLint texcoord_attribute = 2;//glGetAttribLocation(m_diffuse_texture_shader, "texcoords");
+
+    glVertexAttribPointer(position_attribute, /* size */ 3, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ 0);
+    glEnableVertexAttribArray(position_attribute);
+    glVertexAttribPointer(normal_attribute, /* size */ 3, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ (GLvoid*) position_size);
+    glEnableVertexAttribArray(normal_attribute);
+    glVertexAttribPointer(texcoord_attribute, /* size */ 2, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ (GLvoid*) (position_size + normal_size));
+    glEnableVertexAttribArray(texcoord_attribute);
+
+    //Creating an empty VAO that will be used for the cubemap
+    glGenVertexArrays(1, &m_cubemap_vao);
+
+    //TODO sur un thread
+    compute_bounding_boxes_of_groups(m_mesh_triangles_group);
+
+    //Reading the faces of the skybox and creating the OpenGL Cubemap
+    std::vector<ImageData> cubemap_data;
+    Image skysphere_image, irradiance_map_image;
+
+    std::thread load_thread_cubemap = std::thread([&] {cubemap_data = Utils::read_cubemap_data("data/skybox", ".jpg"); });
+    std::thread load_thread_skypshere = std::thread([&] {skysphere_image = Utils::read_skysphere_image(m_application_settings.irradiance_map_file_path.c_str()); });
+    std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_image = Utils::precompute_and_load_associated_irradiance(m_application_settings.irradiance_map_file_path.c_str(), m_application_settings.irradiance_map_precomputation_samples, m_application_settings.irradiance_map_precomputation_downscale_factor); });
+    load_thread_cubemap.join();
+    load_thread_skypshere.join();
+    load_thread_irradiance_map.join();
+
+    m_cubemap = Utils::create_cubemap_texture_from_data(cubemap_data);
+    m_skysphere = Utils::create_skysphere_texture_hdr(skysphere_image, TP2::SKYSPHERE_UNIT);
+    m_irradiance_map = Utils::create_skysphere_texture_hdr(irradiance_map_image, TP2::DIFFUSE_IRRADIANCE_MAP_UNIT);
+
+    //Cleaning (repositionning the buffers that have been selected to their default value)
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    Point p_min, p_max;
+    m_mesh.bounds(p_min, p_max);
+    //m_camera.lookat(p_min, p_max);
+    //m_camera.rotation(145, 0);
+
+    if(create_shadow_map() == -1)
+        return -1;
+    draw_shadow_map();
+
+    if(create_hdr_frame() == -1)
+        return -1;
+
+    return 0;
+}
+
 void TP2::update_ambient_uniforms()
 {
     glUseProgram(m_texture_shadow_cook_torrance_shader);
 
     GLuint use_irradiance_map_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_use_irradiance_map");
     glUniform1i(use_irradiance_map_location, m_application_settings.use_irradiance_map);
-
-    //TODO supprimer ambient color parce qu'on utilise que l'irradiance map, pas de ambient color a deux balles
-    GLuint ambient_color_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_ambient_color");
-    glUniform4f(ambient_color_location, m_application_settings.ambient_color.r, m_application_settings.ambient_color.g, m_application_settings.ambient_color.b, m_application_settings.ambient_color.a);
 }
 
 GLuint TP2::create_opengl_texture(std::string& filepath, int GL_tex_format, float anisotropy)
@@ -323,207 +525,6 @@ bool TP2::rejection_test_bbox_frustum_culling_scene(const BoundingBox& bbox, con
     }
 
     return false;
-}
-
-#define TIME(x, message) { auto __start_timer = std::chrono::high_resolution_clock::now(); x; auto __stop_timer = std::chrono::high_resolution_clock::now(); std::cout << message << std::chrono::duration_cast<std::chrono::milliseconds>(__stop_timer - __start_timer).count() << "ms" << std::endl;}
-
-// creation des objets de l'application
-int TP2::init()
-{
-    //Setting ImGUI up
-    ImGui::CreateContext();
-
-    m_imgui_io = ImGui::GetIO();
-    ImGui_ImplSdlGL3_Init(m_window);
-
-    //Positioning the camera to a default state
-    m_camera.read_orbiter("data/TPs/start_camera_bistro.txt");
-    m_light_camera.read_orbiter("data/TPs/light_camera_bistro.txt");
-    m_lp_light_transform = TP2::LIGHT_CAMERA_ORTHO_PROJ_BISTRO * m_light_camera.view();
-
-    //Reading the mesh displayed
-    //TIME(m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj"), "Load OBJ Time: ");
-    TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
-    //TIME(m_mesh = read_mesh("data/TPs/stanford_bunny_smooth.obj"), "Load OBJ Time: ");
-    //TIME(m_mesh = read_mesh("data/cube_plane_touching.obj"), "Load OBJ Time: ");
-    //TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
-    //TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
-    if (m_mesh.positions().size() == 0)
-    {
-        std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
-
-        exit(-1);
-    }
-
-
-
-    // etat openGL par defaut
-    glClearColor(0.2f, 0.2f, 0.2f, 1.f);        // couleur par defaut de la fenetre
-    glClearDepth(1.f);                          // profondeur par defaut
-
-    glDepthFunc(GL_LEQUAL);                       // ztest, conserver l'intersection la plus proche de la camera
-    glEnable(GL_DEPTH_TEST);                    // activer le ztest
-
-
-    m_fullscreen_quad_texture_shader = read_program("data/TPs/shaders/shader_fullscreen_quad_texture.glsl");
-    program_print_errors(m_fullscreen_quad_texture_shader);
-
-    m_fullscreen_quad_texture_hdr_exposure_shader = read_program("data/TPs/shaders/shader_fullscreen_quad_texture_hdr_exposure.glsl");
-    program_print_errors(m_fullscreen_quad_texture_hdr_exposure_shader);
-
-    m_texture_shadow_cook_torrance_shader = read_program("data/TPs/shaders/shader_texture_shadow_cook_torrance_shader.glsl");
-    program_print_errors(m_texture_shadow_cook_torrance_shader);
-
-    GLint use_irradiance_map_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_use_irradiance_map");
-    glUniform1i(use_irradiance_map_location, m_application_settings.use_irradiance_map);
-
-    GLint base_color_texture_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_mesh_base_color_texture");
-    glUniform1i(base_color_texture_uniform_location, TP2::TRIANGLE_GROUP_BASE_COLOR_TEXTURE_UNIT);
-
-    GLint specular_texture_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_mesh_specular_texture");
-    glUniform1i(specular_texture_uniform_location, TP2::TRIANGLE_GROUP_SPECULAR_TEXTURE_UNIT);
-
-    GLint normal_map_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_mesh_normal_map");
-    glUniform1i(normal_map_uniform_location, TP2::TRIANGLE_GROUP_NORMAL_MAP_UNIT);
-
-    m_shadow_map_program = read_program("data/TPs/shaders/shader_shadow_map.glsl");
-    program_print_errors(m_shadow_map_program);
-    m_cubemap_shader = read_program("data/TPs/shaders/shader_cubemap.glsl");
-    program_print_errors(m_cubemap_shader);
-
-    GLint skysphere_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_skysphere");
-    //The skysphere is on texture unit 1 so we're using 1 for the value of the uniform
-    glUniform1i(skysphere_uniform_location, 1);
-
-
-
-
-
-    //Loading the textures on another thread
-    //std::thread texture_thread(&TP2::load_mesh_textures_thread_function, this, std::ref(m_mesh.materials()));
-
-    //TODO sur un thread
-    auto start = std::chrono::high_resolution_clock::now();
-    m_mesh_triangles_group = m_mesh.groups();
-    m_mesh_base_color_textures.resize(m_mesh.materials().filename_count());
-    m_mesh_specular_textures.resize(m_mesh.materials().filename_count());
-    m_mesh_normal_maps.resize(m_mesh.materials().filename_count());
-    for (Material& mat : m_mesh.materials().materials)
-    {
-        int diffuse_texture_index = mat.diffuse_texture;
-        int specular_texture_index = mat.specular_texture;
-        int normal_map_index = mat.normal_map;
-
-        if (diffuse_texture_index != -1)
-        {
-            GLuint texture_id = create_opengl_texture(m_mesh.materials().texture_filenames[diffuse_texture_index], GL_SRGB_ALPHA);
-            m_mesh_base_color_textures[diffuse_texture_index] = texture_id;
-        }
-
-        if (specular_texture_index != -1)
-        {
-            GLuint texture_id = create_opengl_texture(m_mesh.materials().texture_filenames[specular_texture_index], GL_RGB);
-            m_mesh_specular_textures[specular_texture_index] = texture_id;
-        }
-
-        if (normal_map_index != -1)
-        {
-            GLuint texture_id = create_opengl_texture(m_mesh.materials().texture_filenames[normal_map_index], GL_RGB);
-            m_mesh_normal_maps[normal_map_index] = texture_id;
-        }
-    }
-    auto stop = std::chrono::high_resolution_clock::now();
-    std::cout << "Texture loading time: " << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << "ms" << std::endl;
-
-    //Generating the default textures that the triangle groups that don't have texture will use
-    unsigned char default_texture_data[3] = {255, 255, 255};
-    glGenTextures(1, &m_default_texture);
-    glBindTexture(GL_TEXTURE_2D, m_default_texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGB, GL_UNSIGNED_BYTE, default_texture_data);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_REPEAT);
-    glGenerateMipmap(GL_TEXTURE_2D);
-
-    //Creating the VAO for the mesh that will be displayed
-    glGenVertexArrays(1, &m_mesh_vao);
-    //Selecting the VAO that we're going to configure
-    glBindVertexArray(m_mesh_vao);
-
-    //Creation du position buffer
-    GLuint mesh_buffer;
-    glGenBuffers(1, &mesh_buffer);
-    //On selectionne le position buffer
-    glBindBuffer(GL_ARRAY_BUFFER, mesh_buffer);
-    size_t total_size = m_mesh.normal_buffer_size() + m_mesh.positions().size() * sizeof(vec3) + m_mesh.texcoord_buffer_size();
-    //On definit la taille du buffer selectionne (le position buffer)
-    glBufferData(GL_ARRAY_BUFFER, total_size, nullptr, GL_STATIC_DRAW);
-
-    //Envoie des positions
-    glBufferSubData(GL_ARRAY_BUFFER, 0, m_mesh.positions().size() * sizeof(vec3), m_mesh.positions().data());
-    size_t position_size = m_mesh.positions().size() * sizeof(vec3);
-
-    //Envoie des normales
-    glBufferSubData(GL_ARRAY_BUFFER, position_size, m_mesh.normal_buffer_size(), m_mesh.normal_buffer());
-    size_t normal_size = m_mesh.normal_buffer_size();
-
-    //Envoie des texcoords
-    glBufferSubData(GL_ARRAY_BUFFER, position_size + normal_size, m_mesh.texcoord_buffer_size(), m_mesh.texcoord_buffer());
-
-
-    glUseProgram(m_texture_shadow_cook_torrance_shader);
-    //Setting the id of the attributes (set using layout in the shader)
-    GLint position_attribute = 0;//glGetAttribLocation(m_diffuse_texture_shader, "position");
-    GLint normal_attribute = 1;//glGetAttribLocation(m_diffuse_texture_shader, "normal");
-    GLint texcoord_attribute = 2;//glGetAttribLocation(m_diffuse_texture_shader, "texcoords");
-
-    glVertexAttribPointer(position_attribute, /* size */ 3, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ 0);
-    glEnableVertexAttribArray(position_attribute);
-    glVertexAttribPointer(normal_attribute, /* size */ 3, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ (GLvoid*) position_size);
-    glEnableVertexAttribArray(normal_attribute);
-    glVertexAttribPointer(texcoord_attribute, /* size */ 2, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ (GLvoid*) (position_size + normal_size));
-    glEnableVertexAttribArray(texcoord_attribute);
-
-    //Creating an empty VAO that will be used for the cubemap
-    glGenVertexArrays(1, &m_cubemap_vao);
-
-    //TODO sur un thread
-    compute_bounding_boxes_of_groups(m_mesh_triangles_group);
-
-    //Reading the faces of the skybox and creating the OpenGL Cubemap
-    std::vector<ImageData> cubemap_data;
-    Image skysphere_image, irradiance_map_image;
-
-    std::thread load_thread_cubemap = std::thread([&] {cubemap_data = Utils::read_cubemap_data("data/TPs/skybox", ".jpg"); });
-    std::thread load_thread_skypshere = std::thread([&] {skysphere_image = Utils::read_skysphere_image(m_application_settings.irradiance_map_file_path.c_str()); });
-    std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_image = Utils::precompute_and_load_associated_irradiance(m_application_settings.irradiance_map_file_path.c_str(), m_application_settings.irradiance_map_precomputation_samples, m_application_settings.irradiance_map_precomputation_downscale_factor); });
-    load_thread_cubemap.join();
-    load_thread_skypshere.join();
-    load_thread_irradiance_map.join();
-
-    m_cubemap = Utils::create_cubemap_texture_from_data(cubemap_data);
-    m_skysphere = Utils::create_skysphere_texture_hdr(skysphere_image, TP2::SKYSPHERE_UNIT);
-    m_irradiance_map = Utils::create_skysphere_texture_hdr(irradiance_map_image, TP2::DIFFUSE_IRRADIANCE_MAP_UNIT);
-
-    //Cleaning (repositionning the buffers that have been selected to their default value)
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    Point p_min, p_max;
-    //TODO ça recalcule tous les bounds alors qu'on les a deja calculees
-    m_mesh.bounds(p_min, p_max);
-    //m_camera.lookat(p_min, p_max);
-    //m_camera.rotation(145, 0);
-
-    if(create_shadow_map() == -1)
-        return -1;
-    draw_shadow_map();
-
-    if(create_hdr_frame() == -1)
-        return -1;
-
-    return 0;
 }
 
 int TP2::quit()
