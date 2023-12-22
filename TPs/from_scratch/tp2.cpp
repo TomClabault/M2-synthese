@@ -330,68 +330,6 @@ bool TP2::rejection_test_bbox_frustum_culling_scene(const BoundingBox& bbox, con
 // creation des objets de l'application
 int TP2::init()
 {
-    //TP4 intro compute shader
-//    //Initialisation des données sur le CPU
-//    const int N = 200;
-//    int global_counter_init_value = 0;
-//    std::vector<int> input_data(N);
-//    for (int i= 0; i < N; i++)
-//        input_data[i] = i;
-
-//    GLuint input_gpu_buffer, output_gpu_buffer;
-//    glGenBuffers(1, &input_gpu_buffer);
-//    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, input_gpu_buffer);
-//    //sizeof(int) * (N + 1) because we're allocating memory for the global_counter as well as the input data
-//    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(int) * (N + 1), NULL, GL_STREAM_READ);
-//    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(int), &global_counter_init_value);
-//    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 1 * sizeof(int), sizeof(int) * N, input_data.data());
-
-//    glGenBuffers(1, &output_gpu_buffer);
-//    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, output_gpu_buffer);
-//    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(int) * N, NULL, GL_STREAM_COPY);
-
-//    GLuint compute_shader_program = read_program("data/TPs/shaders/occlusion_culling.glsl");
-//    if (program_print_errors(compute_shader_program)) {
-//        exit(EXIT_FAILURE);
-//    }
-
-//    glUseProgram(compute_shader_program);
-
-//    int nb_groups = N / 256;
-//    nb_groups += (N % 256) ? 1 : 0;
-//    std::cout << "Nb groups: " << nb_groups << std::endl;
-
-//    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, input_gpu_buffer);
-//    glUniform1i(glGetUniformLocation(compute_shader_program, "u_operand"), 0);
-
-//    glDispatchCompute(nb_groups, 1, 1);
-//    glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
-
-//    std::vector<int> result_data(N);
-//    glBindBuffer(GL_SHADER_STORAGE_BUFFER, output_gpu_buffer);
-//    glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(int) * N, result_data.data());
-
-//    for (int i = 0; i < N; i++)
-//        std::cout << result_data[i] << ", ";
-
-//    std::exit(0);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     //Setting ImGUI up
     ImGui::CreateContext();
 
@@ -405,10 +343,10 @@ int TP2::init()
 
     //Reading the mesh displayed
     //TIME(m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj"), "Load OBJ Time: ");
-    //TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
+    TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/TPs/stanford_bunny_smooth.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/cube_plane_touching.obj"), "Load OBJ Time: ");
-    TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
+    //TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
     if (m_mesh.positions().size() == 0)
     {
@@ -575,7 +513,7 @@ int TP2::init()
     Point p_min, p_max;
     //TODO ça recalcule tous les bounds alors qu'on les a deja calculees
     m_mesh.bounds(p_min, p_max);
-    m_camera.lookat(p_min, p_max);
+    //m_camera.lookat(p_min, p_max);
     //m_camera.rotation(145, 0);
 
     if(create_shadow_map() == -1)
@@ -672,10 +610,7 @@ void TP2::draw_shadow_map()
 
     glUseProgram(m_shadow_map_program);
     GLint mlp_matrix_uniform_location = glGetUniformLocation(m_shadow_map_program, "mlp_matrix");
-    if (m_application_settings.bind_light_camera_to_camera)
-        glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, (m_camera.projection() * m_camera.view()).data());
-    else
-        glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, m_lp_light_transform.data());
+    glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, m_lp_light_transform.data());
 
     glBindVertexArray(m_mesh_vao);
     glDrawArrays(GL_TRIANGLES, 0, m_mesh.triangle_count() * 3);
@@ -767,16 +702,6 @@ Mesh make_frustum( )
     return camera;
 }
 
-void TP2::draw_light_camera_frustum()
-{
-    if (m_application_settings.draw_light_camera_frustum)
-    {
-        // affiche le frustum de la camera
-        Mesh frustum_mesh = make_frustum();
-        draw(frustum_mesh, m_lp_light_transform.inverse(), camera());
-    }
-}
-
 void TP2::draw_fullscreen_quad_texture(GLuint texture_to_draw)
 {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -843,8 +768,6 @@ void TP2::draw_lighting_window()
     ImGui::RadioButton("Use Skysphere", &m_application_settings.cubemap_or_skysphere, 0);
     ImGui::Separator();
     ImGui::Checkbox("Draw Shadow Map", &m_application_settings.draw_shadow_map);
-    ImGui::Checkbox("Bind Light Camera to Camera", &m_application_settings.bind_light_camera_to_camera);
-    ImGui::Checkbox("Show Light Camera Frustum", &m_application_settings.draw_light_camera_frustum);
     ImGui::Separator();
     ImGui::SliderFloat3("Light Direction", (float*)&m_light_direction, -1.0f, 1.0f);
     ImGui::SliderFloat3("Light Intensity", (float*)&m_light_intensity, 7.5f, 20.0f);
@@ -1055,7 +978,6 @@ int TP2::render()
     }
 
     draw_skysphere();
-    draw_light_camera_frustum();
     draw_fullscreen_quad_texture_hdr_exposure(m_hdr_shader_output_texture);
 
     ////////// ImGUI //////////

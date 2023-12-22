@@ -16,8 +16,6 @@ struct ApplicationSettings
 
     float shadow_intensity = 0.1f;
     bool draw_shadow_map = false;
-    bool bind_light_camera_to_camera = false;
-    bool draw_light_camera_frustum = false;
 
     float hdr_exposure = 1.0f;
 
