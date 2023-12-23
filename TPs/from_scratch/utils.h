@@ -4,6 +4,8 @@
 #include "GL/glew.h"
 
 #include "image_io.h"
+#include "mat.h" //For Transform
+#include "tp2.h" //For TP2::CullingObject
 
 #include <vector>
 
@@ -37,6 +39,8 @@ public:
 
     static std::vector<std::vector<float>> compute_mipmaps(const std::vector<float> &input_image, int width, int height);
     static std::vector<float> get_z_buffer(int window_width, int window_height);
+    static void get_object_screen_space_bounding_box(const Transform& mvp_matrix, const Transform& viewport_matrix, const TP2::CullObject& object, Point& out_bbox_min, Point& out_bbox_max);
+    static int get_visibility_of_object_from_camera(const Transform& view_matrix, const TP2::CullObject& object);
 };
 
 #endif

@@ -1,3 +1,6 @@
+#ifndef TP2_H
+#define TP2_H
+
 #include "app_camera.h"
 #include "application_settings.h"
 #include "application_state.h"
@@ -12,8 +15,8 @@
 
 struct BoundingBox
 {
-	Point pMin;
-	Point pMax;
+    Point pMin;
+    Point pMax;
 };
 
 class TP2 : public AppCamera
@@ -58,6 +61,15 @@ public:
     bool rejection_test_bbox_frustum_culling(const CullObject& object, const Transform& mvpMatrix);
     bool rejection_test_bbox_frustum_culling_scene(const CullObject& object, const Transform& inverse_mvp_matrix);
 
+    /**
+     * @param object Object to try to cull
+     * @param z_buffer_mipmaps The mipmaps of the z-buffer that will be
+     * used for the hierarchical occlusion test
+     * @return True if the object has been culled and is not visible.
+     * False if it is visible
+     */
+    bool occlusion_cull_cpu(const Transform &mvp_matrix, CullObject& object, int depth_buffer_width, int depth_buffer_height, const std::vector<std::vector<float>> &z_buffer_mipmaps);
+
 	// creation des objets de l'application
 	int init();
 
@@ -69,13 +81,16 @@ public:
     int resize_hdr_frame();
     int create_hdr_frame();
     int create_shadow_map();
+
 	void draw_shadow_map();
     void draw_light_camera_frustum();
     void draw_fullscreen_quad_texture(GLuint texture_to_draw);
     void draw_fullscreen_quad_texture_hdr_exposure(GLuint texture_to_draw);
 	void draw_skysphere();
+
+    std::vector<TP2::MultiDrawIndirectParam> generate_draw_params_from_object_ids(std::vector<int> object_ids);
+
     void draw_by_groups_cpu_frustum_culling(const Transform &vp_matrix, const Transform &mvp_matrix_inverse);
-    void draw_multi_draw_indirect();
     void draw_multi_draw_indirect_from_ids(const std::vector<int>& object_ids);
     void draw_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse);
     void draw_mdi_occlusion_culling(const Transform &mvp_matrix, const Transform &mvp_matrix_inverse);
@@ -171,3 +186,5 @@ protected:
 	//such as whether or not we're currently recomputing an irradiance map
 	ApplicationState m_application_state;
 };
+
+#endif

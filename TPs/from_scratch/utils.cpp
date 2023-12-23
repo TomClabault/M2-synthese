@@ -359,3 +359,56 @@ std::vector<float> Utils::get_z_buffer(int window_width, int window_height)
 
     return tmp;
 }
+
+void Utils::get_object_screen_space_bounding_box(const Transform& mvp_matrix, const Transform& viewport_matrix, const TP2::CullObject& object, Point& out_bbox_min, Point& out_bbox_max)
+{
+    Point object_screen_space_bbox_points[8];
+    object_screen_space_bbox_points[0] = viewport_matrix(mvp_matrix(Point(object.min)));
+    object_screen_space_bbox_points[1] = viewport_matrix(mvp_matrix(Point(object.max.x, object.min.y, object.min.z)));
+    object_screen_space_bbox_points[2] = viewport_matrix(mvp_matrix(Point(object.min.x, object.max.y, object.min.z)));
+    object_screen_space_bbox_points[3] = viewport_matrix(mvp_matrix(Point(object.max.x, object.max.y, object.min.z)));
+    object_screen_space_bbox_points[4] = viewport_matrix(mvp_matrix(Point(object.min.x, object.min.y, object.max.z)));
+    object_screen_space_bbox_points[5] = viewport_matrix(mvp_matrix(Point(object.max.x, object.min.y, object.max.z)));
+    object_screen_space_bbox_points[6] = viewport_matrix(mvp_matrix(Point(object.min.x, object.max.y, object.max.z)));
+    object_screen_space_bbox_points[7] = viewport_matrix(mvp_matrix(Point(object.max)));
+
+    out_bbox_min = Point(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
+    out_bbox_max = Point(-std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(), -std::numeric_limits<float>::max());
+    for (int i = 0; i < 8; i++)
+    {
+        out_bbox_min = min(out_bbox_min, object_screen_space_bbox_points[i]);
+        out_bbox_max = max(out_bbox_max, object_screen_space_bbox_points[i]);
+    }
+}
+
+int Utils::get_visibility_of_object_from_camera(const Transform& view_matrix, const TP2::CullObject& object)
+{
+    Point view_space_points[8];
+
+    //TODO we only need the z coordinate so the whole matrix-point multiplication isn't needed, too slow
+    view_space_points[0] = view_matrix(Point(object.min));
+    view_space_points[1] = view_matrix(Point(object.max.x, object.min.y, object.min.z));
+    view_space_points[2] = view_matrix(Point(object.min.x, object.max.y, object.min.z));
+    view_space_points[3] = view_matrix(Point(object.max.x, object.max.y, object.min.z));
+    view_space_points[4] = view_matrix(Point(object.min.x, object.min.y, object.max.z));
+    view_space_points[5] = view_matrix(Point(object.max.x, object.min.y, object.max.z));
+    view_space_points[6] = view_matrix(Point(object.min.x, object.max.y, object.max.z));
+    view_space_points[7] = view_matrix(Point(object.max));
+
+    bool all_behind = true;
+    bool all_in_front = true;
+    for (int i = 0; i < 8; i++)
+    {
+        bool point_behind = view_space_points[i].z > 0;
+
+        all_behind &= point_behind;
+        all_in_front &= !point_behind;
+    }
+
+    if (all_behind)
+        return 0;
+    else if (all_in_front)
+        return 1;
+    else
+        return 2;
+}
