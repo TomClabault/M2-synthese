@@ -68,7 +68,7 @@ public:
      * @return True if the object has been culled and is not visible.
      * False if it is visible
      */
-    bool occlusion_cull_cpu(const Transform &mvp_matrix, CullObject& object, int depth_buffer_width, int depth_buffer_height, const std::vector<std::vector<float>> &z_buffer_mipmaps);
+    bool occlusion_cull_cpu(const Transform &mvp_matrix, CullObject& object, int depth_buffer_width, int depth_buffer_height, const std::vector<std::vector<float>>& z_buffer_mipmaps, const std::vector<std::pair<int, int>>& mipmaps_widths_heights);
 
 	// creation des objets de l'application
 	int init();
@@ -159,7 +159,7 @@ protected:
 	GLuint m_shadow_map_framebuffer;
     GLuint m_shadow_map = 0;
 
-    GLuint m_occlusion_culling_shader;
+    GLuint m_frustum_culling_shader;
     GLuint m_mdi_draw_params_buffer;
     GLuint m_occlusion_culling_objects_id_to_draw;
     GLuint m_occlusion_culling_input_object_buffer;

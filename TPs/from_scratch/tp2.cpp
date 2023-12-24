@@ -401,7 +401,7 @@ bool TP2::rejection_test_bbox_frustum_culling_scene(const CullObject& object, co
     return false;
 }
 
-bool TP2::occlusion_cull_cpu(const Transform& mvp_matrix, CullObject& object, int depth_buffer_width, int depth_buffer_height, const std::vector<std::vector<float> > &z_buffer_mipmaps)
+bool TP2::occlusion_cull_cpu(const Transform& mvp_matrix, CullObject& object, int depth_buffer_width, int depth_buffer_height, const std::vector<std::vector<float> >& z_buffer_mipmaps, const std::vector<std::pair<int, int>>& mipmaps_widths_heights)
 {
     Point screen_space_bbox_min, screen_space_bbox_max;
     float nearest_depth;
@@ -448,15 +448,15 @@ bool TP2::occlusion_cull_cpu(const Transform& mvp_matrix, CullObject& object, in
 
     bool one_pixel_visible = false;
     int min_y = std::floor(screen_space_bbox_min.y * reduction_factor_inverse);
-    int max_y = std::ceil(screen_space_bbox_max.y * reduction_factor_inverse);
+    int max_y = std::min((int)std::ceil(screen_space_bbox_max.y * reduction_factor_inverse), mipmaps_widths_heights[mipmap_level].second - 1);
     int min_x = std::floor(screen_space_bbox_min.x * reduction_factor_inverse);
-    int max_x = std::ceil(screen_space_bbox_max.x * reduction_factor_inverse);
+    int max_x = std::min((int)std::ceil(screen_space_bbox_max.x * reduction_factor_inverse), mipmaps_widths_heights[mipmap_level].first - 1);
 
     for (int y = min_y; y <= max_y; y++)
     {
         for (int x = min_x; x <= max_x; x++)
         {
-            float depth_buffer_depth = mipmap[x + y * depth_buffer_width];
+            float depth_buffer_depth = mipmap[x + y * mipmaps_widths_heights[mipmap_level].first];
             if (depth_buffer_depth >= nearest_depth)
             {
                 //The object needs to be rendered, we can stop here
@@ -468,6 +468,53 @@ bool TP2::occlusion_cull_cpu(const Transform& mvp_matrix, CullObject& object, in
 
         if (one_pixel_visible)
             break;
+    }
+
+    //TODO remove, debug only
+    {
+            /*std::vector<float> debug_bboxes_zbuffer_mipmap_image;
+
+            for (int i = 0; i < z_buffer_mipmaps.size(); i++)
+            {
+                Image debug_mipmaps_with_bbox = Image(mipmaps_widths_heights[i].first, mipmaps_widths_heights[i].second);
+                for (int y = 0; y < mipmaps_widths_heights[i].second; y++)
+                    for (int x = 0; x < mipmaps_widths_heights[i].first; x++)
+                        debug_mipmaps_with_bbox(x, y) = Color(z_buffer_mipmaps[i][x + y * mipmaps_widths_heights[i].first]);
+
+                int reduction_factor = std::pow(2, i);
+                float reduction_factor_inverse = 1.0f / reduction_factor;
+                int min_y = std::floor(screen_space_bbox_min.y * reduction_factor_inverse);
+                int max_y = std::ceil(screen_space_bbox_max.y * reduction_factor_inverse);
+                int min_x = std::floor(screen_space_bbox_min.x * reduction_factor_inverse);
+                int max_x = std::ceil(screen_space_bbox_max.x * reduction_factor_inverse);
+
+                for (int x = min_x; x <= max_x; x++)
+                {
+                    debug_mipmaps_with_bbox(x, min_y) = Color(1.0f, 0, 0);
+                    debug_mipmaps_with_bbox(x, max_y) = Color(1.0f, 0, 0);
+                }
+
+                for (int y = min_y; y <= max_y; y++)
+                {
+                    debug_mipmaps_with_bbox(min_x, y) = Color(1.0f, 0, 0);
+                    debug_mipmaps_with_bbox(max_x, y) = Color(1.0f, 0, 0);
+                }
+
+                write_image(debug_mipmaps_with_bbox, std::string(std::string("debug_z_buffer_bboxes_mipmap") + std::to_string(i) + std::string(".png")).c_str());
+            }*/
+
+
+        /*for (int x = screen_space_bbox_min.x; x <= screen_space_bbox_max.x; x++)
+        {
+            debug_bboxes_image(x, screen_space_bbox_min.y) = Color(1.0f, 0, 0);
+            debug_bboxes_image(x, screen_space_bbox_max.y) = Color(1.0f, 0, 0);
+        }
+
+        for (int y = screen_space_bbox_min.y; y <= screen_space_bbox_max.y; y++)
+        {
+            debug_bboxes_image(screen_space_bbox_min.x, y) = Color(1.0f, 0, 0);
+            debug_bboxes_image(screen_space_bbox_max.x, y) = Color(1.0f, 0, 0);
+        }*/
     }
 
     if (one_pixel_visible)
@@ -557,9 +604,9 @@ int TP2::init()
     //Reading the mesh displayed
     //TIME(m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
-    //TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
+    TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
-    TIME(m_mesh = read_mesh("data/TPs/cube_occlusion_culling.obj"), "Load OBJ Time: ");
+    //TIME(m_mesh = read_mesh("data/TPs/cube_occlusion_culling.obj"), "Load OBJ Time: ");
     if (m_mesh.positions().size() == 0)
     {
         std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -609,8 +656,8 @@ int TP2::init()
     GLint skysphere_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_skysphere");
     glUniform1i(skysphere_uniform_location, 1);
 
-    m_occlusion_culling_shader = read_program("data/TPs/shaders/TPCG/frustum_culling.glsl");
-    program_print_errors(m_occlusion_culling_shader);
+    m_frustum_culling_shader = read_program("data/TPs/shaders/TPCG/frustum_culling.glsl");
+    program_print_errors(m_frustum_culling_shader);
 
 
 
@@ -716,17 +763,17 @@ int TP2::init()
 
     std::thread load_thread_cubemap = std::thread([&] {cubemap_data = Utils::read_cubemap_data("data/TPs/skybox", ".jpg"); });
     std::thread load_thread_skypshere = std::thread([&] {skysphere_image = Utils::read_skysphere_image(m_application_settings.irradiance_map_file_path.c_str()); });
-    std::thread load_thread_irradiance_map = std::thread([&] {irradiance_map_image = Utils::precompute_and_load_associated_irradiance(m_application_settings.irradiance_map_file_path.c_str(), m_application_settings.irradiance_map_precomputation_samples, m_application_settings.irradiance_map_precomputation_downscale_factor); });
+    irradiance_map_image = Utils::precompute_and_load_associated_irradiance(m_application_settings.irradiance_map_file_path.c_str(), m_application_settings.irradiance_map_precomputation_samples, m_application_settings.irradiance_map_precomputation_downscale_factor);
+
     load_thread_cubemap.join();
     load_thread_skypshere.join();
-    load_thread_irradiance_map.join();
 
     m_cubemap = Utils::create_cubemap_texture_from_data(cubemap_data);
     m_skysphere = Utils::create_skysphere_texture_hdr(skysphere_image, TP2::SKYSPHERE_UNIT);
     m_irradiance_map = Utils::create_skysphere_texture_hdr(irradiance_map_image, TP2::DIFFUSE_IRRADIANCE_MAP_UNIT);
 
     // ---------- Preparing for multi-draw indirect: ---------- //
-    glUseProgram(m_occlusion_culling_shader);
+    glUseProgram(m_frustum_culling_shader);
 
     glGenBuffers(1, &m_mdi_draw_params_buffer);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_mdi_draw_params_buffer);
@@ -758,7 +805,7 @@ int TP2::init()
 
     Point p_min, p_max;
     m_mesh.bounds(p_min, p_max);
-    m_camera.lookat(p_min, p_max);
+    //m_camera.lookat(p_min, p_max);
     m_camera.read_orbiter("app_orbiter.txt");
 
     if (create_shadow_map() == -1)
@@ -1083,9 +1130,9 @@ void TP2::cpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& 
 
 int TP2::gpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
 {
-    glUseProgram(m_occlusion_culling_shader);
+    glUseProgram(m_frustum_culling_shader);
 
-    GLint mvp_matrix_uniform_location = glGetUniformLocation(m_occlusion_culling_shader, "u_mvp_matrix");
+    GLint mvp_matrix_uniform_location = glGetUniformLocation(m_frustum_culling_shader, "u_mvp_matrix");
     glUniformMatrix4fv(mvp_matrix_uniform_location, 1, GL_TRUE, mvp_matrix.data());
 
     std::array<Vector, 8> frustum_points_world_space;
@@ -1109,7 +1156,7 @@ int TP2::gpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& m
             frustum_points_world_space[i] = Vector(frustum_points_projective_space[i]) / frustum_points_projective_space[i].w;
     }
 
-    GLint frustum_world_space_vertices_uniform_location = glGetUniformLocation(m_occlusion_culling_shader, "frustum_world_space_vertices");
+    GLint frustum_world_space_vertices_uniform_location = glGetUniformLocation(m_frustum_culling_shader, "frustum_world_space_vertices");
     glUniform3fv(frustum_world_space_vertices_uniform_location, 8, (float*)frustum_points_world_space.data());
 
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_mdi_draw_params_buffer); //Out buffer
@@ -1176,55 +1223,6 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
     }
     else
     {
-//        //Running every object of the scene through the frustum culling
-//        int nb_accepted_objects = gpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
-//        int nb_objects_drawn_last_frame = m_objects_drawn_last_frame.size();
-
-//        //Getting the ids of the object that are in the frustum this frame
-//        std::vector<int> objects_visible_this_frame(nb_accepted_objects);
-//        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_objects_id_to_draw);
-//        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int) * nb_accepted_objects, objects_visible_this_frame.data());
-
-//        //We're going to find the objects from last frame that are still visible
-//        //(pass the frustum culling test) this frame
-//        //and that thus need to be drawn to fill the z buffer
-//        std::vector<int> visible_objects_from_last_frame;
-//        visible_objects_from_last_frame.reserve(m_objects_drawn_last_frame.size());
-//        for (int object_id_visible_last_frame : m_objects_drawn_last_frame)
-//            if (std::find(objects_visible_this_frame.begin(), objects_visible_this_frame.end(), object_id_visible_last_frame) != objects_visible_this_frame.end())
-//                visible_objects_from_last_frame.push_back(object_id_visible_last_frame);
-
-//        //Drawing to fill the z buffer
-//        draw_multi_draw_indirect_from_ids(visible_objects_from_last_frame);
-
-//        //Starting the construction of the visible objects of this current frame that will be used
-//        //in the next frame
-//        m_objects_drawn_last_frame.clear();
-//        m_objects_drawn_last_frame.resize(visible_objects_from_last_frame.size());
-//        std::copy(visible_objects_from_last_frame.begin(), visible_objects_from_last_frame.end(), m_objects_drawn_last_frame.begin());
-
-//        int depth_buffer_width = window_width();
-//        int depth_buffer_height = window_height();
-
-//        //Getting the z-buffer and computing the hierarchy
-//        m_debug_z_buffer = Utils::get_z_buffer(depth_buffer_width, depth_buffer_height);
-//        z_buffer_mipmaps = Utils::compute_mipmaps(m_debug_z_buffer, depth_buffer_width, depth_buffer_height);
-
-//        int nb_occlusion_culling_objects = nb_accepted_objects - nb_objects_drawn_last_frame;
-//        //This vector contains the ids of the object that have to be tested with occlusion culling.
-//        //We have nb_accepted_objects potential objects to draw and have m_objects_drawn_last_frame.size()
-//        //have alredy been drawn to fill the z buffer
-//        std::vector<int> occlusion_culling_objects;
-//        occlusion_culling_objects.reserve(nb_occlusion_culling_objects);
-
-//        //Simple variable renaming for clarity
-//        const std::vector<int>& already_drawn_objects = visible_objects_from_last_frame;
-//        //We're looking for all the objects that are visible this frame and that we haven't already drawn
-//        //(because we have alraedy drawn some objects to fill the z buffer)
-//        for (int potential_culling_object : objects_visible_this_frame)
-//            if (std::find(already_drawn_objects.begin(), already_drawn_objects.end(), potential_culling_object) == already_drawn_objects.end())
-//                occlusion_culling_objects.push_back(potential_culling_object);
-
         //First, we want to draw the objects that were visible last frame to fill the z-buffer
         int nb_accepted_objects = gpu_mdi_frustum_culling(mvp_matrix, mvp_matrix_inverse);
         std::vector<int> accepted_ids_this_frame(nb_accepted_objects);
@@ -1249,113 +1247,40 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                 //We found an object that was visible last frame and that still is this frame
                 //We're going to use that object to fill the z buffer
                 objects_to_fill_zbuffer.push_back(object_id_this_frame);
-            else
-                //This object is visible (in the frustum) this frame but wasn't last frame
-                //This object will have to pass the occlusion culling test
-                objects_to_occlusion_cull_test.push_back(object_id_this_frame);
+
+            //Testing the object for occlusion culling
+            objects_to_occlusion_cull_test.push_back(object_id_this_frame);
         }
 
         //Filling the z-buffer with the objects that were visible last frame and that still
-        //are
+        //are visible
         glUseProgram(m_texture_shadow_cook_torrance_shader);
         draw_multi_draw_indirect_from_ids(objects_to_fill_zbuffer);
-        m_objects_drawn_last_frame = objects_to_fill_zbuffer;
+        m_objects_drawn_last_frame.clear();
 
         //Getting the zbuffer
-        m_debug_z_buffer = Utils::get_z_buffer(window_width(), window_height());
-        z_buffer_mipmaps = Utils::compute_mipmaps(m_debug_z_buffer, window_width(), window_height());
+        std::vector<std::pair<int, int>> mipmaps_widths_heights;
+        //We're drawing in the HDR framebuffer so the z-buffer is there
+        m_debug_z_buffer = Utils::get_z_buffer(window_width(), window_height(), m_hdr_framebuffer);
+        Image depth_buffer_image(window_width(), window_height());
+        for (int y = 0; y < window_height(); y++)
+            for (int x = 0; x < window_width(); x++)
+                depth_buffer_image(x, y) = Color(m_debug_z_buffer[x + y * window_width()]);
 
-        std::vector<int> objects_to_test;
-        if (m_frame_number == 1) //Second frame
-        {
-            //On the second frame, we're going to have to test the occlusion of
-            //every objects because:
-            //- The first frame, everyone is drawn
-            //- The second frame, we're going to draw every objects
-            //  that was drawn in the first frame. Let's say the camera
-            //  didn't move. If it didn't move, we're going to draw the exact same
-            //  objects that were drawn in the first frame to fill the z buffer
-            //  but this means that we're also going to draw objects that are potentially
-            //  behind other objects (occluded) even though we have the z-buffer to test
-            //  their occlusion so we could have tested these objects for occlusion
-            //  against the zbuffer of the first frame and not drawn them
+        write_image(depth_buffer_image, "debug_z_buffer.png");
 
-            objects_to_test = objects_to_occlusion_cull_test;
-            objects_to_test.insert(objects_to_test.end(), objects_to_fill_zbuffer.begin(), objects_to_fill_zbuffer.end());
-        }
-        else
-            objects_to_test = objects_to_occlusion_cull_test;
+        z_buffer_mipmaps = Utils::compute_mipmaps(m_debug_z_buffer, window_width(), window_height(), mipmaps_widths_heights);
 
-        for (int object_id : objects_to_test)
+        for (int object_id : objects_to_occlusion_cull_test)
         {
             CullObject object = m_cull_objects[object_id];
-            if (!occlusion_cull_cpu(mvp_matrix, object, window_width(), window_height(), z_buffer_mipmaps))
+            if (!occlusion_cull_cpu(mvp_matrix, object, window_width(), window_height(), z_buffer_mipmaps, mipmaps_widths_heights))
                 objects_to_draw.push_back(object_id);
-            else
-                std::cout << object_id << " culled" << std::endl;
-
-            //            //TODO remove, debug only
-            //            {
-            //                if (i == 0)
-            //                {
-            //                    debug_zbuffer_mipmap_image = mipmap;
-            //                    debug_bboxes_zbuffer_mipmap_image = mipmap;//Bboxes drawn on top of zbuffer
-            //                    debug_bboxes_mipmap_image = Image(mipmap.width(), mipmap.height());
-
-            //                    for (int x = min_x; x <= max_x; x++)
-            //                    {
-            //                        //debug_bboxes_mipmap_image(x, min_y) = Color(1.0f, 0, 0);
-            //                        //debug_bboxes_mipmap_image(x, max_y) = Color(1.0f, 0, 0);
-
-            //                        debug_bboxes_zbuffer_mipmap_image(x, min_y) = Color(1.0f, 0, 0);
-            //                        debug_bboxes_zbuffer_mipmap_image(x, max_y) = Color(1.0f, 0, 0);
-            //                    }
-
-            //                    for (int y = min_y; y <= max_y; y++)
-            //                    {
-            //                        //debug_bboxes_mipmap_image(min_x, y) = Color(1.0f, 0, 0);
-            //                        //debug_bboxes_mipmap_image(max_x, y) = Color(1.0f, 0, 0);
-
-            //                        debug_bboxes_zbuffer_mipmap_image(min_x, y) = Color(1.0f, 0, 0);
-            //                        debug_bboxes_zbuffer_mipmap_image(max_x, y) = Color(1.0f, 0, 0);
-            //                    }
-
-            //                    for (int i = 0; i < mipmaps.size(); i++)
-            //                    {
-            //                        int reduction_factor = std::pow(2, i);
-            //                        float reduction_factor_inverse = 1.0f  / reduction_factor;
-            //                        int min_y = std::floor(screen_space_bbox_min.y * reduction_factor_inverse);
-            //                        int max_y = std::ceil(screen_space_bbox_max.y * reduction_factor_inverse);
-            //                        int min_x = std::floor(screen_space_bbox_min.x * reduction_factor_inverse);
-            //                        int max_x = std::ceil(screen_space_bbox_max.x * reduction_factor_inverse);
-
-            //                        for (int x = min_x; x <= max_x; x++)
-            //                        {
-            //                            debug_mipmaps_with_bboxes[i](x, min_y) = Color(1.0f, 0, 0);
-            //                            debug_mipmaps_with_bboxes[i](x, max_y) = Color(1.0f, 0, 0);
-            //                        }
-
-            //                        for (int y = min_y; y <= max_y; y++)
-            //                        {
-            //                            debug_mipmaps_with_bboxes[i](min_x, y) = Color(1.0f, 0, 0);
-            //                            debug_mipmaps_with_bboxes[i](max_x, y) = Color(1.0f, 0, 0);
-            //                        }
-            //                    }
-            //                }
-
-            //                for (int x = screen_space_bbox_min.x; x <= screen_space_bbox_max.x; x++)
-            //                {
-            //                    debug_bboxes_image(x, screen_space_bbox_min.y) = Color(1.0f, 0, 0);
-            //                    debug_bboxes_image(x, screen_space_bbox_max.y) = Color(1.0f, 0, 0);
-            //                }
-
-            //                for (int y = screen_space_bbox_min.y; y <= screen_space_bbox_max.y; y++)
-            //                {
-            //                    debug_bboxes_image(screen_space_bbox_min.x, y) = Color(1.0f, 0, 0);
-            //                    debug_bboxes_image(screen_space_bbox_max.x, y) = Color(1.0f, 0, 0);
-            //                }
-            //            }
+            /*else
+                std::cout << object_id << " culled";*/
         }
+
+        std::cout << std::endl;
 
         m_objects_drawn_last_frame.insert(m_objects_drawn_last_frame.begin(), objects_to_draw.begin(), objects_to_draw.end());
 
@@ -1397,6 +1322,7 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         //culling compute shaders
         glUseProgram(m_texture_shadow_cook_torrance_shader);
         draw_multi_draw_indirect_from_ids(objects_to_draw);
+        m_mesh_groups_drawn = m_objects_drawn_last_frame.size();
     }
 
     //TODO remove debug
@@ -1406,9 +1332,9 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
             if (key_state('d'))
             {
                 write_image(debug_bboxes_image, "debug_bboxes.png");
-                //write_image(debug_bboxes_mipmap_image, "debug_bboxes_mipmap.png");
-                //write_image(debug_zbuffer_mipmap_image, "debug_zbuffer_mipmap.png");
-                //write_image(debug_bboxes_zbuffer_mipmap_image, "debug_zbuffer_bboxes_mipmap.png");
+                write_image(debug_bboxes_mipmap_image, "debug_bboxes_mipmap.png");
+                write_image(debug_zbuffer_mipmap_image, "debug_zbuffer_mipmap.png");
+                write_image(debug_bboxes_zbuffer_mipmap_image, "debug_zbuffer_bboxes_mipmap.png");
 
                 Image depth_buffer_image(window_width(), window_height());
                 for (int y = 0; y < window_height(); y++)
@@ -1417,18 +1343,15 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
 
                 write_image(depth_buffer_image, "debug_z_buffer.png");
 
-                for (int i = 0; i < z_buffer_mipmaps.size(); i++)
+                /*for (int i = 0; i < z_buffer_mipmaps.size(); i++)
                 {
                     Image temp(window_width(), window_height());
                     for (int y = 0; y < window_height(); y++)
                         for (int x = 0; x < window_width(); x++)
-                            temp(x, y) = Color(z_buffer_mipmaps[i][x + y * window_width()]);
+                            temp(x, y) = Color(z_buffer_mipmaps[i][x + y * std::floor((window_width() / std::pow(2, i)))]);
 
                     write_image(temp, std::string(std::string("debug_z_buffer_mipmap") + std::to_string(i) + std::string(".png")).c_str());
-                }
-
-                //                for (int i = 0; i < z_buffer_mipmaps.size(); i++)
-                //                    write_image(debug_mipmaps_with_bboxes[i], std::string(std::string("debug_z_buffer_bboxes_mipmap") + std::to_string(i) + std::string(".png")).c_str());
+                }*/
             }
     }
 }

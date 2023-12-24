@@ -26,14 +26,41 @@ uint32_t Utils::xorshift32(struct Utils::xorshift32_state* state)
 
 void Utils::precompute_irradiance_map_from_skysphere_and_write(const char* skysphere_path, unsigned int samples, unsigned int downscale_factor, const char* output_irradiance_map_path)
 {
-	auto start = std::chrono::high_resolution_clock::now();
-	Image irradiance_map = Utils::precompute_irradiance_map_from_skysphere(skysphere_path, samples, downscale_factor);
-	auto stop = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::high_resolution_clock::now();
+    Image irradiance_map = Utils::precompute_irradiance_map_from_skysphere(skysphere_path, samples, downscale_factor);
+    auto stop = std::chrono::high_resolution_clock::now();
 
-	std::cout << "Writing the precomputed irradiance map to disk..." << std::endl;
+    std::cout << "Writing the precomputed irradiance map to disk..." << std::endl;
     write_image_hdr(irradiance_map, output_irradiance_map_path);
 
-	std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << "ms --- " << (irradiance_map.width() * irradiance_map.height() * samples) / (float)(std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count()) << "samples/ms" << std::endl;
+    std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << "ms --- " << (irradiance_map.width() * irradiance_map.height() * samples) / (float)(std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count()) << "samples/ms" << std::endl;
+}
+
+void Utils::precompute_irradiance_map_from_skysphere_and_write_gpu(const char* skysphere_path, unsigned int samples, unsigned int downscale_factor, const char* output_irradiance_map_path)
+{
+    auto start = std::chrono::high_resolution_clock::now();
+    GLuint irradiance_map_texture = Utils::precompute_irradiance_map_from_skysphere_gpu(skysphere_path, samples, std::log2(downscale_factor));
+    auto stop = std::chrono::high_resolution_clock::now();
+
+    // Determine the size of the texture
+    int width, height;
+    glBindTexture(GL_TEXTURE_2D, irradiance_map_texture);
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
+
+    Image irradiance_map(width, height);
+
+    // Read pixel data from the texture
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, irradiance_map.data());
+
+    // Unbind the texture
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    std::cout << "Writing the precomputed irradiance map to disk..." << std::endl;
+    write_image_hdr(irradiance_map, output_irradiance_map_path);
+
+    std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << "ms --- " << (irradiance_map.width() * irradiance_map.height() * samples) / (float)(std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count()) << "samples/ms" << std::endl;
+    std::exit(0);
 }
 
 Image Utils::precompute_and_load_associated_irradiance(const char* skysphere_file_path, unsigned int samples, unsigned int downscale_factor)
@@ -48,7 +75,9 @@ Image Utils::precompute_and_load_associated_irradiance(const char* skysphere_fil
 
     //Checking whether the irradiance map already exists or not
     std::ifstream input_irradiance(irradiance_map_name);
-    if (input_irradiance.is_open())
+
+    //TODO remove false
+    if (false)//input_irradiance.is_open())
     {
         std::cout << "An irradiance map has been found!" << std::endl;
         //The irradiance map already exists
@@ -58,7 +87,7 @@ Image Utils::precompute_and_load_associated_irradiance(const char* skysphere_fil
     {
         //No irradiance map was found, precomputing it
 
-        precompute_irradiance_map_from_skysphere_and_write(skysphere_file_path, samples, downscale_factor, irradiance_map_name.c_str());
+        precompute_irradiance_map_from_skysphere_and_write_gpu(skysphere_file_path, samples, downscale_factor, irradiance_map_name.c_str());
         return read_skysphere_image(irradiance_map_name.c_str());
     }
 }
@@ -105,6 +134,7 @@ void branchlessONB(const Vector& n, Vector& b1, Vector& b2)
 	b1 = Vector(1.0f + sign * n.x * n.x * a, sign * b, -sign * n.x);
 	b2 = Vector(b, sign + n.y * n.y * a, -n.y);
 }
+
 
 Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path, unsigned int samples, unsigned int downscale_factor)
 {
@@ -197,6 +227,174 @@ Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path
 		}
 
 	return irradiance_map;
+}
+
+#include "texture.h"
+
+GLuint Utils::precompute_irradiance_map_from_skysphere_gpu(const char* skysphere_path, unsigned int samples, float mipmap_level)
+{
+    Image skysphere_image = read_image_hdr(skysphere_path);
+
+    std::cout << "Skysphere loaded" << std::endl;
+
+    GLuint irradiance_map_precomputation_shader = read_program("data/TPs/shaders/TPCG/irradiance_map_precomputation.glsl");
+    program_print_errors(irradiance_map_precomputation_shader);
+    glUseProgram(irradiance_map_precomputation_shader);
+
+    //Creating the input texture for the skysphere
+    GLuint skysphere_texture;
+    glGenTextures(1, &skysphere_texture);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, skysphere_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, skysphere_image.width(), skysphere_image.height(), 0, GL_RGBA, GL_FLOAT, skysphere_image.data());
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    GLint skysphere_input_uniform_location = glGetUniformLocation(irradiance_map_precomputation_shader, "hdr_skysphere_input");
+    GLint u_sample_count_uniform_location = glGetUniformLocation(irradiance_map_precomputation_shader, "u_sample_count");
+    GLint u_total_sample_count_uniform_location = glGetUniformLocation(irradiance_map_precomputation_shader, "u_total_sample_count");
+    GLint u_mipmap_level_location = glGetUniformLocation(irradiance_map_precomputation_shader, "u_mipmap_level");
+
+    glUniform1i(skysphere_input_uniform_location, 0);
+    glUniform1i(u_sample_count_uniform_location, 64);
+    glUniform1i(u_total_sample_count_uniform_location, samples);
+    glUniform1f(u_mipmap_level_location, mipmap_level);
+    
+
+    //Creating the output irradiance map texture
+    GLuint irradiance_map_texture_input;
+    glGenTextures(1, &irradiance_map_texture_input);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, irradiance_map_texture_input);
+    {
+        Image black_image(skysphere_image.width(), skysphere_image.height(), Color(0.0f, 0.0f, 0.0f));
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, skysphere_image.width(), skysphere_image.height(), 0, GL_RGBA, GL_FLOAT, black_image.data());
+    }
+
+    GLuint irradiance_map_texture_output;
+    glGenTextures(1, &irradiance_map_texture_output);
+    glBindTexture(GL_TEXTURE_2D, irradiance_map_texture_output);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, skysphere_image.width(), skysphere_image.height(), 0, GL_RGBA, GL_FLOAT, NULL);
+
+    glBindImageTexture(1, irradiance_map_texture_input, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+    glBindImageTexture(2, irradiance_map_texture_output, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+
+    GLint threads[3];
+    glGetProgramiv(irradiance_map_precomputation_shader, GL_COMPUTE_WORK_GROUP_SIZE, threads);
+
+    int nb_groups_x = std::ceil(skysphere_image.width() / (float)threads[0]);
+    int nb_groups_y = std::ceil(skysphere_image.height() / (float)threads[1]);
+    glUseProgram(irradiance_map_precomputation_shader);
+
+    //To avoid the compute shader timeout, we're going to do several iterations
+    //of 64 samples
+    int nb_iterations = std::ceil(samples / 64.0f);
+    for (int i = 0; i < nb_iterations; i++)
+    {
+        glDispatchCompute(nb_groups_x, nb_groups_y, 1);
+        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+        glFlush();
+        glFinish();
+
+        //Swapping the input and output texture for the accumulation
+        if (i % 2 == 0)
+        {
+            glBindImageTexture(1, irradiance_map_texture_output, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+            glBindImageTexture(2, irradiance_map_texture_input, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+        }
+        else
+        {
+            glBindImageTexture(1, irradiance_map_texture_input, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+            glBindImageTexture(2, irradiance_map_texture_output, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+        }
+
+        if (i % 16 == 0)
+            std::cout << i / (float)nb_iterations * 100 << "%" << std::endl;
+    }
+
+    glDeleteTextures(1, &skysphere_texture);
+    glDeleteProgram(irradiance_map_precomputation_shader);
+
+    return irradiance_map_texture_input;
+
+    //TODO remove
+//    Image irradiance_map(skysphere_image.width(), skysphere_image.height());
+//
+//    std::cout << "Precomputing the irradiance map..." << std::endl;
+//
+//    //Generating one random number generator for each thread
+//    std::vector<Utils::xorshift32_state> states;
+//    for (int i = 0; i < omp_get_max_threads(); i++)
+//    {
+//        Utils::xorshift32_state state;
+//        state.a = rand();
+//
+//        states.push_back(state);
+//    }
+//
+//    //Each thread is going to increment this variable after one line of the irradiance map has been computed
+//    //Because all thread increment this variable, it is atomic
+//    //This variable is then used to print a completion purcentage on stdout
+//    std::atomic<int> completed_lines(0);
+//
+//#pragma omp parallel for schedule(dynamic)
+//    for (int y = 0; y < irradiance_map.height(); y++)
+//    {
+//        float theta = M_PI * (1.0f - (float)y / irradiance_map.height());
+//        for (int x = 0; x < irradiance_map.width(); x++)
+//        {
+//            float phi = 2.0f * M_PI * (0.5f - (float)x / irradiance_map.width());
+//
+//            //The main direction we're going to randomly sample the skysphere around
+//            Vector normal = normalize(Vector(std::cos(phi) * std::sin(theta),
+//                std::sin(phi) * std::sin(theta),
+//                std::cos(theta)));
+//
+//            //Calculating the vectors of the basis we're going to use to rotate the randomly generated vector
+//            //around our main direction
+//            Vector tangent, bitangent;
+//
+//            branchlessONB(normal, tangent, bitangent);
+//            Transform onb(tangent, bitangent, normal, Vector(0, 0, 0));
+//
+//            Color sum = Color(0, 0, 0);
+//            for (unsigned int i = 0; i < samples; i++)
+//            {
+//                float rand1 = Utils::xorshift32(&states[omp_get_thread_num()]) / (float)std::numeric_limits<unsigned int>::max();
+//                float rand2 = Utils::xorshift32(&states[omp_get_thread_num()]) / (float)std::numeric_limits<unsigned int>::max();
+//
+//                float phi_rand = 2.0f * M_PI * rand1;
+//                float theta_rand = std::asin(std::sqrt(rand2));
+//
+//                Vector random_direction_in_canonical_hemisphere = normalize(Vector(std::cos(phi_rand) * std::sin(theta_rand),
+//                    std::sin(phi_rand) * std::sin(theta_rand),
+//                    std::cos(theta_rand)));
+//
+//                Vector random_direction_in_hemisphere_around_normal = onb(random_direction_in_canonical_hemisphere);
+//                Vector random_direction_rotated = random_direction_in_hemisphere_around_normal;
+//
+//                vec2 uv = vec2(0.5 - std::atan2(random_direction_rotated.y, random_direction_rotated.x) / (2.0 * M_PI),
+//                    1.0 - std::acos(random_direction_rotated.z) / M_PI);
+//
+//                Color sample_color = skysphere_image(uv.x * skysphere_image.width(), uv.y * skysphere_image.height());
+//                sum = sum + sample_color;
+//            }
+//
+//            irradiance_map(x, y) = sum / (float)samples;
+//        }
+//
+//        completed_lines++;
+//
+//        if (omp_get_thread_num() == 0)
+//        {
+//            if (completed_lines % 20)
+//            {
+//                printf("[%d*%d, %dx] - %.3f%% completed", skysphere_image.width(), skysphere_image.height(), samples, completed_lines / (float)skysphere_image.height() * 100);
+//                std::cout << std::endl;
+//            }
+//        }
+//    }
+//
+//    //return irradiance_map;
 }
 
 std::vector<ImageData> Utils::read_cubemap_data(const char* folder_name, const char* face_extension)
@@ -315,10 +513,11 @@ void Utils::downscale_image(const Image& input_image, Image& downscaled_output, 
     }
 }
 
-std::vector<std::vector<float>> Utils::compute_mipmaps(const std::vector<float>& input_image, int width, int height)
+std::vector<std::vector<float>> Utils::compute_mipmaps(const std::vector<float>& input_image, int width, int height, std::vector<std::pair<int, int>>& mipmaps_widths_heights)
 {
     std::vector<std::vector<float>> mipmaps;
     mipmaps.push_back(input_image);
+    mipmaps_widths_heights.push_back(std::make_pair(width, height));
 
     int level = 0;
     while (width > 4 && height > 4)//Stop at a 4*4 mipmap
@@ -327,6 +526,7 @@ std::vector<std::vector<float>> Utils::compute_mipmaps(const std::vector<float>&
         int new_height = std::max(1, height / 2);
 
         mipmaps.push_back(std::vector<float>(new_width * new_height));
+        mipmaps_widths_heights.push_back(std::make_pair(new_width, new_height));
 
         const std::vector<float>& previous_level = mipmaps[level];
         std::vector<float>& mipmap = mipmaps[level + 1];
@@ -342,13 +542,13 @@ std::vector<std::vector<float>> Utils::compute_mipmaps(const std::vector<float>&
     return mipmaps;
 }
 
-std::vector<float> Utils::get_z_buffer(int window_width, int window_height)
+std::vector<float> Utils::get_z_buffer(int window_width, int window_height, GLuint framebuffer)
 {
     int previous_framebuffer;
     glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previous_framebuffer);
 
     //We want to read the depth buffer from the default framebuffer
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    //glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 
     std::vector<float> tmp(window_width * window_height);
 
