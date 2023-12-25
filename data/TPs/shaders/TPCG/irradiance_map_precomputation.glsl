@@ -3,23 +3,14 @@
 #ifdef COMPUTE_SHADER
 
 uniform float u_mipmap_level;
+uniform int u_iteration;
 uniform int u_sample_count;
 uniform int u_total_sample_count;//Used to accumulate several passes of the compute shader
 uniform sampler2D hdr_skysphere_input;
 
-layout (binding = 1, rgba32f) uniform readonly image2D irradiance_map_input;
-layout (binding = 2, rgba32f) uniform writeonly image2D irradiance_map_output;
+layout (binding = 1, rgba32f) uniform coherent image2D irradiance_map_output;
 
 #define M_PI 3.1415926535897932384626433832795
-
-/*
-#define PHI 1.61803398874989484820459 // Golden Ratio   
-
-float gold_noise(in vec2 xy, in float seed)
-{
-    return fract(tan(distance(xy*PHI, xy)*seed)*xy.x);
-}
-*/
 
 void branchlessONB(in vec3 n, out vec3 tangent, out vec3 bitangent)
 {
@@ -41,19 +32,7 @@ struct random_state
     uint seed;
 };
 
-/*
-float hash(out random_state state)
-{
-    const uint UINT_MAX = 4294967295u; // Maximum value of a 32-bit unsigned integer
-
-    state.seed ^= state.seed << 13;
-    state.seed ^= state.seed >> 17;
-    state.seed ^= state.seed << 5;
-
-    return state.seed / float(UINT_MAX);
-}*/
-
-//bias: 0.17353355999581582 ( very probably the best of its kind )
+//bias: 0.1735335599958158
 float hash(out random_state state)
 {
     const uint UINT_MAX = 4294967295u; // Maximum value of a 32-bit unsigned integer
@@ -67,15 +46,44 @@ float hash(out random_state state)
     return state.seed / float(UINT_MAX);
 }
 
+/*
+int   seed = 1;
+int   rand(void) { seed = seed*0x343fd+0x269ec3; return (seed>>16)&32767; }
+float frand(void) { return float(rand())/32767.0; }
+void  srand( ivec2 p, int frame )
+{
+    int n = frame;
+    n = (n<<13)^n; n=n*(n*n*15731+789221)+1376312589; // by Hugo Elias
+    n += p.y;
+    n = (n<<13)^n; n=n*(n*n*15731+789221)+1376312589;
+    n += p.x;
+    n = (n<<13)^n; n=n*(n*n*15731+789221)+1376312589;
+    seed = n;
+}
+*/
+
+float pcg_hash(out random_state state_struct)
+{
+    const uint UINT_MAX = 4294967295u; // Maximum value of a 32-bit unsigned integer
+
+    uint state = state_struct.seed * 747796405u + 2891336453u;
+    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+
+    uint new_state = ((word >> 22u) ^ word);
+    state_struct.seed = new_state;
+    return new_state / float(UINT_MAX);
+}
+
+
 layout(local_size_x = 16, local_size_y = 16) in;
 void main()
 {
-	ivec2 thread_id = ivec2(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y);
-	ivec2 image_size = imageSize(irradiance_map_output);
-	if (thread_id.x > image_size.x || thread_id.y > image_size.y)
-		return;
+    ivec2 thread_id = ivec2(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y);
+    ivec2 image_size = imageSize(irradiance_map_output);
+    if (thread_id.x > image_size.x || thread_id.y > image_size.y)
+            return;
 
-	vec2 uv = vec2(thread_id) / image_size;
+    vec2 uv = vec2(thread_id) / image_size;
 
     float theta = M_PI * (1.0f - uv.y);
     float phi = 2.0f * M_PI * (0.5f - uv.x);
@@ -94,13 +102,13 @@ void main()
 
     //Init random
     random_state random;
-    random.seed = thread_id.x + thread_id.y * image_size.x;
+    random.seed = 31;//u_iteration + thread_id.x;// + thread_id.x + thread_id.y * image_size.x) ^ 31;
 
     vec3 sum = vec3(0.0f, 0.0f, 0.0f);
     for (int i = 0; i < u_sample_count; i++)
     {
-        float rand1 = hash(random);
-        float rand2 = hash(random);
+        float rand1 = pcg_hash(random);
+        float rand2 = pcg_hash(random);
 
         float phi_rand = 2.0f * M_PI * rand1;
         float theta_rand = asin(sqrt(rand2));
@@ -117,8 +125,8 @@ void main()
         sum = sum + sample_color;
     }
 
-    vec3 current_color = imageLoad(irradiance_map_input, thread_id).rgb;
-    imageStore(irradiance_map_output, thread_id, vec4(sum / vec3(u_sample_count) + current_color, 1.0f));
+    vec3 current_color = imageLoad(irradiance_map_output, thread_id).rgb;
+    imageStore(irradiance_map_output, thread_id, vec4(sum / vec3(u_total_sample_count) + current_color, 1.0f));
 }
 
 #endif

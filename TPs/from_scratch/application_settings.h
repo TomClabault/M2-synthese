@@ -25,10 +25,11 @@ struct ApplicationSettings
 
 	bool currently_recomputing_irradiance = false;
     int irradiance_map_precomputation_samples = 16384;
-    int irradiance_map_precomputation_downscale_factor = 32;
+    int irradiance_map_precomputation_downscale_factor = 2;
     //std::string irradiance_map_file_path = "data/TPs/AllSkyFree_Sky_EpicGloriousPink_Equirect.jpg"; //Non HDR
     //std::string irradiance_map_file_path = "data/TPs/DaySkyHDRI015A_4K-HDR_blurred.hdr";
-    std::string irradiance_map_file_path = "data/TPs/blaubeuren_night_8k.hdr";
+    std::string irradiance_map_file_path = "data/TPs/blaubeuren_night_4k.hdr";
+    //std::string irradiance_map_file_path = "data/TPs/blaubeuren_night_8k.hdr";
     //std::string irradiance_map_file_path = "data/TPs/industrial_sunset_puresky_4k.hdr";
     //std::string irradiance_map_file_path = "data/TPs/evening_road_01_puresky_2k.hdr";
 

@@ -250,33 +250,31 @@ GLuint Utils::precompute_irradiance_map_from_skysphere_gpu(const char* skysphere
     glGenerateMipmap(GL_TEXTURE_2D);
 
     GLint skysphere_input_uniform_location = glGetUniformLocation(irradiance_map_precomputation_shader, "hdr_skysphere_input");
+    GLint u_iteration_uniform_location = glGetUniformLocation(irradiance_map_precomputation_shader, "u_iteration");
     GLint u_sample_count_uniform_location = glGetUniformLocation(irradiance_map_precomputation_shader, "u_sample_count");
     GLint u_total_sample_count_uniform_location = glGetUniformLocation(irradiance_map_precomputation_shader, "u_total_sample_count");
     GLint u_mipmap_level_location = glGetUniformLocation(irradiance_map_precomputation_shader, "u_mipmap_level");
 
+    int nb_iterations = std::ceil(samples / 64.0f);
     glUniform1i(skysphere_input_uniform_location, 0);
     glUniform1i(u_sample_count_uniform_location, 64);
-    glUniform1i(u_total_sample_count_uniform_location, samples);
+    glUniform1i(u_total_sample_count_uniform_location, 64 * nb_iterations);
     glUniform1f(u_mipmap_level_location, mipmap_level);
     
 
-    //Creating the output irradiance map texture
-    GLuint irradiance_map_texture_input;
-    glGenTextures(1, &irradiance_map_texture_input);
+    //Creating the input accumulation irradiance map texture
+    GLuint irradiance_map_texture_output;
+    glGenTextures(1, &irradiance_map_texture_output);
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, irradiance_map_texture_input);
+    glBindTexture(GL_TEXTURE_2D, irradiance_map_texture_output);
     {
         Image black_image(skysphere_image.width(), skysphere_image.height(), Color(0.0f, 0.0f, 0.0f));
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, skysphere_image.width(), skysphere_image.height(), 0, GL_RGBA, GL_FLOAT, black_image.data());
     }
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+    glBindImageTexture(1, irradiance_map_texture_output, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
 
-    GLuint irradiance_map_texture_output;
-    glGenTextures(1, &irradiance_map_texture_output);
-    glBindTexture(GL_TEXTURE_2D, irradiance_map_texture_output);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, skysphere_image.width(), skysphere_image.height(), 0, GL_RGBA, GL_FLOAT, NULL);
 
-    glBindImageTexture(1, irradiance_map_texture_input, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
-    glBindImageTexture(2, irradiance_map_texture_output, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
 
     GLint threads[3];
     glGetProgramiv(irradiance_map_precomputation_shader, GL_COMPUTE_WORK_GROUP_SIZE, threads);
@@ -287,25 +285,11 @@ GLuint Utils::precompute_irradiance_map_from_skysphere_gpu(const char* skysphere
 
     //To avoid the compute shader timeout, we're going to do several iterations
     //of 64 samples
-    int nb_iterations = std::ceil(samples / 64.0f);
     for (int i = 0; i < nb_iterations; i++)
     {
+        glUniform1i(u_iteration_uniform_location, i);
         glDispatchCompute(nb_groups_x, nb_groups_y, 1);
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-        glFlush();
-        glFinish();
-
-        //Swapping the input and output texture for the accumulation
-        if (i % 2 == 0)
-        {
-            glBindImageTexture(1, irradiance_map_texture_output, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
-            glBindImageTexture(2, irradiance_map_texture_input, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
-        }
-        else
-        {
-            glBindImageTexture(1, irradiance_map_texture_input, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
-            glBindImageTexture(2, irradiance_map_texture_output, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
-        }
 
         if (i % 16 == 0)
             std::cout << i / (float)nb_iterations * 100 << "%" << std::endl;
@@ -314,7 +298,9 @@ GLuint Utils::precompute_irradiance_map_from_skysphere_gpu(const char* skysphere
     glDeleteTextures(1, &skysphere_texture);
     glDeleteProgram(irradiance_map_precomputation_shader);
 
-    return irradiance_map_texture_input;
+    glFlush();
+    glFinish();
+    return irradiance_map_texture_output;
 
     //TODO remove
 //    Image irradiance_map(skysphere_image.width(), skysphere_image.height());
