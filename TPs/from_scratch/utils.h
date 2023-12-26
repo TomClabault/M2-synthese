@@ -27,6 +27,7 @@ public:
 	 */
 	static GLuint precompute_irradiance_map_from_skysphere_gpu(const char* skysphere_path, unsigned int samples, float mipmap_level = 0.0f);
     static Image precompute_and_load_associated_irradiance(const char* skysphere_file_path, unsigned int samples = 20, unsigned int downscale_factor = 1);
+    static Image precompute_and_load_associated_irradiance_gpu(const char* skysphere_file_path, unsigned int samples, unsigned int downscale_factor);
 
     static std::vector<ImageData> read_cubemap_data(const char* folder_name, const char* face_extension);
 	static GLuint create_cubemap_texture_from_data(std::vector<ImageData>& faces_data);

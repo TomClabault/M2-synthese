@@ -76,8 +76,35 @@ Image Utils::precompute_and_load_associated_irradiance(const char* skysphere_fil
     //Checking whether the irradiance map already exists or not
     std::ifstream input_irradiance(irradiance_map_name);
 
-    //TODO remove false
-    if (false)//input_irradiance.is_open())
+    if (input_irradiance.is_open())
+    {
+        std::cout << "An irradiance map has been found!" << std::endl;
+        //The irradiance map already exists
+        return read_skysphere_image(irradiance_map_name.c_str());
+    }
+    else
+    {
+        //No irradiance map was found, precomputing it
+
+        precompute_irradiance_map_from_skysphere_and_write(skysphere_file_path, samples, downscale_factor, irradiance_map_name.c_str());
+        return read_skysphere_image(irradiance_map_name.c_str());
+    }
+}
+
+Image Utils::precompute_and_load_associated_irradiance_gpu(const char* skysphere_file_path, unsigned int samples, unsigned int downscale_factor)
+{
+    std::string skysphere_file_string = std::string(skysphere_file_path);
+    //Only the name of the jpg (or png, bmp, ...) file without the path in front of it
+    std::string skysphere_image_file_name = skysphere_file_string.substr(skysphere_file_string.rfind('/') + 1);
+
+    //Creating the complete (path + image file name) file name of the irradiance map
+    std::filesystem::create_directory(TP::IRRADIANCE_MAPS_CACHE_FOLDER);
+    std::string irradiance_map_name = skysphere_file_string.substr(0, skysphere_file_string.rfind('/')) + "/irradiance_maps_cache/" + skysphere_image_file_name + "_Irradiance_" + std::to_string(samples) + "x_Down" + std::to_string(downscale_factor) + "x.hdr";
+
+    //Checking whether the irradiance map already exists or not
+    std::ifstream input_irradiance(irradiance_map_name);
+
+    if (input_irradiance.is_open())
     {
         std::cout << "An irradiance map has been found!" << std::endl;
         //The irradiance map already exists
@@ -260,7 +287,6 @@ GLuint Utils::precompute_irradiance_map_from_skysphere_gpu(const char* skysphere
     glUniform1i(u_sample_count_uniform_location, 64);
     glUniform1i(u_total_sample_count_uniform_location, 64 * nb_iterations);
     glUniform1f(u_mipmap_level_location, mipmap_level);
-    
 
     //Creating the input accumulation irradiance map texture
     GLuint irradiance_map_texture_output;
@@ -290,6 +316,8 @@ GLuint Utils::precompute_irradiance_map_from_skysphere_gpu(const char* skysphere
         glUniform1i(u_iteration_uniform_location, i);
         glDispatchCompute(nb_groups_x, nb_groups_y, 1);
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+        glFlush();
+        glFinish();
 
         if (i % 16 == 0)
             std::cout << i / (float)nb_iterations * 100 << "%" << std::endl;
@@ -298,89 +326,7 @@ GLuint Utils::precompute_irradiance_map_from_skysphere_gpu(const char* skysphere
     glDeleteTextures(1, &skysphere_texture);
     glDeleteProgram(irradiance_map_precomputation_shader);
 
-    glFlush();
-    glFinish();
     return irradiance_map_texture_output;
-
-    //TODO remove
-//    Image irradiance_map(skysphere_image.width(), skysphere_image.height());
-//
-//    std::cout << "Precomputing the irradiance map..." << std::endl;
-//
-//    //Generating one random number generator for each thread
-//    std::vector<Utils::xorshift32_state> states;
-//    for (int i = 0; i < omp_get_max_threads(); i++)
-//    {
-//        Utils::xorshift32_state state;
-//        state.a = rand();
-//
-//        states.push_back(state);
-//    }
-//
-//    //Each thread is going to increment this variable after one line of the irradiance map has been computed
-//    //Because all thread increment this variable, it is atomic
-//    //This variable is then used to print a completion purcentage on stdout
-//    std::atomic<int> completed_lines(0);
-//
-//#pragma omp parallel for schedule(dynamic)
-//    for (int y = 0; y < irradiance_map.height(); y++)
-//    {
-//        float theta = M_PI * (1.0f - (float)y / irradiance_map.height());
-//        for (int x = 0; x < irradiance_map.width(); x++)
-//        {
-//            float phi = 2.0f * M_PI * (0.5f - (float)x / irradiance_map.width());
-//
-//            //The main direction we're going to randomly sample the skysphere around
-//            Vector normal = normalize(Vector(std::cos(phi) * std::sin(theta),
-//                std::sin(phi) * std::sin(theta),
-//                std::cos(theta)));
-//
-//            //Calculating the vectors of the basis we're going to use to rotate the randomly generated vector
-//            //around our main direction
-//            Vector tangent, bitangent;
-//
-//            branchlessONB(normal, tangent, bitangent);
-//            Transform onb(tangent, bitangent, normal, Vector(0, 0, 0));
-//
-//            Color sum = Color(0, 0, 0);
-//            for (unsigned int i = 0; i < samples; i++)
-//            {
-//                float rand1 = Utils::xorshift32(&states[omp_get_thread_num()]) / (float)std::numeric_limits<unsigned int>::max();
-//                float rand2 = Utils::xorshift32(&states[omp_get_thread_num()]) / (float)std::numeric_limits<unsigned int>::max();
-//
-//                float phi_rand = 2.0f * M_PI * rand1;
-//                float theta_rand = std::asin(std::sqrt(rand2));
-//
-//                Vector random_direction_in_canonical_hemisphere = normalize(Vector(std::cos(phi_rand) * std::sin(theta_rand),
-//                    std::sin(phi_rand) * std::sin(theta_rand),
-//                    std::cos(theta_rand)));
-//
-//                Vector random_direction_in_hemisphere_around_normal = onb(random_direction_in_canonical_hemisphere);
-//                Vector random_direction_rotated = random_direction_in_hemisphere_around_normal;
-//
-//                vec2 uv = vec2(0.5 - std::atan2(random_direction_rotated.y, random_direction_rotated.x) / (2.0 * M_PI),
-//                    1.0 - std::acos(random_direction_rotated.z) / M_PI);
-//
-//                Color sample_color = skysphere_image(uv.x * skysphere_image.width(), uv.y * skysphere_image.height());
-//                sum = sum + sample_color;
-//            }
-//
-//            irradiance_map(x, y) = sum / (float)samples;
-//        }
-//
-//        completed_lines++;
-//
-//        if (omp_get_thread_num() == 0)
-//        {
-//            if (completed_lines % 20)
-//            {
-//                printf("[%d*%d, %dx] - %.3f%% completed", skysphere_image.width(), skysphere_image.height(), samples, completed_lines / (float)skysphere_image.height() * 100);
-//                std::cout << std::endl;
-//            }
-//        }
-//    }
-//
-//    //return irradiance_map;
 }
 
 std::vector<ImageData> Utils::read_cubemap_data(const char* folder_name, const char* face_extension)
