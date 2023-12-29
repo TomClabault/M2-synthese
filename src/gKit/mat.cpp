@@ -6,6 +6,7 @@
 
 #include "mat.h"
 
+#define M_PI 3.14159265358979323846
 
 float radians( const float deg )
 {

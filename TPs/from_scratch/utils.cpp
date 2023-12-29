@@ -104,7 +104,7 @@ Image Utils::precompute_and_load_associated_irradiance_gpu(const char* skysphere
     //Checking whether the irradiance map already exists or not
     std::ifstream input_irradiance(irradiance_map_name);
 
-    if (input_irradiance.is_open())
+    if (false)//input_irradiance.is_open())
     {
         std::cout << "An irradiance map has been found!" << std::endl;
         //The irradiance map already exists
@@ -316,11 +316,6 @@ GLuint Utils::precompute_irradiance_map_from_skysphere_gpu(const char* skysphere
         glUniform1i(u_iteration_uniform_location, i);
         glDispatchCompute(nb_groups_x, nb_groups_y, 1);
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-        glFlush();
-        glFinish();
-
-        if (i % 16 == 0)
-            std::cout << i / (float)nb_iterations * 100 << "%" << std::endl;
     }
 
     glDeleteTextures(1, &skysphere_texture);
