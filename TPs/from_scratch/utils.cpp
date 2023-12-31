@@ -104,7 +104,7 @@ Image Utils::precompute_and_load_associated_irradiance_gpu(const char* skysphere
     //Checking whether the irradiance map already exists or not
     std::ifstream input_irradiance(irradiance_map_name);
 
-    if (false)//input_irradiance.is_open())
+    if (input_irradiance.is_open())
     {
         std::cout << "An irradiance map has been found!" << std::endl;
         //The irradiance map already exists
@@ -260,6 +260,8 @@ Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path
 
 GLuint Utils::precompute_irradiance_map_from_skysphere_gpu(const char* skysphere_path, unsigned int samples, float mipmap_level)
 {
+    constexpr int SAMPLES_PER_ITERATION = 64;
+
     Image skysphere_image = read_image_hdr(skysphere_path);
 
     std::cout << "Skysphere loaded" << std::endl;
@@ -282,10 +284,10 @@ GLuint Utils::precompute_irradiance_map_from_skysphere_gpu(const char* skysphere
     GLint u_total_sample_count_uniform_location = glGetUniformLocation(irradiance_map_precomputation_shader, "u_total_sample_count");
     GLint u_mipmap_level_location = glGetUniformLocation(irradiance_map_precomputation_shader, "u_mipmap_level");
 
-    int nb_iterations = std::ceil(samples / 64.0f);
+    int nb_iterations = std::ceil(samples / (float)SAMPLES_PER_ITERATION);
     glUniform1i(skysphere_input_uniform_location, 0);
-    glUniform1i(u_sample_count_uniform_location, 64);
-    glUniform1i(u_total_sample_count_uniform_location, 64 * nb_iterations);
+    glUniform1i(u_sample_count_uniform_location, SAMPLES_PER_ITERATION);
+    glUniform1i(u_total_sample_count_uniform_location, SAMPLES_PER_ITERATION * nb_iterations);
     glUniform1f(u_mipmap_level_location, mipmap_level);
 
     //Creating the input accumulation irradiance map texture
@@ -316,6 +318,10 @@ GLuint Utils::precompute_irradiance_map_from_skysphere_gpu(const char* skysphere
         glUniform1i(u_iteration_uniform_location, i);
         glDispatchCompute(nb_groups_x, nb_groups_y, 1);
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+        glFinish();
+        if (i % 16 == 0)
+            std::cout << i << " --- " << (float)i / nb_iterations * 100.0f << "%" << std::endl;
     }
 
     glDeleteTextures(1, &skysphere_texture);
@@ -475,7 +481,7 @@ std::vector<float> Utils::get_z_buffer(int window_width, int window_height, GLui
     glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previous_framebuffer);
 
     //We want to read the depth buffer from the default framebuffer
-    //glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 
     std::vector<float> tmp(window_width * window_height);
 

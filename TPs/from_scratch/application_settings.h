@@ -24,7 +24,7 @@ struct ApplicationSettings
     float hdr_exposure = 0.9f;
 
 	bool currently_recomputing_irradiance = false;
-    int irradiance_map_precomputation_samples = 16384;
+    int irradiance_map_precomputation_samples = 16384 * 1024;
     int irradiance_map_precomputation_downscale_factor = 32;
     //std::string irradiance_map_file_path = "data/TPs/AllSkyFree_Sky_EpicGloriousPink_Equirect.jpg"; //Non HDR
     //std::string irradiance_map_file_path = "data/TPs/DaySkyHDRI015A_4K-HDR_blurred.hdr";
