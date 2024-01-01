@@ -104,7 +104,7 @@ Image Utils::precompute_and_load_associated_irradiance_gpu(const char* skysphere
     //Checking whether the irradiance map already exists or not
     std::ifstream input_irradiance(irradiance_map_name);
 
-    if (input_irradiance.is_open())
+    if (false)//input_irradiance.is_open())
     {
         std::cout << "An irradiance map has been found!" << std::endl;
         //The irradiance map already exists
