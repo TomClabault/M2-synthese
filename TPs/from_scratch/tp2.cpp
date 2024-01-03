@@ -447,9 +447,9 @@ bool TP2::occlusion_cull_cpu(const Transform& mvp_matrix, CullObject& object, in
     const std::vector<float>& mipmap = z_buffer_mipmaps[mipmap_level];
 
     bool one_pixel_visible = false;
-    int min_y = std::floor(screen_space_bbox_min.y * reduction_factor_inverse);
+    int min_y = std::min((int)std::floor(screen_space_bbox_min.y * reduction_factor_inverse), mipmaps_widths_heights[mipmap_level].second - 1);
     int max_y = std::min((int)std::ceil(screen_space_bbox_max.y * reduction_factor_inverse), mipmaps_widths_heights[mipmap_level].second - 1);
-    int min_x = std::floor(screen_space_bbox_min.x * reduction_factor_inverse);
+    int min_x = std::min((int)std::floor(screen_space_bbox_min.x * reduction_factor_inverse), mipmaps_widths_heights[mipmap_level].first - 1);
     int max_x = std::min((int)std::ceil(screen_space_bbox_max.x * reduction_factor_inverse), mipmaps_widths_heights[mipmap_level].first - 1);
 
     for (int y = min_y; y <= max_y; y++)
@@ -603,8 +603,8 @@ int TP2::init()
 
     //Reading the mesh displayed
     //TIME(m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj"), "Load OBJ Time: ");
-    //TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
-    TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
+    TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
+    //TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/TPs/cube_occlusion_culling.obj"), "Load OBJ Time: ");
     if (m_mesh.positions().size() == 0)
@@ -805,7 +805,7 @@ int TP2::init()
 
     Point p_min, p_max;
     m_mesh.bounds(p_min, p_max);
-    //m_camera.lookat(p_min, p_max);
+    m_camera.lookat(p_min, p_max);
     m_camera.read_orbiter("app_orbiter.txt");
 
     if (create_shadow_map() == -1)
@@ -831,15 +831,15 @@ int TP2::create_hdr_frame()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
-    GLuint render_buffer;
-    glGenRenderbuffers(1, &render_buffer);
-    glBindRenderbuffer(GL_RENDERBUFFER, render_buffer);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, window_width(), window_height());
-    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    glGenTextures(1, &m_hdr_depth_buffer_texture);
+    glBindTexture(GL_TEXTURE_2D, m_hdr_depth_buffer_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, window_width(), window_height(), 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     glGenFramebuffers(1, &m_hdr_framebuffer);
     glBindFramebuffer(GL_FRAMEBUFFER, m_hdr_framebuffer);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, render_buffer);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, m_hdr_depth_buffer_texture, 0);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_hdr_shader_output_texture, 0);
 
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
@@ -1262,13 +1262,6 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         std::vector<std::pair<int, int>> mipmaps_widths_heights;
         //We're drawing in the HDR framebuffer so the z-buffer is there
         m_debug_z_buffer = Utils::get_z_buffer(window_width(), window_height(), m_hdr_framebuffer);
-        Image depth_buffer_image(window_width(), window_height());
-        for (int y = 0; y < window_height(); y++)
-            for (int x = 0; x < window_width(); x++)
-                depth_buffer_image(x, y) = Color(m_debug_z_buffer[x + y * window_width()]);
-
-        write_image(depth_buffer_image, "debug_z_buffer.png");
-
         z_buffer_mipmaps = Utils::compute_mipmaps(m_debug_z_buffer, window_width(), window_height(), mipmaps_widths_heights);
 
         for (int object_id : objects_to_occlusion_cull_test)
@@ -1280,8 +1273,6 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                 std::cout << object_id << " culled";*/
         }
 
-        std::cout << std::endl;
-
         m_objects_drawn_last_frame.insert(m_objects_drawn_last_frame.begin(), objects_to_draw.begin(), objects_to_draw.end());
 
         //        //TODO remove debug
@@ -1292,7 +1283,6 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         //        m_nb_objects_drawn_last_frame = m_mesh_groups_drawn;
     }
 
-    debug_counterr++;
 
     //TODO remove debug only
     //    int temp;
@@ -1314,6 +1304,8 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
             std::cout << object_to_draw << ", ";
         std::cout << std::endl;
     }
+
+    debug_counterr++;
 
     if (objects_to_draw.size() > 0)
     {
@@ -1337,13 +1329,22 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                 write_image(debug_bboxes_zbuffer_mipmap_image, "debug_zbuffer_bboxes_mipmap.png");
 
                 Image depth_buffer_image(window_width(), window_height());
+                bool written = false;
                 for (int y = 0; y < window_height(); y++)
                     for (int x = 0; x < window_width(); x++)
+                    {
+                        float color = m_debug_z_buffer[x + y * window_width()];
+                        if (color != 1.0f && !written)
+                        {
+                            std::cout << color << std::endl;
+                            written = true;
+                        }
                         depth_buffer_image(x, y) = Color(m_debug_z_buffer[x + y * window_width()]);
+                    }
 
                 write_image(depth_buffer_image, "debug_z_buffer.png");
 
-                /*for (int i = 0; i < z_buffer_mipmaps.size(); i++)
+                for (int i = 0; i < z_buffer_mipmaps.size(); i++)
                 {
                     Image temp(window_width(), window_height());
                     for (int y = 0; y < window_height(); y++)
@@ -1351,7 +1352,7 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                             temp(x, y) = Color(z_buffer_mipmaps[i][x + y * std::floor((window_width() / std::pow(2, i)))]);
 
                     write_image(temp, std::string(std::string("debug_z_buffer_mipmap") + std::to_string(i) + std::string(".png")).c_str());
-                }*/
+                }
             }
     }
 }

@@ -3,9 +3,19 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LocalDebuggerEnvironment>PATH=%PATH%;$(ProjectDir)/../SYCL-ray-tracing/oidn/bin</LocalDebuggerEnvironment>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+    <LocalDebuggerCommandArguments>--w=1024 --h=1024 --samples=128 --bounces=25 --sky=../SYCL-ray-tracing/data/Skyspheres/rustig_koppie_puresky_8k.hdr ../SYCL-ray-tracing/data/OBJs/pbrt_dragon.obj</LocalDebuggerCommandArguments>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LocalDebuggerEnvironment>PATH=%PATH%;$(ProjectDir)/../SYCL-ray-tracing/oidn/bin</LocalDebuggerEnvironment>
+    <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+    <LocalDebuggerCommandArguments>--w=1024 --h=1024 --samples=1024 --bounces=25 --sky=../SYCL-ray-tracing/data/Skyspheres/rustig_koppie_puresky_8k.hdr ../SYCL-ray-tracing/data/OBJs/pbrt_dragon.obj</LocalDebuggerCommandArguments>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <LocalDebuggerCommandArguments>--w=1024 --h=1024 --samples=32 --bounces=25 --sky=../SYCL-ray-tracing/data/Skyspheres/rustig_koppie_puresky_8k.hdr ../SYCL-ray-tracing/data/OBJs/pbrt_dragon.obj</LocalDebuggerCommandArguments>
+    <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <LocalDebuggerCommandArguments>--w=1024 --h=1024 --samples=32 --bounces=25 --sky=../SYCL-ray-tracing/data/Skyspheres/rustig_koppie_puresky_8k.hdr ../SYCL-ray-tracing/data/OBJs/pbrt_dragon.obj</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
   </PropertyGroup>
 </Project>

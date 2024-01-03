@@ -104,7 +104,7 @@ Image Utils::precompute_and_load_associated_irradiance_gpu(const char* skysphere
     //Checking whether the irradiance map already exists or not
     std::ifstream input_irradiance(irradiance_map_name);
 
-    if (false)//input_irradiance.is_open())
+    if (input_irradiance.is_open())
     {
         std::cout << "An irradiance map has been found!" << std::endl;
         //The irradiance map already exists
@@ -485,7 +485,7 @@ std::vector<float> Utils::get_z_buffer(int window_width, int window_height, GLui
 
     std::vector<float> tmp(window_width * window_height);
 
-    glReadBuffer(GL_BACK);
+    //glReadBuffer(GL_BACK);
     glReadPixels(0, 0, window_width, window_height, GL_DEPTH_COMPONENT, GL_FLOAT, tmp.data());
 
     glBindFramebuffer(GL_FRAMEBUFFER, previous_framebuffer);

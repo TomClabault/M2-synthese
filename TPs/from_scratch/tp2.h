@@ -151,6 +151,7 @@ protected:
 	GLuint m_irradiance_map;
 
     GLuint m_hdr_shader_output_texture;
+    GLuint m_hdr_depth_buffer_texture;
     GLuint m_hdr_framebuffer;
 
     GLuint m_fullscreen_quad_texture_shader;
