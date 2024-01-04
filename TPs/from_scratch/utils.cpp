@@ -511,7 +511,7 @@ std::vector<GLuint> Utils::compute_mipmaps_gpu(GLuint input_image, int width, in
             GLuint previous_level_texture = mipmaps_texture_indices[level];
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, previous_level_texture);
-            glBindImageTexture(1, previous_level_texture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R32F);
+            glBindImageTexture(0, previous_level_texture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R32F);
         }
 
         //Creating the texture for the mipmap that we're computing and binding to image

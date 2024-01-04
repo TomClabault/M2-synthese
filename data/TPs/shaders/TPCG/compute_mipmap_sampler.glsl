@@ -20,10 +20,11 @@ void main()
     vec2 dv = vec2(0, dudv.y);
     vec2 uv = vec2(thread_id) / input_mipmap_size;
 
-    float first_texel_depth = texture(input_mipmap, vec2(0.0f, 1.0f) - uv * 2).r;
-    float second_texel_depth = texture(input_mipmap, vec2(0.0f, 1.0f) - uv * 2 + du).r;
-    float third_texel_depth = texture(input_mipmap, vec2(0.0f, 1.0f) - uv * 2 + dv).r;
-    float fourth_texel_depth = texture(input_mipmap, vec2(0.0f, 1.0f) - uv * 2 + dudv).r;
+    vec2 centering = (du + dv) / 2.0f;
+    float first_texel_depth = texture(input_mipmap, uv * 2 + centering).r;
+    float second_texel_depth = texture(input_mipmap, uv * 2 + du + centering).r;
+    float third_texel_depth = texture(input_mipmap, uv * 2 + dv + centering).r;
+    float fourth_texel_depth = texture(input_mipmap, uv * 2 + dudv + centering).r;
     float computed_mipmap_depth = max(max(max(first_texel_depth, second_texel_depth), third_texel_depth), fourth_texel_depth);
 
     imageStore(output_mipmap, thread_id, vec4(vec3(computed_mipmap_depth), 1.0f));
