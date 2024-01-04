@@ -475,14 +475,11 @@ std::vector<std::vector<float>> Utils::compute_mipmaps(const std::vector<float>&
     return mipmaps;
 }
 
-void Utils::compute_mipmaps_gpu(GLuint input_image, int width, int height, const std::vector<GLuint>& mipmaps_texture_indices)
+void Utils::compute_mipmaps_gpu(GLuint input_image, int width, int height, GLuint z_buffer_mipmap_texture)
 {
     static GLuint compute_mipmap_shader_sampler = read_program("data/TPs/shaders/TPCG/compute_mipmap_sampler.glsl");
-    program_print_errors(compute_mipmap_shader_sampler);
     static GLuint compute_mipmap_shader_image_unit = read_program("data/TPs/shaders/TPCG/compute_mipmap_image_unit.glsl");
-    program_print_errors(compute_mipmap_shader_image_unit);
 
-    //TODO ne creer les texutres de mipmap que une seule fois plutot que a chaque fois
     int level = 0;
     while (width > 4 && height > 4)//Stop at a 4*4 mipmap
     {
@@ -506,19 +503,19 @@ void Utils::compute_mipmaps_gpu(GLuint input_image, int width, int height, const
         {
             //For the other levels, the input mipmap is a regular texture that can be used
             //in an image unit
-            GLuint previous_level_texture = mipmaps_texture_indices[level];
             glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, previous_level_texture);
-            glBindImageTexture(0, previous_level_texture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R32F);
+            glBindTexture(GL_TEXTURE_2D, z_buffer_mipmap_texture);
+            //level - 1 here because the z_buffer_mipmap_texture start at mipmap level 1, not 0 :
+            //the first mipmap of the z_buffer_mipmap_texture is the mipmap level 1 of the z_buffer
+            glBindImageTexture(0, z_buffer_mipmap_texture, level - 1, GL_FALSE, 0, GL_READ_ONLY, GL_R32F);
         }
 
         //Binding the output mipmap level to image unit 1
-        GLuint mipmap_texture = mipmaps_texture_indices[level + 1];
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, mipmap_texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, new_width, new_height, 0, GL_RED, GL_FLOAT, nullptr);
+        glBindTexture(GL_TEXTURE_2D, z_buffer_mipmap_texture);
+        glTexImage2D(GL_TEXTURE_2D, level, GL_R32F, new_width, new_height, 0, GL_RED, GL_FLOAT, nullptr);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0); //No mipmaps
-        glBindImageTexture(1, mipmap_texture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32F);
+        glBindImageTexture(1, z_buffer_mipmap_texture, level, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32F);
 
         GLuint compute_shader;
         if (level == 0)

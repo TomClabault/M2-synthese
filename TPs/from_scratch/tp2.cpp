@@ -526,7 +526,7 @@ bool TP2::occlusion_cull_cpu(const Transform& mvp_matrix, CullObject& object, in
         return true;
 }
 
-bool TP2::occlusion_cull_gpu(const Transform& mvp_matrix, CullObject& object, int depth_buffer_width, int depth_buffer_height, const std::vector<GLuint>& z_buffer_mipmaps, const std::vector<std::pair<int, int>>& mipmaps_widths_heights)
+bool TP2::occlusion_cull_gpu(const Transform& mvp_matrix, CullObject& object, int depth_buffer_width, int depth_buffer_height, GLuint z_buffer_mipmaps, const std::vector<std::pair<int, int>>& mipmaps_widths_heights)
 {
     return false;
 }
@@ -797,30 +797,39 @@ int TP2::create_hdr_frame()
 
 void TP2::create_z_buffer_mipmaps_textures(int width, int height)
 {
-    m_z_buffer_mipmaps_textures.clear();
-    m_z_buffer_mipmaps_widths_heights.clear();
-    m_z_buffer_mipmaps_textures.push_back(m_hdr_depth_buffer_texture);
-    m_z_buffer_mipmaps_widths_heights.push_back(std::make_pair(width, height));
+    //We're going to create the mipmaps without the very first level so that's why
+    //the mipmaps start at new_width and new_height
+    int new_width = std::max(1, width / 2);
+    int new_height = std::max(1, height / 2);
 
-    while (width > 4 && height > 4)//Stop at a 4*4 mipmap
-    {
-        int new_width = std::max(1, width / 2);
-        int new_height = std::max(1, height / 2);
+    glGenTextures(1, &m_z_buffer_mipmaps_texture);
+    glBindTexture(GL_TEXTURE_2D, m_z_buffer_mipmaps_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, new_width, new_height, 0, GL_RED, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 1000);
+    glGenerateMipmap(GL_TEXTURE_2D);
 
-        //Binding the output mipmap level to image unit 1
-        GLuint mipmap_texture;
-        glGenTextures(1, &mipmap_texture);
-        glActiveTexture(GL_TEXTURE1); //TODO remove
-        glBindTexture(GL_TEXTURE_2D, mipmap_texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, new_width, new_height, 0, GL_RED, GL_FLOAT, nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0); //No mipmaps
+    //TODO remove
+    //m_z_buffer_mipmaps_textures.clear();
+    //m_z_buffer_mipmaps_widths_heights.clear();
+    //m_z_buffer_mipmaps_textures.push_back(m_hdr_depth_buffer_texture);
+    //m_z_buffer_mipmaps_widths_heights.push_back(std::make_pair(width, height));
 
-        m_z_buffer_mipmaps_textures.push_back(mipmap_texture);
-        m_z_buffer_mipmaps_widths_heights.push_back(std::make_pair(new_width, new_height));
+    //while (width > 4 && height > 4)//Stop at a 4*4 mipmap
+    //{
+    //    int new_width = std::max(1, width / 2);
+    //    int new_height = std::max(1, height / 2);
 
-        width = new_width;
-        height = new_height;
-    }
+    //    //Binding the output mipmap level to image unit 1
+
+    //    m_z_buffer_mipmaps_textures.push_back(mipmap_texture);
+    //    m_z_buffer_mipmaps_widths_heights.push_back(std::make_pair(new_width, new_height));
+
+    //    width = new_width;
+    //    height = new_height;
+    //}
 }
 
 int TP2::resize_hdr_frame()
@@ -833,7 +842,7 @@ int TP2::resize_hdr_frame()
 
 void TP2::resize_z_buffer_mipmaps()
 {
-    glDeleteTextures(m_z_buffer_mipmaps_textures.size(), m_z_buffer_mipmaps_textures.data());
+    glDeleteTextures(1, &m_z_buffer_mipmaps_texture);
     create_z_buffer_mipmaps_textures(window_width(), window_height());
 }
 
@@ -1239,7 +1248,7 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         m_objects_drawn_last_frame.clear();
 
         //We're drawing in the HDR framebuffer so the z-buffer is there
-        Utils::compute_mipmaps_gpu(m_hdr_depth_buffer_texture, window_width(), window_height(), m_z_buffer_mipmaps_textures);
+        Utils::compute_mipmaps_gpu(m_hdr_depth_buffer_texture, window_width(), window_height(), m_z_buffer_mipmaps_texture);
         
         //Getting the zbuffer
         m_z_buffer_cpu = Utils::get_z_buffer(window_width(), window_height(), m_hdr_framebuffer);
@@ -1248,7 +1257,7 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         for (int object_id : objects_to_occlusion_cull_test)
         {
             CullObject object = m_cull_objects[object_id];
-            if (!occlusion_cull_gpu(mvp_matrix, object, window_width(), window_height(), m_z_buffer_mipmaps_textures, m_z_buffer_mipmaps_widths_heights))
+            if (!occlusion_cull_gpu(mvp_matrix, object, window_width(), window_height(), m_z_buffer_mipmaps_texture, m_z_buffer_mipmaps_widths_heights))
                 objects_to_draw.push_back(object_id);
         }
 
@@ -1310,18 +1319,32 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
 
                 for (int level = 0; level < z_buffer_mipmaps_cpu.size(); level++)
                 {
-                    int width = m_z_buffer_mipmaps_widths_heights[level].first;
-                    int height = m_z_buffer_mipmaps_widths_heights[level].second;
+                    int width = -1, height = -1;
+                    if (level == 0)
+                        //Depth texture for the first level
+                        glBindTexture(GL_TEXTURE_2D, m_hdr_depth_buffer_texture);
+                    else
+                        glBindTexture(GL_TEXTURE_2D, m_z_buffer_mipmaps_texture);
+
+                    if (level == 0)
+                    {
+                        glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
+                        glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
+                    }
+                    else
+                    {
+                        glGetTexLevelParameteriv(GL_TEXTURE_2D, level - 1, GL_TEXTURE_WIDTH, &width);
+                        glGetTexLevelParameteriv(GL_TEXTURE_2D, level - 1, GL_TEXTURE_HEIGHT, &height);
+                    }
+
+                    std::vector<float> z_buffer_from_gpu(width * height);
                     Image depth_buffer_image_gpu(width, height);
                     Image depth_buffer_image_cpu(width, height);
 
-                    std::vector<float> z_buffer_from_gpu(width * height);
-                    glBindTexture(GL_TEXTURE_2D, m_z_buffer_mipmaps_textures[level]);
                     if (level == 0)
-                        //Depth texture for the first level
-                        glGetTexImage(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, GL_FLOAT, z_buffer_from_gpu.data());
+                        glGetTexImage(GL_TEXTURE_2D, level, GL_DEPTH_COMPONENT, GL_FLOAT, z_buffer_from_gpu.data());
                     else
-                        glGetTexImage(GL_TEXTURE_2D, 0, GL_RED, GL_FLOAT, z_buffer_from_gpu.data());
+                        glGetTexImage(GL_TEXTURE_2D, level - 1, GL_RED, GL_FLOAT, z_buffer_from_gpu.data());
 
                     for (int y = 0; y < height; y++)
                     {
