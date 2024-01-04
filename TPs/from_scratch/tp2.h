@@ -80,7 +80,9 @@ public:
 	void update_recomputed_irradiance_map();
 
     int resize_hdr_frame();
+    void resize_z_buffer_mipmaps();
     int create_hdr_frame();
+    void create_z_buffer_mipmaps_textures(int width, int height);
     int create_shadow_map();
 
 	void draw_shadow_map();
@@ -133,39 +135,45 @@ protected:
     int m_mesh_groups_drawn;
     Lines m_bbox_lines;
 
-    std::vector<float> m_z_buffer_cpu;
-    std::vector<int> m_objects_drawn_last_frame;
-    std::vector<CullObject> m_cull_objects;
+    //Variables used for mesh rendering
     std::vector<TriangleGroup> m_mesh_triangles_group;
     std::vector<GLuint> m_mesh_base_color_textures;
     std::vector<GLuint> m_mesh_specular_textures;
     std::vector<GLuint> m_mesh_normal_maps;
     GLuint m_default_texture;
-
 	GLuint m_cubemap_vao;
     GLuint m_mesh_vao;
     GLuint m_texture_shadow_cook_torrance_shader;
-
 	GLuint m_cubemap_shader;
 	GLuint m_cubemap;
 	GLuint m_skysphere;
 	GLuint m_irradiance_map;
-
     GLuint m_hdr_shader_output_texture;
     GLuint m_hdr_depth_buffer_texture;
     GLuint m_hdr_framebuffer;
-
     GLuint m_fullscreen_quad_texture_shader;
     GLuint m_fullscreen_quad_texture_hdr_exposure_shader;
 	GLuint m_shadow_map_program;
 	GLuint m_shadow_map_framebuffer;
     GLuint m_shadow_map = 0;
 
+    //Variables used for the culling (frustum and occlusion)
+    std::vector<GLuint> m_z_buffer_mipmaps_textures;
+    std::vector<std::pair<int, int>> m_z_buffer_mipmaps_widths_heights;
+    std::vector<float> m_z_buffer_cpu;
+    std::vector<int> m_objects_drawn_last_frame;
+    std::vector<CullObject> m_cull_objects;
     GLuint m_frustum_culling_shader;
     GLuint m_mdi_draw_params_buffer;
     GLuint m_occlusion_culling_objects_id_to_draw;
     GLuint m_occlusion_culling_input_object_buffer;
     GLuint m_occlusion_culling_parameter_buffer;
+
+
+
+
+
+
 
     Orbiter m_light_camera;
     Vector m_light_pos = Vector(1.0f, 0.0, -1.0f);

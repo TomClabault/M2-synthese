@@ -99,7 +99,10 @@ int TP2::prerender()
     }
 
     if (m_resize_event_fired)
+    {
         resize_hdr_frame();
+        resize_z_buffer_mipmaps();
+    }
 
     // appelle la fonction update() de la classe derivee
     return update(global_time(), delta_time());
@@ -530,71 +533,8 @@ bool TP2::occlusion_cull_gpu(const Transform& mvp_matrix, CullObject& object, in
 
 #define TIME(x, message) { auto __start_timer = std::chrono::high_resolution_clock::now(); x; auto __stop_timer = std::chrono::high_resolution_clock::now(); std::cout << message << std::chrono::duration_cast<std::chrono::milliseconds>(__stop_timer - __start_timer).count() << "ms" << std::endl;}
 
-// creation des objets de l'application
 int TP2::init()
 {
-    //TP4 intro compute shader
-    //    //Initialisation des données sur le CPU
-    //    const int N = 200;
-    //    int global_counter_init_value = 0;
-    //    std::vector<int> input_data(N);
-    //    for (int i= 0; i < N; i++)
-    //        input_data[i] = i;
-
-    //    GLuint input_gpu_buffer, output_gpu_buffer;
-    //    glGenBuffers(1, &input_gpu_buffer);
-    //    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, input_gpu_buffer);
-    //    //sizeof(int) * (N + 1) because we're allocating memory for the global_counter as well as the input data
-    //    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(int) * (N + 1), NULL, GL_STREAM_READ);
-    //    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(int), &global_counter_init_value);
-    //    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 1 * sizeof(int), sizeof(int) * N, input_data.data());
-
-    //    glGenBuffers(1, &output_gpu_buffer);
-    //    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, output_gpu_buffer);
-    //    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(int) * N, NULL, GL_STREAM_COPY);
-
-    //    GLuint compute_shader_program = read_program("data/TPs/shaders/frustum_culling.glsl");
-    //    if (program_print_errors(compute_shader_program)) {
-    //        exit(EXIT_FAILURE);
-    //    }
-
-    //    glUseProgram(compute_shader_program);
-
-    //    int nb_groups = N / 256;
-    //    nb_groups += (N % 256) ? 1 : 0;
-    //    std::cout << "Nb groups: " << nb_groups << std::endl;
-
-    //    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, input_gpu_buffer);
-    //    glUniform1i(glGetUniformLocation(compute_shader_program, "u_operand"), 0);
-
-    //    glDispatchCompute(nb_groups, 1, 1);
-    //    glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
-
-    //    std::vector<int> result_data(N);
-    //    glBindBuffer(GL_SHADER_STORAGE_BUFFER, output_gpu_buffer);
-    //    glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(int) * N, result_data.data());
-
-    //    for (int i = 0; i < N; i++)
-    //        std::cout << result_data[i] << ", ";
-
-    //    std::exit(0);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     //Setting ImGUI up
     ImGui::CreateContext();
 
@@ -818,6 +758,8 @@ int TP2::init()
     if (create_hdr_frame() == -1)
         return -1;
 
+    create_z_buffer_mipmaps_textures(window_width(), window_height());
+
     return 0;
 }
 
@@ -853,12 +795,46 @@ int TP2::create_hdr_frame()
     return 0;
 }
 
+void TP2::create_z_buffer_mipmaps_textures(int width, int height)
+{
+    m_z_buffer_mipmaps_textures.clear();
+    m_z_buffer_mipmaps_widths_heights.clear();
+    m_z_buffer_mipmaps_textures.push_back(m_hdr_depth_buffer_texture);
+    m_z_buffer_mipmaps_widths_heights.push_back(std::make_pair(width, height));
+
+    while (width > 4 && height > 4)//Stop at a 4*4 mipmap
+    {
+        int new_width = std::max(1, width / 2);
+        int new_height = std::max(1, height / 2);
+
+        //Binding the output mipmap level to image unit 1
+        GLuint mipmap_texture;
+        glGenTextures(1, &mipmap_texture);
+        glActiveTexture(GL_TEXTURE1); //TODO remove
+        glBindTexture(GL_TEXTURE_2D, mipmap_texture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, new_width, new_height, 0, GL_RED, GL_FLOAT, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0); //No mipmaps
+
+        m_z_buffer_mipmaps_textures.push_back(mipmap_texture);
+        m_z_buffer_mipmaps_widths_heights.push_back(std::make_pair(new_width, new_height));
+
+        width = new_width;
+        height = new_height;
+    }
+}
+
 int TP2::resize_hdr_frame()
 {
     glDeleteTextures(1, &m_hdr_shader_output_texture);
     glDeleteFramebuffers(1, &m_hdr_framebuffer);
 
     return create_hdr_frame();
+}
+
+void TP2::resize_z_buffer_mipmaps()
+{
+    glDeleteTextures(m_z_buffer_mipmaps_textures.size(), m_z_buffer_mipmaps_textures.data());
+    create_z_buffer_mipmaps_textures(window_width(), window_height());
 }
 
 int TP2::create_shadow_map()
@@ -1207,9 +1183,6 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
     Image debug_zbuffer_mipmap_image;
     std::vector<Image> debug_mipmaps_with_bboxes;
 
-    std::vector<GLuint> z_buffer_mipmaps_gpu;
-    std::vector<std::pair<int, int>> mipmaps_widths_heights_gpu;
-
     std::vector<std::vector<float>> z_buffer_mipmaps_cpu;
     std::vector<std::pair<int, int>> mipmaps_widths_heights_cpu;
 
@@ -1266,16 +1239,16 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         m_objects_drawn_last_frame.clear();
 
         //We're drawing in the HDR framebuffer so the z-buffer is there
-        z_buffer_mipmaps_gpu = Utils::compute_mipmaps_gpu(m_hdr_depth_buffer_texture, window_width(), window_height(), mipmaps_widths_heights_gpu);
+        Utils::compute_mipmaps_gpu(m_hdr_depth_buffer_texture, window_width(), window_height(), m_z_buffer_mipmaps_textures);
         
         //Getting the zbuffer
         m_z_buffer_cpu = Utils::get_z_buffer(window_width(), window_height(), m_hdr_framebuffer);
-        z_buffer_mipmaps_cpu = Utils::compute_mipmaps(m_z_buffer_cpu, window_width(), window_height(), mipmaps_widths_heights_gpu);
+        z_buffer_mipmaps_cpu = Utils::compute_mipmaps(m_z_buffer_cpu, window_width(), window_height(), mipmaps_widths_heights_cpu);
 
         for (int object_id : objects_to_occlusion_cull_test)
         {
             CullObject object = m_cull_objects[object_id];
-            if (!occlusion_cull_gpu(mvp_matrix, object, window_width(), window_height(), z_buffer_mipmaps_gpu, mipmaps_widths_heights_gpu))
+            if (!occlusion_cull_gpu(mvp_matrix, object, window_width(), window_height(), m_z_buffer_mipmaps_textures, m_z_buffer_mipmaps_widths_heights))
                 objects_to_draw.push_back(object_id);
         }
 
@@ -1337,13 +1310,13 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
 
                 for (int level = 0; level < z_buffer_mipmaps_cpu.size(); level++)
                 {
-                    int width = mipmaps_widths_heights_gpu[level].first;
-                    int height = mipmaps_widths_heights_gpu[level].second;
+                    int width = m_z_buffer_mipmaps_widths_heights[level].first;
+                    int height = m_z_buffer_mipmaps_widths_heights[level].second;
                     Image depth_buffer_image_gpu(width, height);
                     Image depth_buffer_image_cpu(width, height);
 
                     std::vector<float> z_buffer_from_gpu(width * height);
-                    glBindTexture(GL_TEXTURE_2D, z_buffer_mipmaps_gpu[level]);
+                    glBindTexture(GL_TEXTURE_2D, m_z_buffer_mipmaps_textures[level]);
                     if (level == 0)
                         //Depth texture for the first level
                         glGetTexImage(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, GL_FLOAT, z_buffer_from_gpu.data());

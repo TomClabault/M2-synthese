@@ -475,16 +475,12 @@ std::vector<std::vector<float>> Utils::compute_mipmaps(const std::vector<float>&
     return mipmaps;
 }
 
-std::vector<GLuint> Utils::compute_mipmaps_gpu(GLuint input_image, int width, int height, std::vector<std::pair<int, int>>& mipmaps_widths_heights)
+void Utils::compute_mipmaps_gpu(GLuint input_image, int width, int height, const std::vector<GLuint>& mipmaps_texture_indices)
 {
     static GLuint compute_mipmap_shader_sampler = read_program("data/TPs/shaders/TPCG/compute_mipmap_sampler.glsl");
     program_print_errors(compute_mipmap_shader_sampler);
     static GLuint compute_mipmap_shader_image_unit = read_program("data/TPs/shaders/TPCG/compute_mipmap_image_unit.glsl");
     program_print_errors(compute_mipmap_shader_image_unit);
-
-    std::vector<GLuint> mipmaps_texture_indices;
-    mipmaps_texture_indices.push_back(input_image);
-    mipmaps_widths_heights.push_back(std::make_pair(width, height));
 
     //TODO ne creer les texutres de mipmap que une seule fois plutot que a chaque fois
     int level = 0;
@@ -496,7 +492,9 @@ std::vector<GLuint> Utils::compute_mipmaps_gpu(GLuint input_image, int width, in
         //For the first level, the input image is the depth buffer
         //We cannot use a depth texture directly in an image unit, we need to use
         //a sampler (and we don't want to blit the depth texture to a regular
-        //texture because that's expensive)
+        //texture because that's expensive so we instead have 2 versions of the shader,
+        //one that takes a sampler as the mipmap input and the second version that takes
+        //an image unit as the mipmap input)
         if (level == 0)
         {
             glActiveTexture(GL_TEXTURE0);
@@ -514,10 +512,8 @@ std::vector<GLuint> Utils::compute_mipmaps_gpu(GLuint input_image, int width, in
             glBindImageTexture(0, previous_level_texture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R32F);
         }
 
-        //Creating the texture for the mipmap that we're computing and binding to image
-        //unit 1
-        GLuint mipmap_texture;
-        glGenTextures(1, &mipmap_texture);
+        //Binding the output mipmap level to image unit 1
+        GLuint mipmap_texture = mipmaps_texture_indices[level + 1];
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, mipmap_texture);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, new_width, new_height, 0, GL_RED, GL_FLOAT, nullptr);
@@ -545,15 +541,10 @@ std::vector<GLuint> Utils::compute_mipmaps_gpu(GLuint input_image, int width, in
         glDispatchCompute(nb_groups_x, nb_groups_y, 1);
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
-        mipmaps_texture_indices.push_back(mipmap_texture);
-        mipmaps_widths_heights.push_back(std::make_pair(new_width, new_height));
-
         width = new_width;
         height = new_height;
         level++;
     }
-
-    return mipmaps_texture_indices;
 }
 
 std::vector<float> Utils::get_z_buffer(int window_width, int window_height, GLuint framebuffer)
