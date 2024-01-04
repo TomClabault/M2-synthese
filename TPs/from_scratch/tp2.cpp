@@ -523,6 +523,11 @@ bool TP2::occlusion_cull_cpu(const Transform& mvp_matrix, CullObject& object, in
         return true;
 }
 
+bool TP2::occlusion_cull_gpu(const Transform& mvp_matrix, CullObject& object, int depth_buffer_width, int depth_buffer_height, const std::vector<GLuint>& z_buffer_mipmaps, const std::vector<std::pair<int, int>>& mipmaps_widths_heights)
+{
+    return false;
+}
+
 #define TIME(x, message) { auto __start_timer = std::chrono::high_resolution_clock::now(); x; auto __stop_timer = std::chrono::high_resolution_clock::now(); std::cout << message << std::chrono::duration_cast<std::chrono::milliseconds>(__stop_timer - __start_timer).count() << "ms" << std::endl;}
 
 // creation des objets de l'application
@@ -603,10 +608,10 @@ int TP2::init()
 
     //Reading the mesh displayed
     //TIME(m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj"), "Load OBJ Time: ");
-    TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
+    //TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
-    //TIME(m_mesh = read_mesh("data/TPs/cube_occlusion_culling.obj"), "Load OBJ Time: ");
+    TIME(m_mesh = read_mesh("data/TPs/cube_occlusion_culling.obj"), "Load OBJ Time: ");
     if (m_mesh.positions().size() == 0)
     {
         std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -792,10 +797,8 @@ int TP2::init()
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_occlusion_culling_parameter_buffer);
     glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int), nullptr, GL_DYNAMIC_DRAW);
 
-    //Setting this parameter for the occlusion culling
-    //Because it is initially set to -1, we're going to try to draw
-    //every objects on the first frame
-    m_debug_z_buffer = std::vector<float>(1280 * 720);
+    //The buffer commented below is only for debugging the occlusion culling on the CPU
+    m_z_buffer_cpu = std::vector<float>(1280 * 720);
 
     //Cleaning (repositionning the buffers that have been selected to their default value)
     glBindVertexArray(0);
@@ -1204,7 +1207,11 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
     Image debug_zbuffer_mipmap_image;
     std::vector<Image> debug_mipmaps_with_bboxes;
 
-    std::vector<std::vector<float>> z_buffer_mipmaps;
+    std::vector<GLuint> z_buffer_mipmaps_gpu;
+    std::vector<std::pair<int, int>> mipmaps_widths_heights_gpu;
+
+    std::vector<std::vector<float>> z_buffer_mipmaps_cpu;
+    std::vector<std::pair<int, int>> mipmaps_widths_heights_cpu;
 
     std::vector<int> objects_to_draw;
 
@@ -1258,19 +1265,18 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         draw_multi_draw_indirect_from_ids(objects_to_fill_zbuffer);
         m_objects_drawn_last_frame.clear();
 
-        //Getting the zbuffer
-        std::vector<std::pair<int, int>> mipmaps_widths_heights;
         //We're drawing in the HDR framebuffer so the z-buffer is there
-        m_debug_z_buffer = Utils::get_z_buffer(window_width(), window_height(), m_hdr_framebuffer);
-        z_buffer_mipmaps = Utils::compute_mipmaps(m_debug_z_buffer, window_width(), window_height(), mipmaps_widths_heights);
+        z_buffer_mipmaps_gpu = Utils::compute_mipmaps_gpu(m_hdr_depth_buffer_texture, window_width(), window_height(), mipmaps_widths_heights_gpu);
+        
+        //Getting the zbuffer
+        m_z_buffer_cpu = Utils::get_z_buffer(window_width(), window_height(), m_hdr_framebuffer);
+        z_buffer_mipmaps_cpu = Utils::compute_mipmaps(m_z_buffer_cpu, window_width(), window_height(), mipmaps_widths_heights_gpu);
 
         for (int object_id : objects_to_occlusion_cull_test)
         {
             CullObject object = m_cull_objects[object_id];
-            if (!occlusion_cull_cpu(mvp_matrix, object, window_width(), window_height(), z_buffer_mipmaps, mipmaps_widths_heights))
+            if (!occlusion_cull_gpu(mvp_matrix, object, window_width(), window_height(), z_buffer_mipmaps_gpu, mipmaps_widths_heights_gpu))
                 objects_to_draw.push_back(object_id);
-            /*else
-                std::cout << object_id << " culled";*/
         }
 
         m_objects_drawn_last_frame.insert(m_objects_drawn_last_frame.begin(), objects_to_draw.begin(), objects_to_draw.end());
@@ -1321,39 +1327,44 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
     {
         auto& io = ImGui::GetIO();
         if (!io.WantCaptureKeyboard)
+        {
             if (key_state('d'))
             {
-                write_image(debug_bboxes_image, "debug_bboxes.png");
+                /*write_image(debug_bboxes_image, "debug_bboxes.png");
                 write_image(debug_bboxes_mipmap_image, "debug_bboxes_mipmap.png");
                 write_image(debug_zbuffer_mipmap_image, "debug_zbuffer_mipmap.png");
-                write_image(debug_bboxes_zbuffer_mipmap_image, "debug_zbuffer_bboxes_mipmap.png");
+                write_image(debug_bboxes_zbuffer_mipmap_image, "debug_zbuffer_bboxes_mipmap.png");*/
 
-                Image depth_buffer_image(window_width(), window_height());
-                bool written = false;
-                for (int y = 0; y < window_height(); y++)
-                    for (int x = 0; x < window_width(); x++)
+                for (int level = 0; level < z_buffer_mipmaps_cpu.size(); level++)
+                {
+                    int width = mipmaps_widths_heights_gpu[level].first;
+                    int height = mipmaps_widths_heights_gpu[level].second;
+                    Image depth_buffer_image_gpu(width, height);
+                    Image depth_buffer_image_cpu(width, height);
+
+                    std::vector<float> z_buffer_from_gpu(width * height);
+                    glBindTexture(GL_TEXTURE_2D, z_buffer_mipmaps_gpu[level]);
+                    if (level == 0)
+                        //Depth texture for the first level
+                        glGetTexImage(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, GL_FLOAT, z_buffer_from_gpu.data());
+                    else
+                        glGetTexImage(GL_TEXTURE_2D, 0, GL_RED, GL_FLOAT, z_buffer_from_gpu.data());
+
+                    for (int y = 0; y < height; y++)
                     {
-                        float color = m_debug_z_buffer[x + y * window_width()];
-                        if (color != 1.0f && !written)
+                        for (int x = 0; x < width; x++)
                         {
-                            std::cout << color << std::endl;
-                            written = true;
+                            depth_buffer_image_gpu(x, y) = Color(z_buffer_from_gpu[x + y * width]);
+                            depth_buffer_image_cpu(x, y) = Color(z_buffer_mipmaps_cpu[level][x + y * width]);
                         }
-                        depth_buffer_image(x, y) = Color(m_debug_z_buffer[x + y * window_width()]);
                     }
 
-                write_image(depth_buffer_image, "debug_z_buffer.png");
-
-                for (int i = 0; i < z_buffer_mipmaps.size(); i++)
-                {
-                    Image temp(window_width(), window_height());
-                    for (int y = 0; y < window_height(); y++)
-                        for (int x = 0; x < window_width(); x++)
-                            temp(x, y) = Color(z_buffer_mipmaps[i][x + y * std::floor((window_width() / std::pow(2, i)))]);
-
-                    write_image(temp, std::string(std::string("debug_z_buffer_mipmap") + std::to_string(i) + std::string(".png")).c_str());
+                    std::string base_name = std::string("debug_z_buffer_") + std::to_string(level);
+                    write_image(depth_buffer_image_gpu, (base_name + "_gpu.png").c_str());
+                    write_image(depth_buffer_image_cpu, (base_name + "_cpu.png").c_str());
                 }
             }
+        }
     }
 }
 

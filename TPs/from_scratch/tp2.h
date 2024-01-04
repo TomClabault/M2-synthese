@@ -69,6 +69,7 @@ public:
      * False if it is visible
      */
     bool occlusion_cull_cpu(const Transform &mvp_matrix, CullObject& object, int depth_buffer_width, int depth_buffer_height, const std::vector<std::vector<float>>& z_buffer_mipmaps, const std::vector<std::pair<int, int>>& mipmaps_widths_heights);
+    bool occlusion_cull_gpu(const Transform& mvp_matrix, CullObject& object, int depth_buffer_width, int depth_buffer_height, const std::vector<GLuint>& z_buffer_mipmaps, const std::vector<std::pair<int, int>>& mipmaps_widths_heights);
 
 	// creation des objets de l'application
 	int init();
@@ -132,7 +133,7 @@ protected:
     int m_mesh_groups_drawn;
     Lines m_bbox_lines;
 
-    std::vector<float> m_debug_z_buffer;//TODO remove
+    std::vector<float> m_z_buffer_cpu;
     std::vector<int> m_objects_drawn_last_frame;
     std::vector<CullObject> m_cull_objects;
     std::vector<TriangleGroup> m_mesh_triangles_group;

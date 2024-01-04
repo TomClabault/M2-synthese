@@ -299,7 +299,7 @@ GLuint Utils::precompute_irradiance_map_from_skysphere_gpu(const char* skysphere
         Image black_image(skysphere_image.width(), skysphere_image.height(), Color(0.0f, 0.0f, 0.0f));
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, skysphere_image.width(), skysphere_image.height(), 0, GL_RGBA, GL_FLOAT, black_image.data());
     }
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0); //No mipmaps
     glBindImageTexture(1, irradiance_map_texture_output, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
 
 
@@ -473,6 +473,87 @@ std::vector<std::vector<float>> Utils::compute_mipmaps(const std::vector<float>&
     }
 
     return mipmaps;
+}
+
+std::vector<GLuint> Utils::compute_mipmaps_gpu(GLuint input_image, int width, int height, std::vector<std::pair<int, int>>& mipmaps_widths_heights)
+{
+    static GLuint compute_mipmap_shader_sampler = read_program("data/TPs/shaders/TPCG/compute_mipmap_sampler.glsl");
+    program_print_errors(compute_mipmap_shader_sampler);
+    static GLuint compute_mipmap_shader_image_unit = read_program("data/TPs/shaders/TPCG/compute_mipmap_image_unit.glsl");
+    program_print_errors(compute_mipmap_shader_image_unit);
+
+    std::vector<GLuint> mipmaps_texture_indices;
+    mipmaps_texture_indices.push_back(input_image);
+    mipmaps_widths_heights.push_back(std::make_pair(width, height));
+
+    //TODO ne creer les texutres de mipmap que une seule fois plutot que a chaque fois
+    int level = 0;
+    while (width > 4 && height > 4)//Stop at a 4*4 mipmap
+    {
+        int new_width = std::max(1, width / 2);
+        int new_height = std::max(1, height / 2);
+
+        //For the first level, the input image is the depth buffer
+        //We cannot use a depth texture directly in an image unit, we need to use
+        //a sampler (and we don't want to blit the depth texture to a regular
+        //texture because that's expensive)
+        if (level == 0)
+        {
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, input_image);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        }
+        else
+        {
+            //For the other levels, the input mipmap is a regular texture that can be used
+            //in an image unit
+            GLuint previous_level_texture = mipmaps_texture_indices[level];
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, previous_level_texture);
+            glBindImageTexture(1, previous_level_texture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R32F);
+        }
+
+        //Creating the texture for the mipmap that we're computing and binding to image
+        //unit 1
+        GLuint mipmap_texture;
+        glGenTextures(1, &mipmap_texture);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, mipmap_texture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, new_width, new_height, 0, GL_RED, GL_FLOAT, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0); //No mipmaps
+        glBindImageTexture(1, mipmap_texture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32F);
+
+        GLuint compute_shader;
+        if (level == 0)
+            //Using the program that has a sampler for the unit 0 because
+            //the very first bitmap is not an image unit, it's a texture unit
+            compute_shader = compute_mipmap_shader_sampler;
+        else
+            compute_shader = compute_mipmap_shader_image_unit;
+
+        glUseProgram(compute_shader);
+        glUniform1i(glGetUniformLocation(compute_shader, "input_mipmap"), 0);
+        glUniform1i(glGetUniformLocation(compute_shader, "output_mipmap"), 1);
+
+
+        int threads[3];
+        glGetProgramiv(compute_shader, GL_COMPUTE_WORK_GROUP_SIZE, threads);
+        int nb_groups_x = std::ceil((float)new_width / threads[0]);
+        int nb_groups_y = std::ceil((float)new_height / threads[1]);
+
+        glDispatchCompute(nb_groups_x, nb_groups_y, 1);
+        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+        mipmaps_texture_indices.push_back(mipmap_texture);
+        mipmaps_widths_heights.push_back(std::make_pair(new_width, new_height));
+
+        width = new_width;
+        height = new_height;
+        level++;
+    }
+
+    return mipmaps_texture_indices;
 }
 
 std::vector<float> Utils::get_z_buffer(int window_width, int window_height, GLuint framebuffer)
