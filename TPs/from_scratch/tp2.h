@@ -69,7 +69,7 @@ public:
      * False if it is visible
      */
     bool occlusion_cull_cpu(const Transform &mvp_matrix, CullObject& object, int depth_buffer_width, int depth_buffer_height, const std::vector<std::vector<float>>& z_buffer_mipmaps, const std::vector<std::pair<int, int>>& mipmaps_widths_heights);
-    bool occlusion_cull_gpu(const Transform& mvp_matrix, CullObject& object, int depth_buffer_width, int depth_buffer_height, GLuint z_buffer_mipmaps, const std::vector<std::pair<int, int>>& mipmaps_widths_heights);
+    void occlusion_cull_gpu(const Transform& mvp_matrix, GLuint object_ids_to_cull_buffer, int number_of_objects_to_cull);
 
 	// creation des objets de l'application
 	int init();
@@ -159,15 +159,17 @@ protected:
 
     //Variables used for the culling (frustum and occlusion)
     GLuint m_z_buffer_mipmaps_texture;
-    std::vector<std::pair<int, int>> m_z_buffer_mipmaps_widths_heights;
-    std::vector<float> m_z_buffer_cpu;
+    int m_z_buffer_mipmaps_count;
+    std::vector<std::pair<int, int>> m_z_buffer_mipmaps_widths_heights;//TODO remove, useless now
+    std::vector<float> m_z_buffer_cpu;//TODO remove, useless now
     std::vector<int> m_objects_drawn_last_frame;
     std::vector<CullObject> m_cull_objects;
+    GLuint m_occlusion_culling_shader;
     GLuint m_frustum_culling_shader;
     GLuint m_mdi_draw_params_buffer;
-    GLuint m_occlusion_culling_objects_id_to_draw;
-    GLuint m_occlusion_culling_input_object_buffer;
-    GLuint m_occlusion_culling_parameter_buffer;
+    GLuint m_culling_objects_id_to_draw;
+    GLuint m_culling_input_object_buffer;
+    GLuint m_culling_nb_objects_passed_buffer;
 
 
 
