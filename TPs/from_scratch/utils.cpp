@@ -514,7 +514,6 @@ void Utils::compute_mipmaps_gpu(GLuint input_image, int width, int height, GLuin
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, z_buffer_mipmap_texture);
         glTexImage2D(GL_TEXTURE_2D, level, GL_R32F, new_width, new_height, 0, GL_RED, GL_FLOAT, nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0); //No mipmaps
         glBindImageTexture(1, z_buffer_mipmap_texture, level, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32F);
 
         GLuint compute_shader;

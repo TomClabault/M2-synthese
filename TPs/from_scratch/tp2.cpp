@@ -807,29 +807,7 @@ void TP2::create_z_buffer_mipmaps_textures(int width, int height)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, new_width, new_height, 0, GL_RED, GL_FLOAT, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 1000);
     glGenerateMipmap(GL_TEXTURE_2D);
-
-    //TODO remove
-    //m_z_buffer_mipmaps_textures.clear();
-    //m_z_buffer_mipmaps_widths_heights.clear();
-    //m_z_buffer_mipmaps_textures.push_back(m_hdr_depth_buffer_texture);
-    //m_z_buffer_mipmaps_widths_heights.push_back(std::make_pair(width, height));
-
-    //while (width > 4 && height > 4)//Stop at a 4*4 mipmap
-    //{
-    //    int new_width = std::max(1, width / 2);
-    //    int new_height = std::max(1, height / 2);
-
-    //    //Binding the output mipmap level to image unit 1
-
-    //    m_z_buffer_mipmaps_textures.push_back(mipmap_texture);
-    //    m_z_buffer_mipmaps_widths_heights.push_back(std::make_pair(new_width, new_height));
-
-    //    width = new_width;
-    //    height = new_height;
-    //}
 }
 
 int TP2::resize_hdr_frame()
@@ -1320,19 +1298,17 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                 for (int level = 0; level < z_buffer_mipmaps_cpu.size(); level++)
                 {
                     int width = -1, height = -1;
-                    if (level == 0)
-                        //Depth texture for the first level
-                        glBindTexture(GL_TEXTURE_2D, m_hdr_depth_buffer_texture);
-                    else
-                        glBindTexture(GL_TEXTURE_2D, m_z_buffer_mipmaps_texture);
 
                     if (level == 0)
                     {
+                        //Depth texture for the first level
+                        glBindTexture(GL_TEXTURE_2D, m_hdr_depth_buffer_texture);
                         glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
                         glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
                     }
                     else
                     {
+                        glBindTexture(GL_TEXTURE_2D, m_z_buffer_mipmaps_texture);
                         glGetTexLevelParameteriv(GL_TEXTURE_2D, level - 1, GL_TEXTURE_WIDTH, &width);
                         glGetTexLevelParameteriv(GL_TEXTURE_2D, level - 1, GL_TEXTURE_HEIGHT, &height);
                     }
