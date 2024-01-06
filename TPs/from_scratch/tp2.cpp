@@ -478,8 +478,13 @@ bool TP2::occlusion_cull_cpu(const Transform& mvp_matrix, CullObject& object, in
 
 void TP2::occlusion_cull_gpu(const Transform& mvp_matrix, GLuint object_ids_to_cull_buffer, int number_of_objects_to_cull)
 {
+    std::vector<unsigned int> zeros(m_mesh_triangles_group.size(), -1);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_passing_ids);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int) * m_mesh_triangles_group.size(), zeros.data(), GL_DYNAMIC_DRAW);;
     //256.0f is the hardcoded number of threads per group of the occlusion culling compute shader
     int nb_groups = std::ceil(number_of_objects_to_cull / 256.0f);
+    if (nb_groups == 0) //No objects to cull
+        return;
 
     glUseProgram(m_occlusion_culling_shader);
     glUniformMatrix4fv(glGetUniformLocation(m_occlusion_culling_shader, "u_mvp_matrix"), 1, GL_TRUE, mvp_matrix.data());
@@ -497,14 +502,17 @@ void TP2::occlusion_cull_gpu(const Transform& mvp_matrix, GLuint object_ids_to_c
     glBindTexture(GL_TEXTURE_2D, m_z_buffer_mipmaps_texture);
     glUniform1i(glGetUniformLocation(m_occlusion_culling_shader, "u_z_buffer_mipmaps1"), 1);
 
+
     // Input buffer : the ids of the objects that will be tested for occlusion culling against the current z-buffer
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, object_ids_to_cull_buffer);
+    // Input buffer : the list of cull objects of the scene
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_culling_input_object_buffer);
     // Out buffer : the ids of the objects that passed the culling test
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_culling_objects_id_to_draw);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_culling_passing_ids); //TODO useful ?
     // Out buffer : a list of commands that can be fed directly into a multiDrawIndirect() call
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_mdi_draw_params_buffer);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, m_mdi_draw_params_buffer);
     // Out buffer : how many objects passed the culling test
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, m_culling_nb_objects_passed_buffer);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, m_culling_nb_objects_passed_buffer);
     unsigned int zero = 0;
     glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int), &zero);
 
@@ -710,7 +718,11 @@ int TP2::init()
 
     glGenBuffers(1, &m_culling_objects_id_to_draw);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_objects_id_to_draw);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int) * m_mesh_triangles_group.size(), nullptr, GL_DYNAMIC_DRAW);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int)* m_mesh_triangles_group.size(), nullptr, GL_DYNAMIC_DRAW);
+
+    glGenBuffers(1, &m_culling_passing_ids);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_passing_ids);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int)* m_mesh_triangles_group.size(), nullptr, GL_DYNAMIC_DRAW);
 
     glGenBuffers(1, &m_culling_input_object_buffer);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_input_object_buffer);
@@ -1246,9 +1258,36 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
 
         occlusion_cull_gpu(mvp_matrix, m_culling_objects_id_to_draw, nb_accepted_objects);
 
+        //TODO remove
+        if (debug_counterr % 8 == 0)
+        {
+            std::cout << "CPU: ";
+            for (int object_id : non_frustum_culled_ids_this_frame)
+            {
+                CullObject object = m_cull_objects[object_id];
+                if (!occlusion_cull_cpu(mvp_matrix, object, window_width(), window_height(), z_buffer_mipmaps_cpu, mipmaps_widths_heights_cpu))
+                    std::cout << object_id << ", ";
+            }
+            std::cout << std::endl;
+        }
+
         // Getting the number of objects drawn
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_nb_objects_passed_buffer);
         glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int), &m_mesh_groups_drawn);
+
+        std::vector<unsigned int> passing_objects_id(m_mesh_triangles_group.size(), -1);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_passing_ids);
+        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int)* m_mesh_triangles_group.size(), passing_objects_id.data());
+
+        //TODO remove
+        if (debug_counterr % 8 == 0)
+        {
+            std::cout << "GPU: ";
+            for (int i : passing_objects_id)
+                if (i != -1)
+                    std::cout << i << ", ";
+            std::cout << std::endl;
+        }
 
         // Now that the occlusion culling on the GPU has filled the buffer with
         // the ids of the object that are going to be drawn, we can use this buffer
@@ -1256,8 +1295,7 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_objects_id_to_draw);
         glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, m_mesh_groups_drawn * sizeof(unsigned int), m_objects_drawn_last_frame.data());
 
-        std::cout << m_mesh_groups_drawn << std::endl;
-
+        glUseProgram(m_texture_shadow_cook_torrance_shader);
         glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_mdi_draw_params_buffer);
         glBindBuffer(GL_PARAMETER_BUFFER_ARB, m_culling_nb_objects_passed_buffer);
         glMultiDrawArraysIndirectCountARB(GL_TRIANGLES, 0, 0, m_cull_objects.size(), 0);

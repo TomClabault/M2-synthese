@@ -553,7 +553,6 @@ std::vector<float> Utils::get_z_buffer(int window_width, int window_height, GLui
 
     std::vector<float> tmp(window_width * window_height);
 
-    //glReadBuffer(GL_BACK);
     glReadPixels(0, 0, window_width, window_height, GL_DEPTH_COMPONENT, GL_FLOAT, tmp.data());
 
     glBindFramebuffer(GL_FRAMEBUFFER, previous_framebuffer);

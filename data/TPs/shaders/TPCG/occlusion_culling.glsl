@@ -18,22 +18,27 @@ struct MultiDrawIndirectParam
     uint instance_base;
 };
 
-layout(std430, binding = 0) buffer inputObjectsToCullBuffer
+layout(std430, binding = 0) buffer inputObjectIdsToCullBuffer
+{
+    uint input_cull_object_ids[];
+};
+
+layout(std430, binding = 1) buffer inputObjectsToCullBuffer
 {
     CullObject input_cull_objects[];
 };
 
-layout(std430, binding = 1) buffer outputObjectIdsBuffer
+layout(std430, binding = 2) buffer outputObjectIdsBuffer
 {
     uint passing_object_ids[];
 };
 
-layout(std430, binding = 2) buffer outputDrawCommandsBuffer
+layout(std430, binding = 3) buffer outputDrawCommandsBuffer
 {
     MultiDrawIndirectParam output_draw_commands[];
 };
 
-layout(std430, binding = 3) buffer nbObjectsDrawnBuffer
+layout(std430, binding = 4) buffer nbObjectsDrawnBuffer
 {
     uint nb_passing_objects;
 };
@@ -119,16 +124,12 @@ layout(local_size_x = 256) in;
 void main()
 {
     uint thread_id = gl_GlobalInvocationID.x;
-    //TODO this prints 0, input_cull_objects is empty but shouldn't be
-    if (thread_id == 0)
-        atomicAdd(nb_passing_objects, input_cull_objects.length());
         
-    if (thread_id >= input_cull_objects.length())
+    if (thread_id >= input_cull_object_ids.length())
         return;
 
-    return;
-
-    CullObject object = input_cull_objects[thread_id];
+    uint object_id = input_cull_object_ids[thread_id];
+    CullObject object = input_cull_objects[object_id];
 
     vec3 screen_space_bbox_min, screen_space_bbox_max;
     float nearest_depth;
