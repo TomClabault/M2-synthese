@@ -1249,13 +1249,13 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         draw_multi_draw_indirect_from_ids(objects_to_fill_zbuffer);
         m_objects_drawn_last_frame.clear();
 
-        //We're drawing in the HDR framebuffer so the z-buffer is there
-        Utils::compute_mipmaps_gpu(m_hdr_depth_buffer_texture, window_width(), window_height(), m_z_buffer_mipmaps_texture);
-        
         //Getting the zbuffer
         m_z_buffer_cpu = Utils::get_z_buffer(window_width(), window_height(), m_hdr_framebuffer);
         z_buffer_mipmaps_cpu = Utils::compute_mipmaps(m_z_buffer_cpu, window_width(), window_height(), mipmaps_widths_heights_cpu);
 
+        //We're drawing in the HDR framebuffer so the z-buffer is there
+        Utils::compute_mipmaps_gpu(m_hdr_depth_buffer_texture, window_width(), window_height(), m_z_buffer_mipmaps_texture);
+        
         occlusion_cull_gpu(mvp_matrix, m_culling_objects_id_to_draw, nb_accepted_objects);
 
         //TODO remove
@@ -1314,6 +1314,16 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                 write_image(debug_bboxes_mipmap_image, "debug_bboxes_mipmap.png");
                 write_image(debug_zbuffer_mipmap_image, "debug_zbuffer_mipmap.png");
                 write_image(debug_bboxes_zbuffer_mipmap_image, "debug_zbuffer_bboxes_mipmap.png");*/
+
+                Image z_buffer_cpu_ref(window_width(), window_height());
+                for (int y = 0; y < window_height(); y++)
+                {
+                    for (int x = 0; x < window_width(); x++)
+                    {
+                        z_buffer_cpu_ref(x, y) = Color(m_z_buffer_cpu[x + y * window_width()]);
+                    }
+                }
+                write_image(z_buffer_cpu_ref, "z_buffer_cpu_ref.png");
 
                 for (int level = 0; level < z_buffer_mipmaps_cpu.size(); level++)
                 {
