@@ -51,7 +51,7 @@ public:
 	 */
 	static void compute_mipmaps_gpu(GLuint input_image, int width, int height, GLuint z_buffer_mipmap_texture);
     static std::vector<float> get_z_buffer(int window_width, int window_height, GLuint framebuffer);
-    static void get_object_screen_space_bounding_box(const Transform& mvp_matrix, const Transform& viewport_matrix, const TP2::CullObject& object, Point& out_bbox_min, Point& out_bbox_max);
+	static void get_object_screen_space_bounding_box(const Transform& mvpv_matrix, const TP2::CullObject& object, Point& out_bbox_min, Point& out_bbox_max);
     static int get_visibility_of_object_from_camera(const Transform& view_matrix, const TP2::CullObject& object);
 };
 

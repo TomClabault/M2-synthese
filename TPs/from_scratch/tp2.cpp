@@ -419,7 +419,7 @@ bool TP2::occlusion_cull_cpu(const Transform& mvp_matrix, CullObject& object, in
     }
     else if (visibility == 1) //Entirely visible
     {
-        Utils::get_object_screen_space_bounding_box(mvp_matrix, Viewport(depth_buffer_width, depth_buffer_height), object, screen_space_bbox_min, screen_space_bbox_max);
+        Utils::get_object_screen_space_bounding_box(m_camera.viewport() * mvp_matrix, object, screen_space_bbox_min, screen_space_bbox_max);
 
         //Clamping the points to the image limits
         screen_space_bbox_min = max(screen_space_bbox_min, Point(0, 0, -std::numeric_limits<float>::max()));
@@ -502,7 +502,6 @@ void TP2::occlusion_cull_gpu(const Transform& mvp_matrix, GLuint object_ids_to_c
     glBindTexture(GL_TEXTURE_2D, m_z_buffer_mipmaps_texture);
     glUniform1i(glGetUniformLocation(m_occlusion_culling_shader, "u_z_buffer_mipmaps1"), 1);
 
-
     // Input buffer : the ids of the objects that will be tested for occlusion culling against the current z-buffer
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, object_ids_to_cull_buffer);
     // Input buffer : the list of cull objects of the scene
@@ -516,11 +515,54 @@ void TP2::occlusion_cull_gpu(const Transform& mvp_matrix, GLuint object_ids_to_c
     unsigned int zero = 0;
     glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int), &zero);
 
-    glDispatchCompute(nb_groups, 1, 1);
-    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+    //TODO debug remove
+    static bool done = false;
+    static GLuint debug_image;
+    if (!done)
+    {
+        glGenTextures(1, &debug_image);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, debug_image);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, window_width(), window_height(), 0, GL_RGBA, GL_FLOAT, nullptr);
 
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_passing_ids);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int) * m_mesh_triangles_group.size(), init.data(), GL_DYNAMIC_DRAW);
+        done = true;
+    }
+    else
+    {
+        Image black_pixels(window_width(), window_height());
+
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, debug_image);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, window_width(), window_height(), 0, GL_RGBA, GL_FLOAT, black_pixels.data());
+        glBindImageTexture(2, debug_image, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+        glUniform1i(glGetUniformLocation(m_occlusion_culling_shader, "debug_image"), 2);
+    }
+
+    //TODO do not remove
+    glDispatchCompute(nb_groups, 1, 1);
+    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+    //TODO remove debug
+    {
+        auto& io = ImGui::GetIO();
+        if (!io.WantCaptureKeyboard)
+        {
+            if (key_state('d'))
+            {
+                std::cout << "In debug image" << std::endl;
+
+                Image debug_image_image(window_width(), window_height());
+                glBindTexture(GL_TEXTURE_2D, debug_image);
+                glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, debug_image_image.data());
+             
+                write_image(debug_image_image, "debug_image.png");
+            }
+        }
+    }
+
+    //TODO remove two lines
+    glActiveTexture(GL_TEXTURE0 + TP2::DIFFUSE_IRRADIANCE_MAP_UNIT);
+    glBindTexture(GL_TEXTURE_2D, m_irradiance_map);
 }
 
 #define TIME(x, message) { auto __start_timer = std::chrono::high_resolution_clock::now(); x; auto __stop_timer = std::chrono::high_resolution_clock::now(); std::cout << message << std::chrono::duration_cast<std::chrono::milliseconds>(__stop_timer - __start_timer).count() << "ms" << std::endl;}
@@ -1290,9 +1332,10 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_nb_objects_passed_buffer);
         glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int), &m_mesh_groups_drawn);
 
+        //TODO remove
         std::vector<unsigned int> passing_objects_id(m_mesh_triangles_group.size(), -1);
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_passing_ids);
-        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int)* m_mesh_triangles_group.size(), passing_objects_id.data());
+        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int) * m_mesh_triangles_group.size(), passing_objects_id.data());
 
         //TODO remove
         if (debug_counterr % 8 == 0)
@@ -1310,10 +1353,10 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_objects_id_to_draw);
         glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, m_mesh_groups_drawn * sizeof(unsigned int), m_objects_drawn_last_frame.data());
 
-        /*glUseProgram(m_texture_shadow_cook_torrance_shader);
+        glUseProgram(m_texture_shadow_cook_torrance_shader);
         glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_mdi_draw_params_buffer);
         glBindBuffer(GL_PARAMETER_BUFFER_ARB, m_culling_nb_objects_passed_buffer);
-        glMultiDrawArraysIndirectCountARB(GL_TRIANGLES, 0, 0, m_cull_objects.size(), 0);*/
+        glMultiDrawArraysIndirectCountARB(GL_TRIANGLES, 0, 0, m_cull_objects.size(), 0);
     }
 
     debug_counterr++;
@@ -1325,6 +1368,8 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         {
             if (key_state('d'))
             {
+                std::cout << "In debug z buffer" << std::endl;
+
                 /*write_image(debug_bboxes_image, "debug_bboxes.png");
                 write_image(debug_bboxes_mipmap_image, "debug_bboxes_mipmap.png");
                 write_image(debug_zbuffer_mipmap_image, "debug_zbuffer_mipmap.png");
@@ -1379,6 +1424,69 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                     std::string base_name = std::string("debug_z_buffer_") + std::to_string(level);
                     write_image(depth_buffer_image_gpu, (base_name + "_gpu.png").c_str());
                     write_image(depth_buffer_image_cpu, (base_name + "_cpu.png").c_str());
+
+                    int debug_level = 1;
+                    if (level == debug_level)
+                    {
+                        CullObject object = m_cull_objects[1];
+                        Point screen_space_bbox_min, screen_space_bbox_max;
+
+                        int visibility = Utils::get_visibility_of_object_from_camera(m_camera.view(), object);
+                        if (visibility == 2) //Partially visible, we're going to assume
+                            //that the bounding box of the object
+                            //spans the whole image
+                        {
+                            screen_space_bbox_min = Point(0, 0, 0);
+                            screen_space_bbox_max = Point(window_width() - 1, window_height() - 1, 0);
+                        }
+                        else if (visibility == 1) //Entirely visible
+                        {
+                            Utils::get_object_screen_space_bounding_box(m_camera.viewport() * mvp_matrix, object, screen_space_bbox_min, screen_space_bbox_max);
+
+                            //Clamping the points to the image limits
+                            screen_space_bbox_min = max(screen_space_bbox_min, Point(0, 0, -std::numeric_limits<float>::max()));
+                            screen_space_bbox_max = min(screen_space_bbox_max, Point(window_width() - 1, window_height() - 1, std::numeric_limits<float>::max()));
+                        }
+
+                        //We're going to consider that all the pixels of the object are at the same depth,
+                        //this depth because the closest one to the camera
+                        //Because the closest depth is the biggest z, we're querrying the max point of the bbox
+                        float nearest_depth = screen_space_bbox_min.z;
+
+                        //Computing which mipmap level to choose for the depth test so that the
+                        //screens space bounding rectangle of the object is approximately 4x4
+                        int mipmap_level = 0;
+                        //Getting the biggest axis of the screen space bounding rectangle of the object
+                        int largest_extent = std::max(screen_space_bbox_max.x - screen_space_bbox_min.x, screen_space_bbox_max.y - screen_space_bbox_min.y);
+                        if (largest_extent > 4)
+                            //Computing the factor needed for the largest extent to be 16 pixels
+                            mipmap_level = std::log2(std::ceil(largest_extent / 4.0f));
+                        else //The extent of the bounding rectangle already is small enough
+                            ;
+                        mipmap_level = std::min(mipmap_level, (int)z_buffer_mipmaps_cpu.size() - 1);
+                        mipmap_level = debug_level;
+                        int reduction_factor = std::pow(2, mipmap_level);
+                        float reduction_factor_inverse = 1.0f / reduction_factor;
+
+                        const std::vector<float>& mipmap = z_buffer_mipmaps_cpu[mipmap_level];
+
+                        bool one_pixel_visible = false;
+                        int min_y = std::min((int)std::floor(screen_space_bbox_min.y * reduction_factor_inverse), mipmaps_widths_heights_cpu[mipmap_level].second - 1);
+                        int max_y = std::min((int)std::ceil(screen_space_bbox_max.y * reduction_factor_inverse), mipmaps_widths_heights_cpu[mipmap_level].second - 1);
+                        int min_x = std::min((int)std::floor(screen_space_bbox_min.x * reduction_factor_inverse), mipmaps_widths_heights_cpu[mipmap_level].first - 1);
+                        int max_x = std::min((int)std::ceil(screen_space_bbox_max.x * reduction_factor_inverse), mipmaps_widths_heights_cpu[mipmap_level].first - 1);
+                        Utils::get_object_screen_space_bounding_box(m_camera.viewport()* mvp_matrix, object, screen_space_bbox_min, screen_space_bbox_max);
+
+                        for (int y = min_y; y <= max_y; y++)
+                        {
+                            for (int x = min_x; x <= max_x; x++)
+                            {
+                                depth_buffer_image_cpu(x, y) = Color(1.0, 0.0, 0.0, 1.0);
+                            }
+                        }
+
+                        write_image(depth_buffer_image_cpu, "debug_z_buffer_bboxes_cpu.png");
+                    }
                 }
             }
         }

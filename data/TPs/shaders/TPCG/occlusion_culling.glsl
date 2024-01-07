@@ -56,6 +56,8 @@ uniform mat4 u_mvp_matrix;
 uniform mat4 u_mvpv_matrix;
 uniform mat4 u_view_matrix;
 
+layout (binding = 1, rgba32f) uniform writeonly image2D debug_image;
+
 // How many mipmap levels we have in the hierarchicak z buffer
 uniform int u_nb_mipmaps;
 
@@ -123,6 +125,9 @@ void get_object_screen_space_bounding_box(CullObject object, out vec3 out_bbox_m
 layout(local_size_x = 256) in;
 void main()
 {
+    ivec2 debug_image_size = imageSize(debug_image);
+    uint debug_thread_id = 1;
+
     uint thread_id = gl_GlobalInvocationID.x;
         
     if (thread_id >= input_cull_object_ids.length())
@@ -171,20 +176,54 @@ void main()
     else //The extent of the bounding rectangle already is small enough
         ;
     mipmap_level = min(mipmap_level, u_nb_mipmaps - 1);
+    mipmap_level = 1;
     int reduction_factor = int(pow(2, mipmap_level));
     float reduction_factor_inverse = 1.0f / reduction_factor;
 
-    ivec2 mipmap_dimensions;
-    if (mipmap_level == 0)
-        mipmap_dimensions = textureSize(u_z_buffer_mipmap0, mipmap_level);
-    else
-        mipmap_dimensions = textureSize(u_z_buffer_mipmaps1, mipmap_level);
+    ivec2 mipmap_dimensions = mipmap_level == 0 ? textureSize(u_z_buffer_mipmap0, mipmap_level) : textureSize(u_z_buffer_mipmaps1, mipmap_level);
 
     bool one_pixel_visible = false;
     int min_y = min(int(floor(screen_space_bbox_min.y * reduction_factor_inverse)), mipmap_dimensions.y - 1);
     int max_y = min(int(ceil(screen_space_bbox_max.y * reduction_factor_inverse)), mipmap_dimensions.y - 1);
     int min_x = min(int(floor(screen_space_bbox_min.x * reduction_factor_inverse)), mipmap_dimensions.x - 1);
     int max_x = min(int(ceil(screen_space_bbox_max.x * reduction_factor_inverse)), mipmap_dimensions.x - 1);
+
+    /*if (thread_id == debug_thread_id)
+    {
+        for (int y = int(screen_space_bbox_min.y); y <= int(screen_space_bbox_max.y); y++)
+        {
+            for (int x = int(screen_space_bbox_min.x); x <= int(screen_space_bbox_max.x); x++)
+            {
+                imageStore(debug_image, ivec2(x, y), vec4(1.0f, 0.0f, 0.0f, 1.0f));
+            }
+        }
+    }*/
+
+    if (thread_id == debug_thread_id)
+        imageStore(debug_image, ivec2(mipmap_level, 0), vec4(0.0f, 0.0f, 0.0f, 1.0f));
+
+    if (thread_id == debug_thread_id)
+    {
+        for (int y = 0; y < debug_image_size.y / pow(2, mipmap_level); y++)
+        {
+            for ( int x = 0; x < debug_image_size.x / pow(2, mipmap_level); x++)
+            {
+                vec2 uv = ivec2(x, y) / vec2(debug_image_size / pow(2, mipmap_level));
+                imageStore(debug_image, ivec2(x, y), vec4(vec3(textureLod(u_z_buffer_mipmaps1, uv, 0).r), 1.0f));
+            }
+        }
+    }
+
+    if (thread_id == debug_thread_id)
+    {
+        for (int y = min_y; y <= max_y; y++)
+        {
+            for (int x = min_x; x <= max_x; x++)
+            {
+                imageStore(debug_image, ivec2(x, y), vec4(1.0f, 0.0f, 0.0f, 1.0f));
+            }
+        }
+    }
 
     for (int y = min_y; y <= max_y; y++)
     {

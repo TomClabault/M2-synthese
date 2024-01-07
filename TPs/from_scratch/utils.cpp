@@ -560,17 +560,17 @@ std::vector<float> Utils::get_z_buffer(int window_width, int window_height, GLui
     return tmp;
 }
 
-void Utils::get_object_screen_space_bounding_box(const Transform& mvp_matrix, const Transform& viewport_matrix, const TP2::CullObject& object, Point& out_bbox_min, Point& out_bbox_max)
+void Utils::get_object_screen_space_bounding_box(const Transform& mvpv_matrix, const TP2::CullObject& object, Point& out_bbox_min, Point& out_bbox_max)
 {
     Point object_screen_space_bbox_points[8];
-    object_screen_space_bbox_points[0] = viewport_matrix(mvp_matrix(Point(object.min)));
-    object_screen_space_bbox_points[1] = viewport_matrix(mvp_matrix(Point(object.max.x, object.min.y, object.min.z)));
-    object_screen_space_bbox_points[2] = viewport_matrix(mvp_matrix(Point(object.min.x, object.max.y, object.min.z)));
-    object_screen_space_bbox_points[3] = viewport_matrix(mvp_matrix(Point(object.max.x, object.max.y, object.min.z)));
-    object_screen_space_bbox_points[4] = viewport_matrix(mvp_matrix(Point(object.min.x, object.min.y, object.max.z)));
-    object_screen_space_bbox_points[5] = viewport_matrix(mvp_matrix(Point(object.max.x, object.min.y, object.max.z)));
-    object_screen_space_bbox_points[6] = viewport_matrix(mvp_matrix(Point(object.min.x, object.max.y, object.max.z)));
-    object_screen_space_bbox_points[7] = viewport_matrix(mvp_matrix(Point(object.max)));
+    object_screen_space_bbox_points[0] = mvpv_matrix(Point(object.min));
+    object_screen_space_bbox_points[1] = mvpv_matrix(Point(object.max.x, object.min.y, object.min.z));
+    object_screen_space_bbox_points[2] = mvpv_matrix(Point(object.min.x, object.max.y, object.min.z));
+    object_screen_space_bbox_points[3] = mvpv_matrix(Point(object.max.x, object.max.y, object.min.z));
+    object_screen_space_bbox_points[4] = mvpv_matrix(Point(object.min.x, object.min.y, object.max.z));
+    object_screen_space_bbox_points[5] = mvpv_matrix(Point(object.max.x, object.min.y, object.max.z));
+    object_screen_space_bbox_points[6] = mvpv_matrix(Point(object.min.x, object.max.y, object.max.z));
+    object_screen_space_bbox_points[7] = mvpv_matrix(Point(object.max));
 
     out_bbox_min = Point(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
     out_bbox_max = Point(-std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(), -std::numeric_limits<float>::max());
