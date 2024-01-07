@@ -478,9 +478,9 @@ bool TP2::occlusion_cull_cpu(const Transform& mvp_matrix, CullObject& object, in
 
 void TP2::occlusion_cull_gpu(const Transform& mvp_matrix, GLuint object_ids_to_cull_buffer, int number_of_objects_to_cull)
 {
-    std::vector<unsigned int> zeros(m_mesh_triangles_group.size(), -1);
+    std::vector<unsigned int> init(m_mesh_triangles_group.size(), -1);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_passing_ids);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int) * m_mesh_triangles_group.size(), zeros.data(), GL_DYNAMIC_DRAW);;
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int) * m_mesh_triangles_group.size(), init.data(), GL_DYNAMIC_DRAW);
     //256.0f is the hardcoded number of threads per group of the occlusion culling compute shader
     int nb_groups = std::ceil(number_of_objects_to_cull / 256.0f);
     if (nb_groups == 0) //No objects to cull
@@ -518,6 +518,9 @@ void TP2::occlusion_cull_gpu(const Transform& mvp_matrix, GLuint object_ids_to_c
 
     glDispatchCompute(nb_groups, 1, 1);
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_passing_ids);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int) * m_mesh_triangles_group.size(), init.data(), GL_DYNAMIC_DRAW);
 }
 
 #define TIME(x, message) { auto __start_timer = std::chrono::high_resolution_clock::now(); x; auto __stop_timer = std::chrono::high_resolution_clock::now(); std::cout << message << std::chrono::duration_cast<std::chrono::milliseconds>(__stop_timer - __start_timer).count() << "ms" << std::endl;}
@@ -966,9 +969,18 @@ void TP2::draw_multi_draw_indirect_from_ids(const std::vector<int>& object_ids)
     //Preparing the multi draw indirect params
     std::vector<TP2::MultiDrawIndirectParam> draw_params = generate_draw_params_from_object_ids(object_ids);
 
+    int nb_params;
+    glBindBuffer(GL_PARAMETER_BUFFER_ARB, m_culling_nb_objects_passed_buffer);
+    glGetBufferSubData(GL_PARAMETER_BUFFER_ARB, 0, sizeof(unsigned int), &nb_params);
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_mdi_draw_params_buffer);
+    glBufferSubData(GL_DRAW_INDIRECT_BUFFER, 0, sizeof(TP2::MultiDrawIndirectParam) * nb_params, draw_params.data());
+    glMultiDrawArraysIndirectCountARB(GL_TRIANGLES, 0, 0, m_cull_objects.size(), 0);
+
+    //TODO we should be using this code below instead of interacting with GL_PARAMETER_BUFFER_ARB buffer
+    //to be faster but the code below doesn't draw anything on screen for some reasons
+    /*glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_mdi_draw_params_buffer);
     glBufferSubData(GL_DRAW_INDIRECT_BUFFER, 0, sizeof(TP2::MultiDrawIndirectParam) * draw_params.size(), draw_params.data());
-    glMultiDrawArraysIndirect(GL_TRIANGLES, 0, draw_params.size(), 0);
+    glMultiDrawArraysIndirect(GL_TRIANGLES, 0, draw_params.size(), 0);*/
 }
 
 void TP2::cpu_mdi_selective_frustum_culling(const std::vector<int>& objects_id, const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
@@ -1249,13 +1261,16 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         draw_multi_draw_indirect_from_ids(objects_to_fill_zbuffer);
         m_objects_drawn_last_frame.clear();
 
+        std::vector<TP2::MultiDrawIndirectParam> draw_params(m_mesh_triangles_group.size());
+        int nb_params;
+
         //Getting the zbuffer
         m_z_buffer_cpu = Utils::get_z_buffer(window_width(), window_height(), m_hdr_framebuffer);
         z_buffer_mipmaps_cpu = Utils::compute_mipmaps(m_z_buffer_cpu, window_width(), window_height(), mipmaps_widths_heights_cpu);
 
         //We're drawing in the HDR framebuffer so the z-buffer is there
         Utils::compute_mipmaps_gpu(m_hdr_depth_buffer_texture, window_width(), window_height(), m_z_buffer_mipmaps_texture);
-        
+
         occlusion_cull_gpu(mvp_matrix, m_culling_objects_id_to_draw, nb_accepted_objects);
 
         //TODO remove
@@ -1295,10 +1310,10 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_objects_id_to_draw);
         glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, m_mesh_groups_drawn * sizeof(unsigned int), m_objects_drawn_last_frame.data());
 
-        glUseProgram(m_texture_shadow_cook_torrance_shader);
+        /*glUseProgram(m_texture_shadow_cook_torrance_shader);
         glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_mdi_draw_params_buffer);
         glBindBuffer(GL_PARAMETER_BUFFER_ARB, m_culling_nb_objects_passed_buffer);
-        glMultiDrawArraysIndirectCountARB(GL_TRIANGLES, 0, 0, m_cull_objects.size(), 0);
+        glMultiDrawArraysIndirectCountARB(GL_TRIANGLES, 0, 0, m_cull_objects.size(), 0);*/
     }
 
     debug_counterr++;
