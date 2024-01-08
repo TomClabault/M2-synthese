@@ -1228,6 +1228,7 @@ void TP2::draw_mdi_frustum_culling(const Transform& mvp_matrix, const Transform&
 void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
 {
     //TODO remove all debug
+    int debug_frequency = 32;
     Image debug_bboxes_image(window_width(), window_height());
     Image debug_bboxes_mipmap_image;
     Image debug_bboxes_zbuffer_mipmap_image;
@@ -1316,15 +1317,24 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         occlusion_cull_gpu(mvp_matrix, m_culling_objects_id_to_draw, nb_accepted_objects);
 
         //TODO remove
-        if (debug_counterr % 8 == 0)
+        if (debug_counterr % debug_frequency == 0)
         {
-            std::cout << "CPU: ";
+            int count = 0;
+            for (int object_id : non_frustum_culled_ids_this_frame)
+            {
+                CullObject object = m_cull_objects[object_id];
+                if (!occlusion_cull_cpu(mvp_matrix, object, window_width(), window_height(), z_buffer_mipmaps_cpu, mipmaps_widths_heights_cpu))
+                    count++;
+            }
+            std::cout << "CPU: " << count << " --- ";
+
             for (int object_id : non_frustum_culled_ids_this_frame)
             {
                 CullObject object = m_cull_objects[object_id];
                 if (!occlusion_cull_cpu(mvp_matrix, object, window_width(), window_height(), z_buffer_mipmaps_cpu, mipmaps_widths_heights_cpu))
                     std::cout << object_id << ", ";
             }
+
             std::cout << std::endl;
         }
 
@@ -1338,9 +1348,14 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int) * m_mesh_triangles_group.size(), passing_objects_id.data());
 
         //TODO remove
-        if (debug_counterr % 8 == 0)
+        if (debug_counterr % debug_frequency == 0)
         {
-            std::cout << "GPU: ";
+            int count = 0;
+            for (int i : passing_objects_id)
+                if (i != -1)
+                    count++;
+            std::cout << "GPU: " << count << " --- ";
+
             for (int i : passing_objects_id)
                 if (i != -1)
                     std::cout << i << ", ";
@@ -1425,46 +1440,69 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                     write_image(depth_buffer_image_gpu, (base_name + "_gpu.png").c_str());
                     write_image(depth_buffer_image_cpu, (base_name + "_cpu.png").c_str());
 
-                    int debug_level = 1;
-                    if (level == debug_level)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                    int mipmap_level;
+                    int debug_level = -1;
+                    int debug_object = 2;
+
+                    CullObject object = m_cull_objects[debug_object];
+                    Point screen_space_bbox_min, screen_space_bbox_max;
+
+                    int visibility = Utils::get_visibility_of_object_from_camera(m_camera.view(), object);
+                    if (visibility == 2) //Partially visible, we're going to assume
+                        //that the bounding box of the object
+                        //spans the whole image
                     {
-                        CullObject object = m_cull_objects[1];
-                        Point screen_space_bbox_min, screen_space_bbox_max;
+                        screen_space_bbox_min = Point(0, 0, 0);
+                        screen_space_bbox_max = Point(window_width() - 1, window_height() - 1, 0);
+                    }
+                    else if (visibility == 1) //Entirely visible
+                    {
+                        Utils::get_object_screen_space_bounding_box(m_camera.viewport() * mvp_matrix, object, screen_space_bbox_min, screen_space_bbox_max);
 
-                        int visibility = Utils::get_visibility_of_object_from_camera(m_camera.view(), object);
-                        if (visibility == 2) //Partially visible, we're going to assume
-                            //that the bounding box of the object
-                            //spans the whole image
-                        {
-                            screen_space_bbox_min = Point(0, 0, 0);
-                            screen_space_bbox_max = Point(window_width() - 1, window_height() - 1, 0);
-                        }
-                        else if (visibility == 1) //Entirely visible
-                        {
-                            Utils::get_object_screen_space_bounding_box(m_camera.viewport() * mvp_matrix, object, screen_space_bbox_min, screen_space_bbox_max);
+                        //Clamping the points to the image limits
+                        screen_space_bbox_min = max(screen_space_bbox_min, Point(0, 0, -std::numeric_limits<float>::max()));
+                        screen_space_bbox_max = min(screen_space_bbox_max, Point(window_width() - 1, window_height() - 1, std::numeric_limits<float>::max()));
+                    }
 
-                            //Clamping the points to the image limits
-                            screen_space_bbox_min = max(screen_space_bbox_min, Point(0, 0, -std::numeric_limits<float>::max()));
-                            screen_space_bbox_max = min(screen_space_bbox_max, Point(window_width() - 1, window_height() - 1, std::numeric_limits<float>::max()));
-                        }
+                    //We're going to consider that all the pixels of the object are at the same depth,
+                    //this depth because the closest one to the camera
+                    //Because the closest depth is the biggest z, we're querrying the max point of the bbox
+                    float nearest_depth = screen_space_bbox_min.z;
 
-                        //We're going to consider that all the pixels of the object are at the same depth,
-                        //this depth because the closest one to the camera
-                        //Because the closest depth is the biggest z, we're querrying the max point of the bbox
-                        float nearest_depth = screen_space_bbox_min.z;
-
-                        //Computing which mipmap level to choose for the depth test so that the
-                        //screens space bounding rectangle of the object is approximately 4x4
-                        int mipmap_level = 0;
-                        //Getting the biggest axis of the screen space bounding rectangle of the object
-                        int largest_extent = std::max(screen_space_bbox_max.x - screen_space_bbox_min.x, screen_space_bbox_max.y - screen_space_bbox_min.y);
-                        if (largest_extent > 4)
-                            //Computing the factor needed for the largest extent to be 16 pixels
-                            mipmap_level = std::log2(std::ceil(largest_extent / 4.0f));
-                        else //The extent of the bounding rectangle already is small enough
-                            ;
-                        mipmap_level = std::min(mipmap_level, (int)z_buffer_mipmaps_cpu.size() - 1);
+                    //Computing which mipmap level to choose for the depth test so that the
+                    //screens space bounding rectangle of the object is approximately 4x4
+                    mipmap_level = 0;
+                    //Getting the biggest axis of the screen space bounding rectangle of the object
+                    int largest_extent = std::max(screen_space_bbox_max.x - screen_space_bbox_min.x, screen_space_bbox_max.y - screen_space_bbox_min.y);
+                    if (largest_extent > 4)
+                        //Computing the factor needed for the largest extent to be 16 pixels
+                        mipmap_level = std::log2(std::ceil(largest_extent / 4.0f));
+                    else //The extent of the bounding rectangle already is small enough
+                        ;
+                    mipmap_level = std::min(mipmap_level, (int)z_buffer_mipmaps_cpu.size() - 1);
+                    if (debug_level != -1)
                         mipmap_level = debug_level;
+
+                    if (level == debug_level || (debug_level == -1 && level == mipmap_level))
+                    {
                         int reduction_factor = std::pow(2, mipmap_level);
                         float reduction_factor_inverse = 1.0f / reduction_factor;
 
@@ -1477,15 +1515,24 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                         int max_x = std::min((int)std::ceil(screen_space_bbox_max.x * reduction_factor_inverse), mipmaps_widths_heights_cpu[mipmap_level].first - 1);
                         Utils::get_object_screen_space_bounding_box(m_camera.viewport()* mvp_matrix, object, screen_space_bbox_min, screen_space_bbox_max);
 
+                        Image debug_image_cpu(window_width(), window_height());
+                        for (int y = 0; y < window_height() * reduction_factor_inverse; y++)
+                        {
+                            for (int x = 0; x < window_width() * reduction_factor_inverse; x++)
+                            {
+                                debug_image_cpu(x, y) = depth_buffer_image_cpu(x, y);
+                            }
+                        }
+
                         for (int y = min_y; y <= max_y; y++)
                         {
                             for (int x = min_x; x <= max_x; x++)
                             {
-                                depth_buffer_image_cpu(x, y) = Color(1.0, 0.0, 0.0, 1.0);
+                                debug_image_cpu(x, y) = Color(1.0, 0.0, 0.0, 1.0);
                             }
                         }
 
-                        write_image(depth_buffer_image_cpu, "debug_z_buffer_bboxes_cpu.png");
+                        write_image(debug_image_cpu, "debug_z_buffer_bboxes_cpu.png");
                     }
                 }
             }

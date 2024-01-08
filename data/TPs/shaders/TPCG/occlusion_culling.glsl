@@ -58,7 +58,7 @@ uniform mat4 u_view_matrix;
 
 layout (binding = 1, rgba32f) uniform writeonly image2D debug_image;
 
-// How many mipmap levels we have in the hierarchicak z buffer
+// How many mipmap levels we have in the hierarchical z buffer
 uniform int u_nb_mipmaps;
 
 int get_visibility_of_object_from_camera(CullObject object)
@@ -125,11 +125,12 @@ void get_object_screen_space_bounding_box(CullObject object, out vec3 out_bbox_m
 layout(local_size_x = 256) in;
 void main()
 {
+    //TODO remove
     ivec2 debug_image_size = imageSize(debug_image);
-    uint debug_thread_id = 1;
+    //TODO remove
+    uint debug_thread_id = 2;
 
     uint thread_id = gl_GlobalInvocationID.x;
-        
     if (thread_id >= input_cull_object_ids.length())
         return;
 
@@ -137,14 +138,10 @@ void main()
     CullObject object = input_cull_objects[object_id];
 
     vec3 screen_space_bbox_min, screen_space_bbox_max;
-    float nearest_depth;
-
     ivec2 z_buffer_mipmap_0_dims = textureSize(u_z_buffer_mipmap0, 0);
-
     int visibility = get_visibility_of_object_from_camera(object);
     if (visibility == 2) //Partially visible, we're going to assume
-        //that the bounding box of the object
-        //spans the whole image
+        //that the bounding box of the object spans the whole image
     {
         screen_space_bbox_min = vec3(0.0f, 0.0f, 0.0f);
         screen_space_bbox_max = vec3(z_buffer_mipmap_0_dims.x - 1, z_buffer_mipmap_0_dims.y - 1, 0.0f);
@@ -163,7 +160,7 @@ void main()
     //We're going to consider that all the pixels of the object are at the same depth,
     //this depth because the closest one to the camera
     //Because the closest depth is the biggest z, we're querrying the max point of the bbox
-    nearest_depth = screen_space_bbox_min.z;
+    float nearest_depth = screen_space_bbox_min.z;
 
     //Computing which mipmap level to choose for the depth test so that the
     //screens space bounding rectangle of the object is approximately 4x4
@@ -176,32 +173,19 @@ void main()
     else //The extent of the bounding rectangle already is small enough
         ;
     mipmap_level = min(mipmap_level, u_nb_mipmaps - 1);
-    mipmap_level = 1;
     int reduction_factor = int(pow(2, mipmap_level));
     float reduction_factor_inverse = 1.0f / reduction_factor;
 
-    ivec2 mipmap_dimensions = mipmap_level == 0 ? textureSize(u_z_buffer_mipmap0, mipmap_level) : textureSize(u_z_buffer_mipmaps1, mipmap_level);
+    ivec2 mipmap_dimensions = mipmap_level == 0 ? textureSize(u_z_buffer_mipmap0, mipmap_level) : textureSize(u_z_buffer_mipmaps1, mipmap_level - 1);
+    vec2 half_mipmap_dudv = vec2(0.5f) / mipmap_dimensions;
 
-    bool one_pixel_visible = false;
     int min_y = min(int(floor(screen_space_bbox_min.y * reduction_factor_inverse)), mipmap_dimensions.y - 1);
     int max_y = min(int(ceil(screen_space_bbox_max.y * reduction_factor_inverse)), mipmap_dimensions.y - 1);
     int min_x = min(int(floor(screen_space_bbox_min.x * reduction_factor_inverse)), mipmap_dimensions.x - 1);
     int max_x = min(int(ceil(screen_space_bbox_max.x * reduction_factor_inverse)), mipmap_dimensions.x - 1);
 
-    /*if (thread_id == debug_thread_id)
-    {
-        for (int y = int(screen_space_bbox_min.y); y <= int(screen_space_bbox_max.y); y++)
-        {
-            for (int x = int(screen_space_bbox_min.x); x <= int(screen_space_bbox_max.x); x++)
-            {
-                imageStore(debug_image, ivec2(x, y), vec4(1.0f, 0.0f, 0.0f, 1.0f));
-            }
-        }
-    }*/
-
-    if (thread_id == debug_thread_id)
-        imageStore(debug_image, ivec2(mipmap_level, 0), vec4(0.0f, 0.0f, 0.0f, 1.0f));
-
+    /*
+    //TODO remove. this is debug to copy the mipmap in the debug image
     if (thread_id == debug_thread_id)
     {
         for (int y = 0; y < debug_image_size.y / pow(2, mipmap_level); y++)
@@ -209,11 +193,18 @@ void main()
             for ( int x = 0; x < debug_image_size.x / pow(2, mipmap_level); x++)
             {
                 vec2 uv = ivec2(x, y) / vec2(debug_image_size / pow(2, mipmap_level));
-                imageStore(debug_image, ivec2(x, y), vec4(vec3(textureLod(u_z_buffer_mipmaps1, uv, 0).r), 1.0f));
+                if (mipmap_level == 0)
+                    imageStore(debug_image, ivec2(x, y), vec4(vec3(textureLod(u_z_buffer_mipmap0, uv + half_mipmap_dudv, 0).r), 1.0f));
+                else
+                    imageStore(debug_image, ivec2(x, y), vec4(vec3(textureLod(u_z_buffer_mipmaps1, uv + half_mipmap_dudv, mipmap_level - 1).r), 1.0f));
             }
         }
     }
 
+    //TODO remove this is debug to print the mipmap level at the bottom as one single pixel
+    if (thread_id == debug_thread_id)
+        imageStore(debug_image, ivec2(mipmap_level, 0), vec4(vec3(0.0f), 1.0f));
+    
     if (thread_id == debug_thread_id)
     {
         for (int y = min_y; y <= max_y; y++)
@@ -224,18 +215,19 @@ void main()
             }
         }
     }
-
+    */
+    bool one_pixel_visible = false;
     for (int y = min_y; y <= max_y; y++)
     {
         for (int x = min_x; x <= max_x; x++)
         {
             float depth_buffer_depth;
-            vec2 pixel_uv = (x, y) / vec2(mipmap_dimensions);
+            vec2 pixel_uv = vec2(x, y) / vec2(mipmap_dimensions);
 
             if (mipmap_level == 0)
-                depth_buffer_depth = texture(u_z_buffer_mipmap0, pixel_uv).r;
+                depth_buffer_depth = texture(u_z_buffer_mipmap0, pixel_uv + half_mipmap_dudv).r;
             else
-                depth_buffer_depth = textureLod(u_z_buffer_mipmaps1, pixel_uv, mipmap_level).r;
+                depth_buffer_depth = textureLod(u_z_buffer_mipmaps1, pixel_uv + half_mipmap_dudv, mipmap_level - 1).r;
                 
             if (depth_buffer_depth >= nearest_depth)
             {
