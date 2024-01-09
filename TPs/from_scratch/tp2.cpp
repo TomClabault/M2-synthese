@@ -66,7 +66,7 @@ int TP2::prerender()
         }
     }
 
-    const char* orbiter_filename = "app_orbiter.txt";
+    const char* orbiter_filename = "debug_app_orbiter.txt";
     // copy / export / write orbiter
     if (!imgui_io.WantCaptureKeyboard)
     {
@@ -790,7 +790,7 @@ int TP2::init()
     Point p_min, p_max;
     m_mesh.bounds(p_min, p_max);
     m_camera.lookat(p_min, p_max);
-    m_camera.read_orbiter("app_orbiter.txt");
+    m_camera.read_orbiter("debug_app_orbiter.txt");
 
     if (create_shadow_map() == -1)
         return -1;
@@ -1229,6 +1229,9 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
 {
     //TODO remove all debug
     int debug_frequency = 32;
+    int debug_level = -1;
+    int debug_object = 2;
+
     Image debug_bboxes_image(window_width(), window_height());
     Image debug_bboxes_mipmap_image;
     Image debug_bboxes_zbuffer_mipmap_image;
@@ -1459,9 +1462,6 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
 
 
                     int mipmap_level;
-                    int debug_level = -1;
-                    int debug_object = 2;
-
                     CullObject object = m_cull_objects[debug_object];
                     Point screen_space_bbox_min, screen_space_bbox_max;
 
@@ -1529,10 +1529,14 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                             for (int x = min_x; x <= max_x; x++)
                             {
                                 debug_image_cpu(x, y) = Color(1.0, 0.0, 0.0, 1.0);
+                                debug_image_cpu(x - min_x, y - min_y) = Color((depth_buffer_image_cpu(x, y)).r);
                             }
                         }
 
-                        write_image(debug_image_cpu, "debug_z_buffer_bboxes_cpu.png");
+                        debug_image_cpu(mipmap_level, 0) = Color(1.0f, 1.0f, 0.0f);
+                        debug_image_cpu(mipmap_level + 1, 0) = Color(nearest_depth);
+
+                        write_image(debug_image_cpu, "debug_image_cpu.png");
                     }
                 }
             }

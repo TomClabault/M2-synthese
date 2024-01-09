@@ -184,7 +184,6 @@ void main()
     int min_x = min(int(floor(screen_space_bbox_min.x * reduction_factor_inverse)), mipmap_dimensions.x - 1);
     int max_x = min(int(ceil(screen_space_bbox_max.x * reduction_factor_inverse)), mipmap_dimensions.x - 1);
 
-    /*
     //TODO remove. this is debug to copy the mipmap in the debug image
     if (thread_id == debug_thread_id)
     {
@@ -202,8 +201,6 @@ void main()
     }
 
     //TODO remove this is debug to print the mipmap level at the bottom as one single pixel
-    if (thread_id == debug_thread_id)
-        imageStore(debug_image, ivec2(mipmap_level, 0), vec4(vec3(0.0f), 1.0f));
     
     if (thread_id == debug_thread_id)
     {
@@ -215,7 +212,33 @@ void main()
             }
         }
     }
-    */
+
+    if (thread_id == debug_thread_id)
+    {
+        for (int y = min_y; y <= max_y; y++)
+        {
+            for (int x = min_x; x <= max_x; x++)
+            {
+                vec2 uv = vec2(x, y) / mipmap_dimensions;
+                float depth;
+                if (mipmap_level == 0)
+                    depth = texture(u_z_buffer_mipmap0, uv).r;
+                else
+                    depth = textureLod(u_z_buffer_mipmaps1, uv, mipmap_level - 1).r;
+
+                imageStore(debug_image, ivec2(x - min_x, y - min_y), vec4(vec3(depth), 1.0f));
+                imageStore(debug_image, ivec2(depth * 255, 0), vec4(1.0f, 0.0f, 1.0f, 1.0f));
+            }
+        }
+   }
+
+    if (thread_id == debug_thread_id)
+    {
+        imageStore(debug_image, ivec2(mipmap_level, 0), vec4(vec3(1.0f, 1.0f, 0.0f), 1.0f));
+        imageStore(debug_image, ivec2(mipmap_level + 1, 0), vec4(vec3(nearest_depth), 1.0f));
+        imageStore(debug_image, ivec2(largest_extent, 0), vec4(vec3(1.0f), 1.0f));
+    }
+    
     bool one_pixel_visible = false;
     for (int y = min_y; y <= max_y; y++)
     {
