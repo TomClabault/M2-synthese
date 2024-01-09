@@ -404,7 +404,12 @@ bool TP2::rejection_test_bbox_frustum_culling_scene(const CullObject& object, co
     return false;
 }
 
-bool TP2::occlusion_cull_cpu(const Transform& mvp_matrix, CullObject& object, int depth_buffer_width, int depth_buffer_height, const std::vector<std::vector<float> >& z_buffer_mipmaps, const std::vector<std::pair<int, int>>& mipmaps_widths_heights)
+//TODO remove all debug
+int debug_frequency = 32;
+int debug_level = -1;
+int debug_counterr = 0;
+int debug_object = 2;
+bool TP2::occlusion_cull_cpu(const Transform& mvp_matrix, CullObject& object, int depth_buffer_width, int depth_buffer_height, const std::vector<std::vector<float> >& z_buffer_mipmaps, const std::vector<std::pair<int, int>>& mipmaps_widths_heights, int object_id)
 {
     Point screen_space_bbox_min, screen_space_bbox_max;
     float nearest_depth;
@@ -455,22 +460,49 @@ bool TP2::occlusion_cull_cpu(const Transform& mvp_matrix, CullObject& object, in
     int min_x = std::min((int)std::floor(screen_space_bbox_min.x * reduction_factor_inverse), mipmaps_widths_heights[mipmap_level].first - 1);
     int max_x = std::min((int)std::ceil(screen_space_bbox_max.x * reduction_factor_inverse), mipmaps_widths_heights[mipmap_level].first - 1);
 
+    int debug_index = 5;//TODO remove
+    if (object_id == debug_object)
+    {
+        std::cout << nearest_depth << ", " << min_x << ", " << max_x << ", " << min_y << ", " << max_y;
+    }
     for (int y = min_y; y <= max_y; y++)
     {
         for (int x = min_x; x <= max_x; x++)
         {
             float depth_buffer_depth = mipmap[x + y * mipmaps_widths_heights[mipmap_level].first];
+
+            //TODO remove
+            {
+                if (object_id == debug_object)
+                    std::cout << debug_index++ << ": " << depth_buffer_depth << " ; ";
+            }
+
             if (depth_buffer_depth >= nearest_depth)
             {
                 //The object needs to be rendered, we can stop here
                 one_pixel_visible = true;
 
+                //TODO remove
+                {
+                    if (object_id == debug_object)
+                    {
+                        ;//std::cout << "breaking on x, y: " << x << ", " << y << std::endl;
+                    }
+                }
                 break;
             }
         }
 
         if (one_pixel_visible)
             break;
+    }
+
+    //TODO remove debug
+    {
+        if (debug_object == object_id)
+        {
+            std::cout << debug_index++ << ": " << nearest_depth << std::endl;
+        }
     }
 
     return !one_pixel_visible;
@@ -485,6 +517,13 @@ void TP2::occlusion_cull_gpu(const Transform& mvp_matrix, GLuint object_ids_to_c
     int nb_groups = std::ceil(number_of_objects_to_cull / 256.0f);
     if (nb_groups == 0) //No objects to cull
         return;
+
+    {
+        //TODO remove
+        std::vector<float> init_data(1024, -1000000.0f);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_debug_variable_buffer);
+        glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, 1024 * sizeof(float), init_data.data());
+    }
 
     glUseProgram(m_occlusion_culling_shader);
     glUniformMatrix4fv(glGetUniformLocation(m_occlusion_culling_shader, "u_mvp_matrix"), 1, GL_TRUE, mvp_matrix.data());
@@ -514,6 +553,8 @@ void TP2::occlusion_cull_gpu(const Transform& mvp_matrix, GLuint object_ids_to_c
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, m_culling_nb_objects_passed_buffer);
     unsigned int zero = 0;
     glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int), &zero);
+    // TODO remove debug only
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, m_debug_variable_buffer);
 
     //TODO debug remove
     static bool done = false;
@@ -555,14 +596,34 @@ void TP2::occlusion_cull_gpu(const Transform& mvp_matrix, GLuint object_ids_to_c
                 glBindTexture(GL_TEXTURE_2D, debug_image);
                 glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, debug_image_image.data());
              
-                write_image(debug_image_image, "debug_image.png");
+                write_image_hdr(debug_image_image, "debug_image.hdr");
             }
         }
     }
 
-    //TODO remove two lines
+    //TODO remove two lines, this is only because of the debug image that we're setting that override the irradiance unit
     glActiveTexture(GL_TEXTURE0 + TP2::DIFFUSE_IRRADIANCE_MAP_UNIT);
     glBindTexture(GL_TEXTURE_2D, m_irradiance_map);
+
+    //TODO remove all that follows, debug only
+    {
+        if (debug_counterr % debug_frequency == 0)
+        {
+            std::vector<float> debug_variables(1024);
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_debug_variable_buffer);
+            glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, 1024 * sizeof(float), debug_variables.data());
+            int index = 0;
+            for (float var : debug_variables)
+            {
+                if (var != -1000000.0f)
+                    std::cout << index << ": " << var << " ; ";
+
+                index++;
+            }
+
+            std::cout << std::endl;
+        }
+    }
 }
 
 #define TIME(x, message) { auto __start_timer = std::chrono::high_resolution_clock::now(); x; auto __stop_timer = std::chrono::high_resolution_clock::now(); std::cout << message << std::chrono::duration_cast<std::chrono::milliseconds>(__stop_timer - __start_timer).count() << "ms" << std::endl;}
@@ -777,6 +838,11 @@ int TP2::init()
     glGenBuffers(1, &m_culling_nb_objects_passed_buffer);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_nb_objects_passed_buffer);
     glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int), nullptr, GL_DYNAMIC_DRAW);
+
+    //TODO remove debug only debug_variable_buffer setup
+    glGenBuffers(1, &m_debug_variable_buffer);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_debug_variable_buffer);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(float) * 1024, nullptr, GL_DYNAMIC_DRAW);
 
     //The buffer commented below is only for debugging the occlusion culling on the CPU
     m_z_buffer_cpu = std::vector<float>(1280 * 720);
@@ -1227,11 +1293,6 @@ void TP2::draw_mdi_frustum_culling(const Transform& mvp_matrix, const Transform&
 
 void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse)
 {
-    //TODO remove all debug
-    int debug_frequency = 32;
-    int debug_level = -1;
-    int debug_object = 2;
-
     Image debug_bboxes_image(window_width(), window_height());
     Image debug_bboxes_mipmap_image;
     Image debug_bboxes_zbuffer_mipmap_image;
@@ -1244,7 +1305,6 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
 
     std::vector<int> objects_to_draw;
 
-    static int debug_counterr = 0;
     if(m_frame_number == 0)
     {
         //Drawing every object
@@ -1334,7 +1394,7 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
             for (int object_id : non_frustum_culled_ids_this_frame)
             {
                 CullObject object = m_cull_objects[object_id];
-                if (!occlusion_cull_cpu(mvp_matrix, object, window_width(), window_height(), z_buffer_mipmaps_cpu, mipmaps_widths_heights_cpu))
+                if (!occlusion_cull_cpu(mvp_matrix, object, window_width(), window_height(), z_buffer_mipmaps_cpu, mipmaps_widths_heights_cpu, object_id))
                     std::cout << object_id << ", ";
             }
 
@@ -1401,7 +1461,7 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                         z_buffer_cpu_ref(x, y) = Color(m_z_buffer_cpu[x + y * window_width()]);
                     }
                 }
-                write_image(z_buffer_cpu_ref, "z_buffer_cpu_ref.png");
+                write_image_hdr(z_buffer_cpu_ref, "z_buffer_cpu_ref.hdr");
 
                 for (int level = 0; level < z_buffer_mipmaps_cpu.size(); level++)
                 {
@@ -1440,8 +1500,8 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                     }
 
                     std::string base_name = std::string("debug_z_buffer_") + std::to_string(level);
-                    write_image(depth_buffer_image_gpu, (base_name + "_gpu.png").c_str());
-                    write_image(depth_buffer_image_cpu, (base_name + "_cpu.png").c_str());
+                    write_image_hdr(depth_buffer_image_gpu, (base_name + "_gpu.hdr").c_str());
+                    write_image_hdr(depth_buffer_image_cpu, (base_name + "_cpu.hdr").c_str());
 
 
 
@@ -1524,19 +1584,16 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                             }
                         }
 
-                        for (int y = min_y; y <= max_y; y++)
-                        {
-                            for (int x = min_x; x <= max_x; x++)
-                            {
-                                debug_image_cpu(x, y) = Color(1.0, 0.0, 0.0, 1.0);
-                                debug_image_cpu(x - min_x, y - min_y) = Color((depth_buffer_image_cpu(x, y)).r);
-                            }
-                        }
+//                        for (int y = min_y; y <= max_y; y++)
+//                        {
+//                            for (int x = min_x; x <= max_x; x++)
+//                            {
+//                                //debug_image_cpu(x, y) = Color(1.0, 0.0, 0.0, 1.0);
+//                                debug_image_cpu(x - min_x, y - min_y) = Color((depth_buffer_image_cpu(x, y)).r);
+//                            }
+//                        }
 
-                        debug_image_cpu(mipmap_level, 0) = Color(1.0f, 1.0f, 0.0f);
-                        debug_image_cpu(mipmap_level + 1, 0) = Color(nearest_depth);
-
-                        write_image(debug_image_cpu, "debug_image_cpu.png");
+                        write_image_hdr(debug_image_cpu, "debug_image_cpu.hdr");
                     }
                 }
             }

@@ -60,7 +60,6 @@ void Utils::precompute_irradiance_map_from_skysphere_and_write_gpu(const char* s
     write_image_hdr(irradiance_map, output_irradiance_map_path);
 
     std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << "ms --- " << (irradiance_map.width() * irradiance_map.height() * samples) / (float)(std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count()) << "samples/ms" << std::endl;
-    std::exit(0);
 }
 
 Image Utils::precompute_and_load_associated_irradiance(const char* skysphere_file_path, unsigned int samples, unsigned int downscale_factor)
@@ -318,8 +317,8 @@ GLuint Utils::precompute_irradiance_map_from_skysphere_gpu(const char* skysphere
         glUniform1i(u_iteration_uniform_location, i);
         glDispatchCompute(nb_groups_x, nb_groups_y, 1);
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-
         glFinish();
+
         if (i % 16 == 0)
             std::cout << i << " --- " << (float)i / nb_iterations * 100.0f << "%" << std::endl;
     }
