@@ -57,7 +57,6 @@ public:
     void load_mesh_textures_thread_function(const Materials& materials);
 
 	void compute_bounding_boxes_of_groups(std::vector<TriangleGroup>& groups);
-    void compute_bounding_boxes_lines();
     bool rejection_test_bbox_frustum_culling(const CullObject& object, const Transform& mvpMatrix);
     bool rejection_test_bbox_frustum_culling_scene(const CullObject& object, const Transform& inverse_mvp_matrix);
 
@@ -160,8 +159,6 @@ protected:
     //Variables used for the culling (frustum and occlusion)
     GLuint m_z_buffer_mipmaps_texture;
     int m_z_buffer_mipmaps_count;
-    std::vector<std::pair<int, int>> m_z_buffer_mipmaps_widths_heights;//TODO remove, useless now
-    std::vector<float> m_z_buffer_cpu;//TODO remove, useless now
     std::vector<int> m_objects_drawn_last_frame;
     std::vector<CullObject> m_cull_objects;
     GLuint m_occlusion_culling_shader;
@@ -171,7 +168,6 @@ protected:
     GLuint m_culling_passing_ids; //TODO remove (should be able to, not 100% sure though)
     GLuint m_culling_input_object_buffer;
     GLuint m_culling_nb_objects_passed_buffer;
-    GLuint m_debug_variable_buffer;//TODO remove
 
 
 
