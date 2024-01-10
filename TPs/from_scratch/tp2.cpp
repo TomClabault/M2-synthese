@@ -408,7 +408,7 @@ bool TP2::rejection_test_bbox_frustum_culling_scene(const CullObject& object, co
 int debug_frequency = 32;
 int debug_level = -1;
 int debug_counterr = 0;
-int debug_object = 1;
+int debug_object = 2;
 bool TP2::occlusion_cull_cpu(const Transform& mvp_matrix, CullObject& object, int depth_buffer_width, int depth_buffer_height, const std::vector<std::vector<float> >& z_buffer_mipmaps, const std::vector<std::pair<int, int>>& mipmaps_widths_heights, int object_id)
 {
     Point screen_space_bbox_min, screen_space_bbox_max;
@@ -442,7 +442,7 @@ bool TP2::occlusion_cull_cpu(const Transform& mvp_matrix, CullObject& object, in
     //screens space bounding rectangle of the object is approximately 4x4
     int mipmap_level = 0;
     //Getting the biggest axis of the screen space bounding rectangle of the object
-    int largest_extent = std::max(screen_space_bbox_max.x - screen_space_bbox_min.x, screen_space_bbox_max.y - screen_space_bbox_min.y);
+    float largest_extent = std::max(screen_space_bbox_max.x - screen_space_bbox_min.x, screen_space_bbox_max.y - screen_space_bbox_min.y);
     if (largest_extent > 4)
         //Computing the factor needed for the largest extent to be 16 pixels
         mipmap_level = std::log2(std::ceil(largest_extent / 4.0f));
@@ -460,50 +460,23 @@ bool TP2::occlusion_cull_cpu(const Transform& mvp_matrix, CullObject& object, in
     int min_x = std::min((int)std::floor(screen_space_bbox_min.x * reduction_factor_inverse), mipmaps_widths_heights[mipmap_level].first - 1);
     int max_x = std::min((int)std::ceil(screen_space_bbox_max.x * reduction_factor_inverse), mipmaps_widths_heights[mipmap_level].first - 1);
 
-    int debug_index = 5;//TODO remove
-    if (object_id == debug_object)
-    {
-        std::cout << std::endl;
-        std::cout << mipmap_level << ", " << nearest_depth << ", " << min_x << ", " << max_x << ", " << min_y << ", " << max_y;
-    }
     for (int y = min_y; y <= max_y; y++)
     {
         for (int x = min_x; x <= max_x; x++)
         {
             float depth_buffer_depth = mipmap[x + y * mipmaps_widths_heights[mipmap_level].first];
 
-            //TODO remove
-            {
-                if (object_id == debug_object)
-                    std::cout << depth_buffer_depth << " ; ";
-            }
-
             if (depth_buffer_depth >= nearest_depth)
             {
                 //The object needs to be rendered, we can stop here
                 one_pixel_visible = true;
 
-                //TODO remove
-                {
-                    if (object_id == debug_object)
-                    {
-                        ;//std::cout << "breaking on x, y: " << x << ", " << y << std::endl;
-                    }
-                }
                 break;
             }
         }
 
         if (one_pixel_visible)
             break;
-    }
-
-    //TODO remove debug
-    {
-        if (debug_object == object_id)
-        {
-            std::cout << debug_index++ << ": " << nearest_depth << std::endl;
-        }
     }
 
     return !one_pixel_visible;
@@ -531,6 +504,7 @@ void TP2::occlusion_cull_gpu(const Transform& mvp_matrix, GLuint object_ids_to_c
     glUniformMatrix4fv(glGetUniformLocation(m_occlusion_culling_shader, "u_mvpv_matrix"), 1, GL_TRUE, (m_camera.viewport() * mvp_matrix).data());
     glUniformMatrix4fv(glGetUniformLocation(m_occlusion_culling_shader, "u_view_matrix"), 1, GL_TRUE, m_camera.view().data());
     glUniform1i(glGetUniformLocation(m_occlusion_culling_shader, "u_nb_mipmaps"), m_z_buffer_mipmaps_count);
+    glUniform1i(glGetUniformLocation(m_occlusion_culling_shader, "u_nb_objects_to_cull"), number_of_objects_to_cull);
 
     // Binding the z-buffer depth texture to the texture unit 0
     glActiveTexture(GL_TEXTURE0);
@@ -544,6 +518,11 @@ void TP2::occlusion_cull_gpu(const Transform& mvp_matrix, GLuint object_ids_to_c
 
     // Input buffer : the ids of the objects that will be tested for occlusion culling against the current z-buffer
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, object_ids_to_cull_buffer);
+    //TODO remove
+    {
+        std::vector<unsigned int> ids(1024, -1);
+        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int) * 3, ids.data());
+    }
     // Input buffer : the list of cull objects of the scene
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_culling_input_object_buffer);
     // Out buffer : the ids of the objects that passed the culling test
@@ -1369,9 +1348,6 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         draw_multi_draw_indirect_from_ids(objects_to_fill_zbuffer);
         m_objects_drawn_last_frame.clear();
 
-        std::vector<TP2::MultiDrawIndirectParam> draw_params(m_mesh_triangles_group.size());
-        int nb_params;
-
         //Getting the zbuffer
         m_z_buffer_cpu = Utils::get_z_buffer(window_width(), window_height(), m_hdr_framebuffer);
         z_buffer_mipmaps_cpu = Utils::compute_mipmaps(m_z_buffer_cpu, window_width(), window_height(), mipmaps_widths_heights_cpu);
@@ -1599,9 +1575,11 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                             {
                                 //debug_image_cpu(x, y) = Color(1.0, 0.0, 0.0, 1.0);
                                 float depth = (depth_buffer_image_cpu(x, y)).r;
+                                std::cout << depth << " ; ";
                                 if (depth != 1.0f)
                                     depth /= 2.0f;
                                 debug_image_cpu(x, y) = Color(depth);
+
                             }
                         }
 

@@ -43,7 +43,7 @@ layout(std430, binding = 4) buffer nbObjectsDrawnBuffer
     uint nb_passing_objects;
 };
 
-layout(std430, binding = 5) buffer debugVariableBuffer
+layout(std430, binding = 5) buffer debugVariableBuffer //TODO remove debug
 {
     float debug_variable_buffer[];
 };
@@ -56,27 +56,21 @@ layout(std430, binding = 5) buffer debugVariableBuffer
 uniform sampler2D u_z_buffer_mipmap0;
 // All the other mipmaps (1, 2, 3, ......) of the hierarchical z-buffer
 uniform sampler2D u_z_buffer_mipmaps1;
+// How many mipmap levels we have in the hierarchical z buffer
+uniform int u_nb_mipmaps;
 
 uniform mat4 u_mvp_matrix;
 uniform mat4 u_mvpv_matrix;
 uniform mat4 u_view_matrix;
 
+uniform int u_nb_objects_to_cull;
+
+//TODO remove
 layout (binding = 1, rgba32f) uniform writeonly image2D debug_image;
 
-// How many mipmap levels we have in the hierarchical z buffer
-uniform int u_nb_mipmaps;
 
 int get_visibility_of_object_from_camera(CullObject object)
 {
-    if (gl_GlobalInvocationID.x == 1)
-    {
-        debug_variable_buffer[10] = object.min.x;
-        debug_variable_buffer[11] = object.min.y;
-        debug_variable_buffer[12] = object.min.z;
-        debug_variable_buffer[13] = object.min.x;
-        debug_variable_buffer[14] = object.min.y;
-        debug_variable_buffer[15] = object.min.z;
-    }
     vec4 view_space_points_w[8];
 
     //TODO we only need the z coordinate so the whole matrix-point multiplication isn't needed, too slow
@@ -142,10 +136,10 @@ void main()
     //TODO remove
     ivec2 debug_image_size = imageSize(debug_image);
     //TODO remove
-    uint debug_thread_id = 1;
+    uint debug_thread_id = 2;
 
     uint thread_id = gl_GlobalInvocationID.x;
-    if (thread_id >= input_cull_object_ids.length())
+    if (thread_id >= u_nb_objects_to_cull)
         return;
 
     uint object_id = input_cull_object_ids[thread_id];
@@ -262,11 +256,22 @@ void main()
     int debug_index_here;//TODO remove
     if (thread_id == debug_thread_id)
     {
-        debug_variable_buffer[0] = mipmap_dimensions.x;
-        debug_variable_buffer[1] = mipmap_dimensions.y;
-        debug_variable_buffer[2] = largest_extent.x;
-        debug_variable_buffer[3] = mipmap_level;
-        debug_variable_buffer[4] = visibility;
+        debug_variable_buffer[0] = object.min.x;
+        debug_variable_buffer[1] = object.min.y;
+        debug_variable_buffer[2] = object.min.z;
+        debug_variable_buffer[3] = object.max.x;
+        debug_variable_buffer[4] = object.max.y;
+        debug_variable_buffer[5] = object.max.z;
+        debug_variable_buffer[6] = mipmap_dimensions.x;
+        debug_variable_buffer[7] = mipmap_dimensions.y;
+        debug_variable_buffer[8] = largest_extent.x;
+        debug_variable_buffer[9] = mipmap_level;
+        debug_variable_buffer[10] = visibility;
+        debug_variable_buffer[11] = min_x;
+        debug_variable_buffer[12] = max_x;
+        debug_variable_buffer[13] = min_y;
+        debug_variable_buffer[14] = max_y;
+        debug_index_here = 15;
     }
 
     bool one_pixel_visible = false;
@@ -281,6 +286,8 @@ void main()
                 depth_buffer_depth = texelFetch(u_z_buffer_mipmap0, ivec2(x, y), 0).r;
             else
                 depth_buffer_depth = texelFetch(u_z_buffer_mipmaps1, ivec2(x, y), mipmap_level - 1).r;
+            if (thread_id == debug_thread_id)
+                debug_variable_buffer[debug_index_here++] = depth_buffer_depth;
 
             if (depth_buffer_depth >= nearest_depth)
             {
@@ -299,7 +306,7 @@ void main()
     {
         uint index = atomicAdd(nb_passing_objects, 1);
 
-        passing_object_ids[index] = thread_id;
+        passing_object_ids[index] = object_id;
         output_draw_commands[index].vertex_count = object.vertex_count;
         output_draw_commands[index].vertex_base = object.vertex_base;
         output_draw_commands[index].instance_count = 1;
