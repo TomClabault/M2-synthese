@@ -463,7 +463,8 @@ bool TP2::occlusion_cull_cpu(const Transform& mvp_matrix, CullObject& object, in
     int debug_index = 5;//TODO remove
     if (object_id == debug_object)
     {
-        std::cout << nearest_depth << ", " << min_x << ", " << max_x << ", " << min_y << ", " << max_y;
+        std::cout << std::endl;
+        std::cout << mipmap_level << ", " << nearest_depth << ", " << min_x << ", " << max_x << ", " << min_y << ", " << max_y;
     }
     for (int y = min_y; y <= max_y; y++)
     {
@@ -474,7 +475,7 @@ bool TP2::occlusion_cull_cpu(const Transform& mvp_matrix, CullObject& object, in
             //TODO remove
             {
                 if (object_id == debug_object)
-                    std::cout << debug_index++ << ": " << depth_buffer_depth << " ; ";
+                    std::cout << depth_buffer_depth << " ; ";
             }
 
             if (depth_buffer_depth >= nearest_depth)
@@ -616,7 +617,7 @@ void TP2::occlusion_cull_gpu(const Transform& mvp_matrix, GLuint object_ids_to_c
             for (float var : debug_variables)
             {
                 if (var != -1000000.0f)
-                    std::cout << index << ": " << var << " ; ";
+                    std::cout << var << " ; ";
 
                 index++;
             }
@@ -643,10 +644,10 @@ int TP2::init()
 
     //Reading the mesh displayed
     //TIME(m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj"), "Load OBJ Time: ");
-    //TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
+    TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
-    TIME(m_mesh = read_mesh("data/TPs/cube_occlusion_culling.obj"), "Load OBJ Time: ");
+    //TIME(m_mesh = read_mesh("data/TPs/cube_occlusion_culling.obj"), "Load OBJ Time: ");
     if (m_mesh.positions().size() == 0)
     {
         std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -855,8 +856,8 @@ int TP2::init()
 
     Point p_min, p_max;
     m_mesh.bounds(p_min, p_max);
-    m_camera.lookat(p_min, p_max);
-    m_camera.read_orbiter("debug_app_orbiter.txt");
+    //m_camera.lookat(p_min, p_max);
+    //m_camera.read_orbiter("debug_app_orbiter.txt");
 
     if (create_shadow_map() == -1)
         return -1;
@@ -1494,8 +1495,15 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                     {
                         for (int x = 0; x < width; x++)
                         {
-                            depth_buffer_image_gpu(x, y) = Color(z_buffer_from_gpu[x + y * width]);
-                            depth_buffer_image_cpu(x, y) = Color(z_buffer_mipmaps_cpu[level][x + y * width]);
+                            float depth_gpu = z_buffer_from_gpu[x + y * width];
+                            if (depth_gpu != 1.0f)
+                                depth_gpu /= 2.0f;
+                            depth_buffer_image_gpu(x, y) = Color(depth_gpu);
+
+                            float depth_cpu = z_buffer_mipmaps_cpu[level][x + y * width];
+                            if (depth_cpu != 1.0f)
+                                depth_cpu /= 2.0f;
+                            depth_buffer_image_cpu(x, y) = Color(depth_cpu);
                         }
                     }
 
@@ -1576,22 +1584,25 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                         Utils::get_object_screen_space_bounding_box(m_camera.viewport()* mvp_matrix, object, screen_space_bbox_min, screen_space_bbox_max);
 
                         Image debug_image_cpu(window_width(), window_height());
-                        for (int y = 0; y < window_height() * reduction_factor_inverse; y++)
-                        {
-                            for (int x = 0; x < window_width() * reduction_factor_inverse; x++)
-                            {
-                                debug_image_cpu(x, y) = depth_buffer_image_cpu(x, y);
-                            }
-                        }
-
-//                        for (int y = min_y; y <= max_y; y++)
+//                        for (int y = 0; y < window_height() * reduction_factor_inverse; y++)
 //                        {
-//                            for (int x = min_x; x <= max_x; x++)
+//                            for (int x = 0; x < window_width() * reduction_factor_inverse; x++)
 //                            {
-//                                //debug_image_cpu(x, y) = Color(1.0, 0.0, 0.0, 1.0);
-//                                debug_image_cpu(x - min_x, y - min_y) = Color((depth_buffer_image_cpu(x, y)).r);
+//                                debug_image_cpu(x, y) = depth_buffer_image_cpu(x, y);
 //                            }
 //                        }
+
+                        for (int y = min_y; y <= max_y; y++)
+                        {
+                            for (int x = min_x; x <= max_x; x++)
+                            {
+                                //debug_image_cpu(x, y) = Color(1.0, 0.0, 0.0, 1.0);
+                                float depth = (depth_buffer_image_cpu(x, y)).r;
+                                if (depth != 1.0f)
+                                    depth /= 2.0f;
+                                debug_image_cpu(x, y) = Color(depth);
+                            }
+                        }
 
                         write_image_hdr(debug_image_cpu, "debug_image_cpu.hdr");
                     }

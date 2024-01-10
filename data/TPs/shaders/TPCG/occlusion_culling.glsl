@@ -190,28 +190,30 @@ void main()
     int max_x = min(int(ceil(screen_space_bbox_max.x * reduction_factor_inverse)), mipmap_dimensions.x - 1);
 
     //TODO remove. this is debug to copy the mipmap in the debug image
+    /*
     if (thread_id == debug_thread_id)
     {
         for (int y = 0; y < mipmap_dimensions.y; y++)
         {
             for ( int x = 0; x < mipmap_dimensions.x; x++)
             {
-                vec2 uv = ivec2(x, y) / mipmap_dimensions;
+                vec2 uv = vec2(x, y) / mipmap_dimensions;
                 float depth;
                 if (mipmap_level == 0)
-                    depth = texture(u_z_buffer_mipmap0, uv + half_mipmap_dudv).r;
+                    //depth = texture(u_z_buffer_mipmap0, uv + half_mipmap_dudv).r;
+                    depth = texelFetch(u_z_buffer_mipmap0, ivec2(x, y), 0).r;
                 else
-                    depth = textureLod(u_z_buffer_mipmaps1, uv + half_mipmap_dudv, mipmap_level - 1).r;
+                    //depth = textureLod(u_z_buffer_mipmaps1, uv + half_mipmap_dudv, mipmap_level - 1).r;
+                    depth = texelFetch(u_z_buffer_mipmaps1, ivec2(x, y), mipmap_level - 1).r;
 
+                if (depth != 1.0f)
+                    depth /= 2.0f;
                 imageStore(debug_image, ivec2(x, y), vec4(vec3(depth), 1.0f));
             }
         }
-
-        return;
     }
 
     //TODO remove this is debug to print the mipmap level at the bottom as one single pixel
-    /*
     if (thread_id == debug_thread_id)
     {
         for (int y = min_y; y <= max_y; y++)
@@ -253,12 +255,13 @@ void main()
     int debug_index_here;//TODO remove
     if (thread_id == debug_thread_id)
     {
-        debug_variable_buffer[0] = nearest_depth;
-        debug_variable_buffer[1] = min_x;
-        debug_variable_buffer[2] = max_x;
-        debug_variable_buffer[3] = min_y;
-        debug_variable_buffer[4] = max_y;
-        debug_index_here = 5;
+        debug_variable_buffer[0] = mipmap_level;
+        debug_variable_buffer[1] = nearest_depth;
+        debug_variable_buffer[2] = min_x;
+        debug_variable_buffer[3] = max_x;
+        debug_variable_buffer[4] = min_y;
+        debug_variable_buffer[5] = max_y;
+        debug_index_here = 6;
     }
 
     bool one_pixel_visible = false;
@@ -270,14 +273,17 @@ void main()
             vec2 pixel_uv = vec2(x, y) / vec2(mipmap_dimensions);
 
             if (mipmap_level == 0)
-                depth_buffer_depth = texture(u_z_buffer_mipmap0, pixel_uv + half_mipmap_dudv).r;
+                depth_buffer_depth = texelFetch(u_z_buffer_mipmap0, ivec2(x, y), 0).r;
             else
-                depth_buffer_depth = textureLod(u_z_buffer_mipmaps1, pixel_uv + half_mipmap_dudv, mipmap_level - 1).r;
+                depth_buffer_depth = texelFetch(u_z_buffer_mipmaps1, ivec2(x, y), mipmap_level - 1).r;
 
             //TODO remove debug
             {
                 if (thread_id == debug_thread_id)
+                {
                     debug_variable_buffer[debug_index_here++] = depth_buffer_depth;
+                    imageStore(debug_image, ivec2(x, y), vec4(vec3(depth_buffer_depth), 1.0f));
+                }
             }
                 
             if (depth_buffer_depth >= nearest_depth)

@@ -310,8 +310,7 @@ GLuint Utils::precompute_irradiance_map_from_skysphere_gpu(const char* skysphere
     int nb_groups_y = std::ceil(skysphere_image.height() / (float)threads[1]);
     glUseProgram(irradiance_map_precomputation_shader);
 
-    //To avoid the compute shader timeout, we're going to do several iterations
-    //of 64 samples
+    //To avoid the compute shader timeout, we're going to accumulate several iterations
     for (int i = 0; i < nb_iterations; i++)
     {
         glUniform1i(u_iteration_uniform_location, i);
