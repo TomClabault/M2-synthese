@@ -408,7 +408,7 @@ bool TP2::rejection_test_bbox_frustum_culling_scene(const CullObject& object, co
 int debug_frequency = 32;
 int debug_level = -1;
 int debug_counterr = 0;
-int debug_object = 2;
+int debug_object = 1;
 bool TP2::occlusion_cull_cpu(const Transform& mvp_matrix, CullObject& object, int depth_buffer_width, int depth_buffer_height, const std::vector<std::vector<float> >& z_buffer_mipmaps, const std::vector<std::pair<int, int>>& mipmaps_widths_heights, int object_id)
 {
     Point screen_space_bbox_min, screen_space_bbox_max;
@@ -631,6 +631,7 @@ void TP2::occlusion_cull_gpu(const Transform& mvp_matrix, GLuint object_ids_to_c
 
 int TP2::init()
 {
+    std::cout << "eherhehrherher";
     //Setting ImGUI up
     ImGui::CreateContext();
 
@@ -644,10 +645,10 @@ int TP2::init()
 
     //Reading the mesh displayed
     //TIME(m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj"), "Load OBJ Time: ");
-    TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
+    //TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
-    //TIME(m_mesh = read_mesh("data/TPs/cube_occlusion_culling.obj"), "Load OBJ Time: ");
+    TIME(m_mesh = read_mesh("data/TPs/cube_occlusion_culling.obj"), "Load OBJ Time: ");
     if (m_mesh.positions().size() == 0)
     {
         std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -856,8 +857,8 @@ int TP2::init()
 
     Point p_min, p_max;
     m_mesh.bounds(p_min, p_max);
-    //m_camera.lookat(p_min, p_max);
-    //m_camera.read_orbiter("debug_app_orbiter.txt");
+    m_camera.lookat(p_min, p_max);
+    m_camera.read_orbiter("debug_app_orbiter.txt");
 
     if (create_shadow_map() == -1)
         return -1;
@@ -918,7 +919,7 @@ void TP2::create_z_buffer_mipmaps_textures(int width, int height)
     glGenerateMipmap(GL_TEXTURE_2D);
 
     //How many mipmaps we're actually going to use
-    m_z_buffer_mipmaps_count = 0;
+    m_z_buffer_mipmaps_count = 1; // Counting the level 0
     while (width > 4 && height > 4)//Stop at a 4*4 mipmap
     {
         width = std::max(1, width / 2);

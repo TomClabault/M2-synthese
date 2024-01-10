@@ -68,6 +68,15 @@ uniform int u_nb_mipmaps;
 
 int get_visibility_of_object_from_camera(CullObject object)
 {
+    if (gl_GlobalInvocationID.x == 1)
+    {
+        debug_variable_buffer[10] = object.min.x;
+        debug_variable_buffer[11] = object.min.y;
+        debug_variable_buffer[12] = object.min.z;
+        debug_variable_buffer[13] = object.min.x;
+        debug_variable_buffer[14] = object.min.y;
+        debug_variable_buffer[15] = object.min.z;
+    }
     vec4 view_space_points_w[8];
 
     //TODO we only need the z coordinate so the whole matrix-point multiplication isn't needed, too slow
@@ -133,7 +142,7 @@ void main()
     //TODO remove
     ivec2 debug_image_size = imageSize(debug_image);
     //TODO remove
-    uint debug_thread_id = 2;
+    uint debug_thread_id = 1;
 
     uint thread_id = gl_GlobalInvocationID.x;
     if (thread_id >= input_cull_object_ids.length())
@@ -190,7 +199,6 @@ void main()
     int max_x = min(int(ceil(screen_space_bbox_max.x * reduction_factor_inverse)), mipmap_dimensions.x - 1);
 
     //TODO remove. this is debug to copy the mipmap in the debug image
-    /*
     if (thread_id == debug_thread_id)
     {
         for (int y = 0; y < mipmap_dimensions.y; y++)
@@ -213,6 +221,7 @@ void main()
         }
     }
 
+    /*
     //TODO remove this is debug to print the mipmap level at the bottom as one single pixel
     if (thread_id == debug_thread_id)
     {
@@ -247,21 +256,17 @@ void main()
 
     if (thread_id == debug_thread_id)
     {
-        imageStore(debug_image, ivec2(mipmap_level, 0), vec4(vec3(1.0f, 1.0f, 0.0f), 1.0f));
-        imageStore(debug_image, ivec2(mipmap_level + 1, 0), vec4(vec3(nearest_depth), 1.0f));
-        imageStore(debug_image, ivec2(largest_extent, 0), vec4(vec3(1.0f), 1.0f));
+        imageStore(debug_image, ivec2(mipmap_level, 1), vec4(vec3(1.0f, 0.0f, 0.0f), 1.0f));
     }
     
     int debug_index_here;//TODO remove
     if (thread_id == debug_thread_id)
     {
-        debug_variable_buffer[0] = mipmap_level;
-        debug_variable_buffer[1] = nearest_depth;
-        debug_variable_buffer[2] = min_x;
-        debug_variable_buffer[3] = max_x;
-        debug_variable_buffer[4] = min_y;
-        debug_variable_buffer[5] = max_y;
-        debug_index_here = 6;
+        debug_variable_buffer[0] = mipmap_dimensions.x;
+        debug_variable_buffer[1] = mipmap_dimensions.y;
+        debug_variable_buffer[2] = largest_extent.x;
+        debug_variable_buffer[3] = mipmap_level;
+        debug_variable_buffer[4] = visibility;
     }
 
     bool one_pixel_visible = false;
@@ -277,15 +282,6 @@ void main()
             else
                 depth_buffer_depth = texelFetch(u_z_buffer_mipmaps1, ivec2(x, y), mipmap_level - 1).r;
 
-            //TODO remove debug
-            {
-                if (thread_id == debug_thread_id)
-                {
-                    debug_variable_buffer[debug_index_here++] = depth_buffer_depth;
-                    imageStore(debug_image, ivec2(x, y), vec4(vec3(depth_buffer_depth), 1.0f));
-                }
-            }
-                
             if (depth_buffer_depth >= nearest_depth)
             {
                 //The object needs to be rendered, we can stop here
