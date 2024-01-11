@@ -64,7 +64,7 @@ public:
 	void setup_roughness_uniform(const float roughness);
 
     GLuint create_opengl_texture(std::string& filepath, int GL_tex_format, float anisotropy = 0.0f);
-    void load_mesh_textures_thread_function(const Materials& materials);
+    std::vector<TP2::CookTorranceMaterial> load_and_create_textures();
 
 	void compute_bounding_boxes_of_groups(std::vector<TriangleGroup>& groups);
     bool rejection_test_bbox_frustum_culling(const CullObject& object, const Transform& mvpMatrix);
@@ -124,9 +124,9 @@ public:
 	inline static const int SKYBOX_UNIT = 0;
 	inline static const int SKYSPHERE_UNIT = 1;
 	inline static const int DIFFUSE_IRRADIANCE_MAP_UNIT = 2;
-    inline static const int TRIANGLE_GROUP_BASE_COLOR_TEXTURE_UNIT = 3;
-    inline static const int TRIANGLE_GROUP_SPECULAR_TEXTURE_UNIT = 4;
-    inline static const int TRIANGLE_GROUP_NORMAL_MAP_UNIT = 5;
+    inline static const int BASE_COLOR_TEXTURE_ARRAY_UNIT = 3;
+    inline static const int PECULAR_TEXTURE_ARRAY_UNIT = 4;
+    inline static const int NORMAL_MAP_TEXTURE_ARRAY_UNIT = 5;
     inline static const int SHADOW_MAP_UNIT = 6;
 
     inline static const Transform LIGHT_CAMERA_ORTHO_PROJ_BISTRO = Ortho(-60, 90, -80, 110, 50, 190);
@@ -145,9 +145,9 @@ protected:
 
     //Variables used for mesh rendering
     std::vector<TriangleGroup> m_mesh_triangles_group;
-    std::vector<GLuint> m_mesh_base_color_textures; //TODO remove because now using glTextureArray2D
-    std::vector<GLuint> m_mesh_specular_textures; //TODO remove because now using glTextureArray2D
-    std::vector<GLuint> m_mesh_normal_maps; //TODO remove because now using glTextureArray2D
+    GLuint m_diffuse_texture_array;
+    GLuint m_specular_texture_array;
+    GLuint m_normal_map_texture_array;
     GLuint m_materials_buffer;
     GLuint m_default_texture;
 	GLuint m_cubemap_vao;

@@ -152,37 +152,102 @@ GLuint TP2::create_opengl_texture(std::string& filepath, int GL_tex_format, floa
     return texture_id;
 }
 
-void TP2::load_mesh_textures_thread_function(const Materials& materials)
+std::vector<TP2::CookTorranceMaterial> TP2::load_and_create_textures()
 {
-    m_mesh_base_color_textures.resize(materials.count());
-    for (const Material& mat : materials.materials)
+    m_mesh_triangles_group = m_mesh.groups();
+
+    std::vector<TP2::CookTorranceMaterial> materials_buffer;
+    // Counters used to keep track of the current index of the texture we're going
+    // to use in the texture2DArray
+    std::vector<ImageData> diffuse_textures, specular_textures, normal_maps_textures;
+    int index_diffuse_texture = 0, index_specular_texture = 0, index_normal_map = 0;
+    for (Material& mat : m_mesh.materials().materials)
     {
         int diffuse_texture_index = mat.diffuse_texture;
+        int specular_texture_index = mat.specular_texture;
+        int normal_map_index = mat.normal_map;
+
+        ImageData diffuse_color_texture_data;
+        ImageData specular_texture_data;
+
         if (diffuse_texture_index != -1)
         {
-            std::string texture_file_path = materials.texture_filenames[diffuse_texture_index];
-
-            std::string texture_file_path_full = texture_file_path;
-            ImageData texture_data = read_image_data(texture_file_path_full.c_str());
-
-            GLuint texture_id;
-            glGenTextures(1, &texture_id);
-            glBindTexture(GL_TEXTURE_2D, texture_id);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-                         texture_data.width, texture_data.height, 0,
-                         texture_data.channels == 3 ? GL_RGB : GL_RGBA, GL_UNSIGNED_BYTE,
-                         texture_data.data());
-
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_BORDER);
-
-            glGenerateMipmap(GL_TEXTURE_2D);
-
-            m_mesh_base_color_textures[diffuse_texture_index] = texture_id;
+            diffuse_color_texture_data = read_image_data(m_mesh.materials().texture_filenames[diffuse_texture_index].c_str());
         }
+
+        if (specular_texture_index != -1)
+        {
+            specular_texture_data = read_image_data(m_mesh.materials().texture_filenames[specular_texture_index].c_str());
+        }
+
+        if (normal_map_index != -1)
+            normal_maps_textures.push_back(read_image_data(m_mesh.materials().texture_filenames[normal_map_index].c_str()));
+
+        TP2::CookTorranceMaterial cook_torrance_material;
+        cook_torrance_material.base_color_texture_id = diffuse_texture_index;
+        cook_torrance_material.specular_texture_id = specular_texture_index;
+        cook_torrance_material.normal_map_texture_id = normal_map_index;
+
+        // If the diffuse or specular texture is 16x16, this means (in the case
+        // of the bistro scene) that the texture is only a single color
+        // We're thus going to not use a 16x16 OpenGL texture for that but
+        // rather a single vec3 (since the whole 16x16 texture is a single color
+        // anyway)
+        if (diffuse_color_texture_data.width == 16)
+        {
+            vec3 base_color;
+            base_color.x = diffuse_color_texture_data.pixels[0];
+            base_color.x = diffuse_color_texture_data.pixels[1];
+            base_color.x = diffuse_color_texture_data.pixels[2];
+            cook_torrance_material.base_color = base_color;
+
+            // This texture does not count as a texture
+            index_diffuse_texture--;
+        }
+        else
+            // Pushing the texture in a temporary array that will be used to populate the
+            // OpenGL texture2DArray later
+            diffuse_textures.push_back(diffuse_color_texture_data);
+
+        if (specular_texture_data.width == 16)
+        {
+            // The metalness is in the blue channel of the texture and the
+            // roughness is in the green channel
+            float metalness, roughness;
+            metalness = specular_texture_data.pixels[2];
+            roughness = specular_texture_data.pixels[1];
+
+            cook_torrance_material.metalness = metalness;
+            cook_torrance_material.roughness = roughness;
+
+            // This texture does not count as a specular texture
+            index_specular_texture--;
+        }
+        else
+            // Pushing the texture in a temporary array that will be used to populate the
+            // OpenGL texture2DArray later
+            specular_textures.push_back(specular_texture_data);
     }
+
+    glGenTextures(1, &textureBuffer);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, textureBuffer);
+    int texW, texH;
+    texW = texH = 1024;
+    glTexStorage3D(GL_TEXTURE_2D_ARRAY, 1, GL_RGBA8, texW, texH, materials.filename_count());
+    for (size_t i = 0; i < materials.filename_count(); i++) {
+        ImageData image = read_image_data(materials.filename(i));
+        glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i, texW, texH, 1, GL_RGBA, GL_UNSIGNED_BYTE, image.data());
+    }
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+
+    glGenTextures(1, &m_diffuse_texture_array);
+    glGenTextures(1, &m_specular_texture_array);
+    glGenTextures(1, &m_normal_map_texture_array);
 }
 
 void TP2::compute_bounding_boxes_of_groups(std::vector<TriangleGroup>& groups)
@@ -503,14 +568,14 @@ int TP2::init()
     GLint use_irradiance_map_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_use_irradiance_map");
     glUniform1i(use_irradiance_map_location, m_application_settings.use_irradiance_map);
 
-    GLint base_color_texture_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_mesh_base_color_texture");
-    glUniform1i(base_color_texture_uniform_location, TP2::TRIANGLE_GROUP_BASE_COLOR_TEXTURE_UNIT);
+    GLint base_color_texture_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_base_color_texture_array");
+    glUniform1i(base_color_texture_uniform_location, TP2::BASE_COLOR_TEXTURE_ARRAY_UNIT);
 
-    GLint specular_texture_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_mesh_specular_texture");
-    glUniform1i(specular_texture_uniform_location, TP2::TRIANGLE_GROUP_SPECULAR_TEXTURE_UNIT);
+    GLint specular_texture_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_specular_texture_array");
+    glUniform1i(specular_texture_uniform_location, TP2::PECULAR_TEXTURE_ARRAY_UNIT);
 
-    GLint normal_map_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_mesh_normal_map");
-    glUniform1i(normal_map_uniform_location, TP2::TRIANGLE_GROUP_NORMAL_MAP_UNIT);
+    GLint normal_map_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_normal_map_texture_array");
+    glUniform1i(normal_map_uniform_location, TP2::NORMAL_MAP_TEXTURE_ARRAY_UNIT);
 
     m_shadow_map_program = read_program("data/TPs/shaders/shader_shadow_map.glsl");
     program_print_errors(m_shadow_map_program);
@@ -536,70 +601,7 @@ int TP2::init()
     //std::thread texture_thread(&TP2::load_mesh_textures_thread_function, this, std::ref(m_mesh.materials()));
 
     auto start = std::chrono::high_resolution_clock::now();
-    m_mesh_triangles_group = m_mesh.groups();
-    m_mesh_base_color_textures.resize(m_mesh.materials().filename_count());
-    m_mesh_specular_textures.resize(m_mesh.materials().filename_count());
-    m_mesh_normal_maps.resize(m_mesh.materials().filename_count());
-    std::vector<TP2::CookTorranceMaterial> materials_buffer;
-    for (Material& mat : m_mesh.materials().materials)
-    {
-        int diffuse_texture_index = mat.diffuse_texture;
-        int specular_texture_index = mat.specular_texture;
-        int normal_map_index = mat.normal_map;
-
-        ImageData diffuse_color_texture_data;
-        ImageData specular_texture_data;
-        ImageData normal_map_texture_data;
-
-        if (diffuse_texture_index != -1)
-        {
-            //TODO create texture arrays
-            diffuse_color_texture_data = m_mesh.materials().texture_filenames[diffuse_texture_index];
-            if (diffuse_color_texture_data.width == 16)
-                diffuse_texture_index = -1;
-        }
-
-        if (specular_texture_index != -1)
-        {
-            specular_texture_data = m_mesh.materials().texture_filenames[specular_texture_index];
-            if (specular_texture_data.width == 16)
-                specular_texture_index = -1;
-        }
-
-        if (normal_map_index != -1)
-            normal_map_texture_data = m_mesh.materials().texture_filenames[normal_map_index];
-
-        TP2::CookTorranceMaterial cook_torrance_material;
-        cook_torrance_material.base_color_texture_id = diffuse_texture_index;
-        cook_torrance_material.specular_texture_id = specular_texture_index;
-        cook_torrance_material.normal_map_texture_id = normal_map_index;
-
-        // If the diffuse or specular texture is 16x16, this means (in the case
-        // of the bistro scene) that the texture is only a single color
-        // We're thus going to not use a 16x16 OpenGL texture for that but
-        // rather a single vec3 (since the whole 16x16 texture is a single color
-        // anyway)
-        if (cook_torrance_material.base_color_texture_id == -1)
-        {
-            vec3 base_color;
-            base_color.x = diffuse_color_texture_data.pixels[0];
-            base_color.x = diffuse_color_texture_data.pixels[1];
-            base_color.x = diffuse_color_texture_data.pixels[2];
-            cook_torrance_material.base_color = base_color;
-        }
-
-        if (cook_torrance_material.specular_texture_id == -1)
-        {
-            // The metalness is in the blue channel of the texture and the
-            // roughness is in the green channel
-            float metalness, roughness;
-            metalness = specular_texture_data[0].z;
-            roughness = specular_texture_data[0].y;
-
-            cook_torrance_material.metalness = metalness;
-            cook_torrance_material.roughness = roughness;
-        }
-    }
+    std::vector<TP2::CookTorranceMaterial> materials_buffer = load_and_create_textures();
     auto stop = std::chrono::high_resolution_clock::now();
     std::cout << "Texture loading time: " << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << "ms" << std::endl;
 
@@ -886,7 +888,7 @@ std::vector<TP2::MultiDrawIndirectParam> TP2::generate_draw_params_from_object_i
 
 void TP2::draw_by_groups_cpu_frustum_culling(const Transform& vp_matrix, const Transform& mvp_matrix_inverse)
 {
-    m_mesh_groups_drawn = 0;
+    /*m_mesh_groups_drawn = 0;
 
     GLint has_normal_map_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_has_normal_map");
     for (TriangleGroup& group : m_mesh_triangles_group)
@@ -902,26 +904,26 @@ void TP2::draw_by_groups_cpu_frustum_culling(const Transform& vp_matrix, const T
                 if (diffuse_texture_index != -1)
                 {
                     GLuint group_base_color_texture_id = m_mesh_base_color_textures[diffuse_texture_index];
-                    glActiveTexture(GL_TEXTURE0 + TP2::TRIANGLE_GROUP_BASE_COLOR_TEXTURE_UNIT);
+                    glActiveTexture(GL_TEXTURE0 + TP2::BASE_COLOR_TEXTURE_ARRAY_UNIT);
                     glBindTexture(GL_TEXTURE_2D, group_base_color_texture_id);
                 }
                 else
                 {
-                    glActiveTexture(GL_TEXTURE0 + TP2::TRIANGLE_GROUP_BASE_COLOR_TEXTURE_UNIT);
+                    glActiveTexture(GL_TEXTURE0 + TP2::BASE_COLOR_TEXTURE_ARRAY_UNIT);
                     glBindTexture(GL_TEXTURE_2D, m_default_texture);
                 }
 
                 if (specular_texture_index != -1)
                 {
                     GLuint group_specular_texture_id = m_mesh_specular_textures[specular_texture_index];
-                    glActiveTexture(GL_TEXTURE0 + TP2::TRIANGLE_GROUP_SPECULAR_TEXTURE_UNIT);
+                    glActiveTexture(GL_TEXTURE0 + TP2::PECULAR_TEXTURE_ARRAY_UNIT);
                     glBindTexture(GL_TEXTURE_2D, group_specular_texture_id);
                 }
 
                 if (normal_map_index != -1)
                 {
                     GLuint group_normal_map_id = m_mesh_normal_maps[normal_map_index];
-                    glActiveTexture(GL_TEXTURE0 + TP2::TRIANGLE_GROUP_NORMAL_MAP_UNIT);
+                    glActiveTexture(GL_TEXTURE0 + TP2::NORMAL_MAP_TEXTURE_ARRAY_UNIT);
                     glBindTexture(GL_TEXTURE_2D, group_normal_map_id);
 
                     glUniform1i(has_normal_map_uniform_location, 1);
@@ -934,7 +936,10 @@ void TP2::draw_by_groups_cpu_frustum_culling(const Transform& vp_matrix, const T
                 m_mesh_groups_drawn++;
             }
         }
-    }
+    }*/
+
+    std::cerr << "The implementation of draw_by_groups_cpu_frustum_culling() is not valid anymore since the implementation of texture arrays";
+    std::exit(-1);
 }
 
 void TP2::draw_multi_draw_indirect_from_ids(const std::vector<int>& object_ids)
@@ -1057,7 +1062,7 @@ void TP2::cpu_mdi_selective_frustum_culling(const std::vector<int>& objects_id, 
         //The object has not been culled, we're going to push the params
         //for the object to be drawn by the future MDI call
         TP2::MultiDrawIndirectParam object_draw_params;
-        object_draw_params.instance_base = objects_id;
+        object_draw_params.instance_base = object_id;
         object_draw_params.instance_count = 1;
         object_draw_params.vertex_base = m_cull_objects[object_id].vertex_base;
         object_draw_params.vertex_count = m_cull_objects[object_id].vertex_count;

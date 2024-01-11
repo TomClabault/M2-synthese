@@ -45,9 +45,9 @@ uniform bool u_use_irradiance_map;
 
 uniform sampler2D u_irradiance_map;
 
-uniform sampler2DArray u_base_color_textures;
-uniform sampler2DArray u_specular_textures;
-uniform sampler2DArray u_normal_map_textures;
+uniform sampler2DArray u_base_color_texture_array;
+uniform sampler2DArray u_specular_texture_array;
+uniform sampler2DArray u_normal_map_texture_array;
 
 struct Material
 {
