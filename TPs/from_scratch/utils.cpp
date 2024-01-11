@@ -1,5 +1,6 @@
 #include "image_hdr.h"
 #include "mat.h"
+#include "program.h"
 #include "tp.h"
 #include "utils.h"
 #include "vec.h"

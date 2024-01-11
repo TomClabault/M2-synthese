@@ -5,7 +5,6 @@
 #include "application_settings.h"
 #include "application_state.h"
 #include "application_timer.h"
-#include "line.h"
 #include "image_io.h"
 #include "imgui.h"
 #include "imgui_impl_sdl_gl3.h"
@@ -132,7 +131,6 @@ protected:
 	//Mesh m_repere;
 	Mesh m_mesh;
     int m_mesh_groups_drawn;
-    Lines m_bbox_lines;
 
     //Variables used for mesh rendering
     std::vector<TriangleGroup> m_mesh_triangles_group;

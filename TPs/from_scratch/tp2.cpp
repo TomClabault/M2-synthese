@@ -896,11 +896,11 @@ void TP2::draw_multi_draw_indirect_from_ids(const std::vector<int>& object_ids)
     //Preparing the multi draw indirect params
     std::vector<TP2::MultiDrawIndirectParam> draw_params = generate_draw_params_from_object_ids(object_ids);
 
-    int nb_params;
+    int nb_params = draw_params.size();
     glBindBuffer(GL_PARAMETER_BUFFER_ARB, m_culling_nb_objects_passed_buffer);
-    glGetBufferSubData(GL_PARAMETER_BUFFER_ARB, 0, sizeof(unsigned int), &nb_params);
+    glBufferSubData(GL_PARAMETER_BUFFER_ARB, 0, sizeof(unsigned int), &nb_params);
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_mdi_draw_params_buffer);
-    glBufferSubData(GL_DRAW_INDIRECT_BUFFER, 0, sizeof(TP2::MultiDrawIndirectParam) * nb_params, draw_params.data());
+    glBufferSubData(GL_DRAW_INDIRECT_BUFFER, 0, sizeof(TP2::MultiDrawIndirectParam) * draw_params.size(), draw_params.data());
     glMultiDrawArraysIndirectCountARB(GL_TRIANGLES, 0, 0, m_cull_objects.size(), 0);
 
     //TODO we should be using this code below instead of interacting with GL_PARAMETER_BUFFER_ARB buffer
@@ -918,13 +918,13 @@ void TP2::cpu_mdi_selective_frustum_culling(const std::vector<int>& objects_id, 
     std::array<vec4, 8> frustum_points_projective_space
     {
         vec4(-1, -1, -1, 1),
-                vec4(1, -1, -1, 1),
-                vec4(-1, 1, -1, 1),
-                vec4(1, 1, -1, 1),
-                vec4(-1, -1, 1, 1),
-                vec4(1, -1, 1, 1),
-                vec4(-1, 1, 1, 1),
-                vec4(1, 1, 1, 1)
+        vec4(1, -1, -1, 1),
+        vec4(-1, 1, -1, 1),
+        vec4(1, 1, -1, 1),
+        vec4(-1, -1, 1, 1),
+        vec4(1, -1, 1, 1),
+        vec4(-1, 1, 1, 1),
+        vec4(1, 1, 1, 1)
     };
 
     for (int i = 0; i < 8; i++)
@@ -1124,7 +1124,8 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_objects_id_to_draw);
         glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int) * m_mesh_groups_drawn, objects_to_draw.data());
 
-        m_objects_drawn_last_frame = objects_to_draw;
+        m_objects_drawn_last_frame.resize(m_mesh_groups_drawn);
+        std::copy(objects_to_draw.begin(), objects_to_draw.end(), m_objects_drawn_last_frame.begin());
 
         if (objects_to_draw.size() > 0)
         {
@@ -1133,7 +1134,6 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
             //culling compute shaders
             glUseProgram(m_texture_shadow_cook_torrance_shader);
             draw_multi_draw_indirect_from_ids(objects_to_draw);
-            m_mesh_groups_drawn = m_objects_drawn_last_frame.size();
         }
     }
     else
@@ -1174,9 +1174,7 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         //are visible
         glUseProgram(m_texture_shadow_cook_torrance_shader);
         draw_multi_draw_indirect_from_ids(objects_to_fill_zbuffer);
-        m_objects_drawn_last_frame.clear();
 
-        //We're drawing in the HDR framebuffer so the z-buffer is there
         Utils::compute_mipmaps_gpu(m_hdr_depth_buffer_texture, window_width(), window_height(), m_z_buffer_mipmaps_texture);
         occlusion_cull_gpu(mvp_matrix, m_culling_objects_id_to_draw, nb_accepted_objects);
 
@@ -1187,6 +1185,7 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         // Now that the occlusion culling on the GPU has filled the buffer with
         // the ids of the object that are going to be drawn, we can use this buffer
         // to fill the objects_drawn_last_frame buffer
+        m_objects_drawn_last_frame.resize(m_mesh_groups_drawn);
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_objects_id_to_draw);
         glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, m_mesh_groups_drawn * sizeof(unsigned int), m_objects_drawn_last_frame.data());
 
