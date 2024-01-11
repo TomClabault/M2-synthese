@@ -491,8 +491,6 @@ int TP2::init()
     glDepthFunc(GL_LEQUAL);                       // ztest, conserver l'intersection la plus proche de la camera
     glEnable(GL_DEPTH_TEST);                    // activer le ztest
 
-
-
     m_fullscreen_quad_texture_shader = read_program("data/TPs/shaders/shader_fullscreen_quad_texture.glsl");
     program_print_errors(m_fullscreen_quad_texture_shader);
 
@@ -537,34 +535,69 @@ int TP2::init()
     //Loading the textures on another thread
     //std::thread texture_thread(&TP2::load_mesh_textures_thread_function, this, std::ref(m_mesh.materials()));
 
-    //TODO sur un thread
     auto start = std::chrono::high_resolution_clock::now();
     m_mesh_triangles_group = m_mesh.groups();
     m_mesh_base_color_textures.resize(m_mesh.materials().filename_count());
     m_mesh_specular_textures.resize(m_mesh.materials().filename_count());
     m_mesh_normal_maps.resize(m_mesh.materials().filename_count());
+    std::vector<TP2::CookTorranceMaterial> materials_buffer;
     for (Material& mat : m_mesh.materials().materials)
     {
         int diffuse_texture_index = mat.diffuse_texture;
         int specular_texture_index = mat.specular_texture;
         int normal_map_index = mat.normal_map;
 
+        ImageData diffuse_color_texture_data;
+        ImageData specular_texture_data;
+        ImageData normal_map_texture_data;
+
         if (diffuse_texture_index != -1)
         {
-            GLuint texture_id = create_opengl_texture(m_mesh.materials().texture_filenames[diffuse_texture_index], GL_SRGB_ALPHA);
-            m_mesh_base_color_textures[diffuse_texture_index] = texture_id;
+            //TODO create texture arrays
+            diffuse_color_texture_data = m_mesh.materials().texture_filenames[diffuse_texture_index];
+            if (diffuse_color_texture_data.width == 16)
+                diffuse_texture_index = -1;
         }
 
         if (specular_texture_index != -1)
         {
-            GLuint texture_id = create_opengl_texture(m_mesh.materials().texture_filenames[specular_texture_index], GL_RGB);
-            m_mesh_specular_textures[specular_texture_index] = texture_id;
+            specular_texture_data = m_mesh.materials().texture_filenames[specular_texture_index];
+            if (specular_texture_data.width == 16)
+                specular_texture_index = -1;
         }
 
         if (normal_map_index != -1)
+            normal_map_texture_data = m_mesh.materials().texture_filenames[normal_map_index];
+
+        TP2::CookTorranceMaterial cook_torrance_material;
+        cook_torrance_material.base_color_texture_id = diffuse_texture_index;
+        cook_torrance_material.specular_texture_id = specular_texture_index;
+        cook_torrance_material.normal_map_texture_id = normal_map_index;
+
+        // If the diffuse or specular texture is 16x16, this means (in the case
+        // of the bistro scene) that the texture is only a single color
+        // We're thus going to not use a 16x16 OpenGL texture for that but
+        // rather a single vec3 (since the whole 16x16 texture is a single color
+        // anyway)
+        if (cook_torrance_material.base_color_texture_id == -1)
         {
-            GLuint texture_id = create_opengl_texture(m_mesh.materials().texture_filenames[normal_map_index], GL_RGB);
-            m_mesh_normal_maps[normal_map_index] = texture_id;
+            vec3 base_color;
+            base_color.x = diffuse_color_texture_data.pixels[0];
+            base_color.x = diffuse_color_texture_data.pixels[1];
+            base_color.x = diffuse_color_texture_data.pixels[2];
+            cook_torrance_material.base_color = base_color;
+        }
+
+        if (cook_torrance_material.specular_texture_id == -1)
+        {
+            // The metalness is in the blue channel of the texture and the
+            // roughness is in the green channel
+            float metalness, roughness;
+            metalness = specular_texture_data[0].z;
+            roughness = specular_texture_data[0].y;
+
+            cook_torrance_material.metalness = metalness;
+            cook_torrance_material.roughness = roughness;
         }
     }
     auto stop = std::chrono::high_resolution_clock::now();
@@ -619,6 +652,14 @@ int TP2::init()
     glEnableVertexAttribArray(normal_attribute);
     glVertexAttribPointer(texcoord_attribute, /* size */ 2, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ (GLvoid*)(position_size + normal_size));
     glEnableVertexAttribArray(texcoord_attribute);
+    // Configuring the gl_InstanceID attribute to use the base_instance parameter of the
+    // multi-draw commands
+    glBindBuffer(GL_ARRAY_BUFFER, m_mdi_draw_params_buffer);
+    glEnableVertexAttribArray(3);
+    glVertexAttribIPointer(3, 1, GL_UNSIGNED_INT,
+                           sizeof(TP2::MultiDrawIndirectParam),
+                           (void*)(offsetof(TP2::MultiDrawIndirectParam, instance_base)));
+    glVertexAttribDivisor(3, 1); //only once per instance
 
     //Creating an empty VAO that will be used for the cubemap
     glGenVertexArrays(1, &m_cubemap_vao);
@@ -665,6 +706,11 @@ int TP2::init()
     glGenBuffers(1, &m_culling_nb_objects_passed_buffer);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_nb_objects_passed_buffer);
     glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int), nullptr, GL_DYNAMIC_DRAW);
+
+    glGenBuffers(1, &m_materials_buffer);
+    glBindBuffer(GL_UNIFORM_BUFFER, m_materials_buffer);
+    // The materials buffer has been created earlier, when parsing the materials
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(TP2::CookTorranceMaterial) * m_mesh_triangles_group.size(), materials_buffer.data(), GL_STATIC_DRAW);
 
     //Cleaning (repositionning the buffers that have been selected to their default value)
     glBindVertexArray(0);
@@ -827,7 +873,7 @@ std::vector<TP2::MultiDrawIndirectParam> TP2::generate_draw_params_from_object_i
     for (int object_id : object_ids)
     {
         TP2::MultiDrawIndirectParam draw_param;
-        draw_param.instance_base = 0;
+        draw_param.instance_base = object_id;
         draw_param.instance_count = 1;
         draw_param.vertex_base = m_cull_objects[object_id].vertex_base;
         draw_param.vertex_count = m_cull_objects[object_id].vertex_count;
@@ -1011,7 +1057,7 @@ void TP2::cpu_mdi_selective_frustum_culling(const std::vector<int>& objects_id, 
         //The object has not been culled, we're going to push the params
         //for the object to be drawn by the future MDI call
         TP2::MultiDrawIndirectParam object_draw_params;
-        object_draw_params.instance_base = 0;
+        object_draw_params.instance_base = objects_id;
         object_draw_params.instance_count = 1;
         object_draw_params.vertex_base = m_cull_objects[object_id].vertex_base;
         object_draw_params.vertex_count = m_cull_objects[object_id].vertex_count;
@@ -1659,10 +1705,10 @@ int TP2::render()
     GLint override_material_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_override_material");
     glUniform1i(override_material_uniform_location, m_application_settings.override_material);
 
-    GLint metalness_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_metalness");
+    GLint metalness_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_override_metalness");
     glUniform1f(metalness_uniform_location, m_application_settings.mesh_metalness);
 
-    GLint roughness_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_roughness");
+    GLint roughness_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_override_roughness");
     glUniform1f(roughness_uniform_location, m_application_settings.mesh_roughness);
 
     //Setting up the irradiance map
@@ -1679,6 +1725,10 @@ int TP2::render()
 
     GLint shadow_intensity_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_shadow_intensity");
     glUniform1f(shadow_intensity_uniform_location, m_application_settings.shadow_intensity);
+
+    GLuint material_buffer_block = glGetUniformBlockIndex(m_texture_shadow_cook_torrance_shader, "MaterialUniformBlock");
+    glUniformBlockBinding(m_texture_shadow_cook_torrance_shader, material_buffer_block, 0);
+    glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_materials_buffer);
 
     //Selecting the VAO of the mesh
     glBindVertexArray(m_mesh_vao);

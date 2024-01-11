@@ -5,6 +5,7 @@
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
 layout(location = 2) in vec2 texcoords;
+layout(location = 3) in int draw_id;
 
 uniform mat4 u_model_matrix;
 uniform mat4 u_vp_matrix;
@@ -15,6 +16,7 @@ out vec4 vs_position_light_space;
 out vec3 vs_position;
 out vec3 vs_normal;
 out vec2 vs_texcoords;
+flat out int vs_gl_InstanceID;
 
 void main()
 {
@@ -24,6 +26,7 @@ void main()
     vs_normal = normalize(vec3(transpose(inverse(u_model_matrix)) * vec4(normal, 0.0f)));
     vs_position = vec3(u_model_matrix * vec4(position, 1.0f));
     vs_texcoords = texcoords;
+    vs_gl_InstanceID = draw_id;
 
     vs_position_light_space = u_lp_matrix * u_model_matrix * vec4(position, 1);
 
@@ -39,24 +42,47 @@ uniform vec3 u_camera_position;
 uniform vec3 u_light_position;
 
 uniform bool u_use_irradiance_map;
-uniform bool u_has_normal_map;
 
 uniform sampler2D u_irradiance_map;
-uniform sampler2D u_mesh_base_color_texture;
-uniform sampler2D u_mesh_specular_texture;
-uniform sampler2D u_mesh_normal_map;
+
+uniform sampler2DArray u_base_color_textures;
+uniform sampler2DArray u_specular_textures;
+uniform sampler2DArray u_normal_map_textures;
+
+struct Material
+{
+    vec3 base_color; //Used only if the object doesn't have a base color texture
+    float metalness; //Used only if the object doesn't have a specular texture
+    float roughness; //Used only if the object doesn't have a specular texture
+
+    int base_color_texture_id;
+    int specular_texture_id;
+    int normal_map_texture_id;
+};
+
+layout(std430) uniform MaterialIndicesBlock
+{
+    int material_indices[];
+};
+
+layout(std430) uniform MaterialUniformBlock
+{
+    Material material_buffer[];
+};
+
 uniform sampler2D u_shadow_map;
 uniform float u_shadow_intensity;
 
 uniform bool u_override_material;
-uniform float u_metalness;
-uniform float u_roughness;
+uniform float u_override_metalness;
+uniform float u_override_roughness;
 
 in mat4 vs_model_matrix;
 in vec4 vs_position_light_space;
 in vec3 vs_normal;
 in vec3 vs_position;
 in vec2 vs_texcoords;
+flat in int vs_gl_InstanceID;
 
 float percentage_closer_filtering(sampler2D shadow_map, vec2 texcoords, float scene_depth, float bias)
 {
@@ -162,12 +188,14 @@ vec3 normal_mapping(vec2 normal_map_uv)
 
 void main()
 {
+    Material material = material_buffer[vs_gl_InstanceID];
+
     vec4 base_color = texture2D(u_mesh_base_color_texture, vs_texcoords);
     vec3 irradiance_map_color = texture2D(u_irradiance_map, vs_texcoords).rgb;
     base_color = vec4(1.0, 0.71, 0.29, 1); //Hardcoded gold color
 
     vec3 surface_normal = vs_normal;
-    if (u_has_normal_map)
+    if (material.normal_map_index != -1)
         surface_normal = normal_mapping(vs_texcoords);
 
     vec3 light_direction = normalize(u_light_position - vs_position);
@@ -194,8 +222,8 @@ void main()
 
             if (u_override_material)
             {
-                metalness = u_metalness;
-                roughness = u_roughness;
+                metalness = u_override_metalness;
+                roughness = u_override_roughness;
             }
 
             float alpha = roughness * roughness;

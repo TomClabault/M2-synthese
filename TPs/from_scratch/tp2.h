@@ -37,6 +37,17 @@ public:
         unsigned int instance_base;
     };
 
+    struct alignas(16) CookTorranceMaterial
+    {
+        vec3 base_color; //Used only if the object doesn't have a base color texture
+        float metalness; //Used only if the object doesn't have a specular texture
+        float roughness; //Used only if the object doesn't have a specular texture
+
+        int base_color_texture_id;
+        int specular_texture_id;
+        int normal_map_texture_id;
+    };
+
     TP2();
 
 	int get_window_width();
@@ -134,9 +145,10 @@ protected:
 
     //Variables used for mesh rendering
     std::vector<TriangleGroup> m_mesh_triangles_group;
-    std::vector<GLuint> m_mesh_base_color_textures;
-    std::vector<GLuint> m_mesh_specular_textures;
-    std::vector<GLuint> m_mesh_normal_maps;
+    std::vector<GLuint> m_mesh_base_color_textures; //TODO remove because now using glTextureArray2D
+    std::vector<GLuint> m_mesh_specular_textures; //TODO remove because now using glTextureArray2D
+    std::vector<GLuint> m_mesh_normal_maps; //TODO remove because now using glTextureArray2D
+    GLuint m_materials_buffer;
     GLuint m_default_texture;
 	GLuint m_cubemap_vao;
     GLuint m_mesh_vao;
