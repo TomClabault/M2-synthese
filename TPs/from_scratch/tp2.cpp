@@ -160,12 +160,16 @@ std::vector<TP2::CookTorranceMaterial> TP2::load_and_create_textures()
     // Counters used to keep track of the current index of the texture we're going
     // to use in the texture2DArray
     std::vector<ImageData> diffuse_textures, specular_textures, normal_maps_textures;
-    int index_diffuse_texture = 0, index_specular_texture = 0, index_normal_map = 0;
+    int diffuse_texture_count = 0, specular_texture_count = 0, normal_map_count = 0;
     for (Material& mat : m_mesh.materials().materials)
     {
         int diffuse_texture_index = mat.diffuse_texture;
         int specular_texture_index = mat.specular_texture;
         int normal_map_index = mat.normal_map;
+
+        diffuse_texture_count++;
+        specular_texture_count++;
+        normal_map_count++;
 
         ImageData diffuse_color_texture_data;
         ImageData specular_texture_data;
@@ -202,7 +206,7 @@ std::vector<TP2::CookTorranceMaterial> TP2::load_and_create_textures()
             cook_torrance_material.base_color = base_color;
 
             // This texture does not count as a texture
-            index_diffuse_texture--;
+            diffuse_texture_count--;
         }
         else
             // Pushing the texture in a temporary array that will be used to populate the
@@ -221,33 +225,57 @@ std::vector<TP2::CookTorranceMaterial> TP2::load_and_create_textures()
             cook_torrance_material.roughness = roughness;
 
             // This texture does not count as a specular texture
-            index_specular_texture--;
+            specular_texture_count--;
         }
         else
             // Pushing the texture in a temporary array that will be used to populate the
             // OpenGL texture2DArray later
             specular_textures.push_back(specular_texture_data);
+
+        materials_buffer.push_back(cook_torrance_material);
     }
 
-    glGenTextures(1, &textureBuffer);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, textureBuffer);
-    int texW, texH;
-    texW = texH = 1024;
-    glTexStorage3D(GL_TEXTURE_2D_ARRAY, 1, GL_RGBA8, texW, texH, materials.filename_count());
-    for (size_t i = 0; i < materials.filename_count(); i++) {
-        ImageData image = read_image_data(materials.filename(i));
-        glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i, texW, texH, 1, GL_RGBA, GL_UNSIGNED_BYTE, image.data());
-    }
+    int texture_width = 2048, texture_height = 2048;
+    glGenTextures(1, &m_diffuse_texture_array);
+    glActiveTexture(GL_TEXTURE0 + TP2::BASE_COLOR_TEXTURE_ARRAY_UNIT);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_diffuse_texture_array);
+    glTexStorage3D(GL_TEXTURE_2D_ARRAY, 1, GL_SRGB8_ALPHA8, texture_width, texture_height, diffuse_texture_count);
+    for (size_t i = 0; i < diffuse_textures.size(); i++)
+        glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i, texture_width, texture_height, 1, GL_RGBA, GL_UNSIGNED_BYTE, diffuse_textures[i].data());
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
+
+    glGenTextures(1, &m_specular_texture_array);
+    glActiveTexture(GL_TEXTURE0 + TP2::SPECULAR_TEXTURE_ARRAY_UNIT);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_specular_texture_array);
+    glTexStorage3D(GL_TEXTURE_2D_ARRAY, 1, GL_RGBA8, texture_width, texture_height, specular_texture_count);
+    for (size_t i = 0; i < specular_textures.size(); i++)
+        glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i, texture_width, texture_height, 1, GL_RGBA, GL_UNSIGNED_BYTE, specular_textures[i].data());
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
+
+    glGenTextures(1, &m_normal_map_texture_array);
+    glActiveTexture(GL_TEXTURE0 + TP2::NORMAL_MAP_TEXTURE_ARRAY_UNIT);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_normal_map_texture_array);
+    glTexStorage3D(GL_TEXTURE_2D_ARRAY, 1, GL_RGBA8, texture_width, texture_height, normal_map_count);
+    for (size_t i = 0; i < normal_maps_textures.size(); i++)
+        glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i, texture_width, texture_height, 1, GL_RGBA, GL_UNSIGNED_BYTE, normal_maps_textures[i].data());
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
+
+    // Cleaning
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 
-    glGenTextures(1, &m_diffuse_texture_array);
-    glGenTextures(1, &m_specular_texture_array);
-    glGenTextures(1, &m_normal_map_texture_array);
+    return materials_buffer;
 }
 
 void TP2::compute_bounding_boxes_of_groups(std::vector<TriangleGroup>& groups)
@@ -572,7 +600,7 @@ int TP2::init()
     glUniform1i(base_color_texture_uniform_location, TP2::BASE_COLOR_TEXTURE_ARRAY_UNIT);
 
     GLint specular_texture_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_specular_texture_array");
-    glUniform1i(specular_texture_uniform_location, TP2::PECULAR_TEXTURE_ARRAY_UNIT);
+    glUniform1i(specular_texture_uniform_location, TP2::SPECULAR_TEXTURE_ARRAY_UNIT);
 
     GLint normal_map_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_normal_map_texture_array");
     glUniform1i(normal_map_uniform_location, TP2::NORMAL_MAP_TEXTURE_ARRAY_UNIT);
@@ -709,10 +737,12 @@ int TP2::init()
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_nb_objects_passed_buffer);
     glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int), nullptr, GL_DYNAMIC_DRAW);
 
+    glUseProgram(m_texture_shadow_cook_torrance_shader);
     glGenBuffers(1, &m_materials_buffer);
-    glBindBuffer(GL_UNIFORM_BUFFER, m_materials_buffer);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_materials_buffer);
     // The materials buffer has been created earlier, when parsing the materials
-    glBufferData(GL_UNIFORM_BUFFER, sizeof(TP2::CookTorranceMaterial) * m_mesh_triangles_group.size(), materials_buffer.data(), GL_STATIC_DRAW);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(TP2::CookTorranceMaterial) * m_mesh_triangles_group.size(), materials_buffer.data(), GL_STATIC_DRAW);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_materials_buffer);
 
     //Cleaning (repositionning the buffers that have been selected to their default value)
     glBindVertexArray(0);
@@ -1730,10 +1760,6 @@ int TP2::render()
 
     GLint shadow_intensity_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_shadow_intensity");
     glUniform1f(shadow_intensity_uniform_location, m_application_settings.shadow_intensity);
-
-    GLuint material_buffer_block = glGetUniformBlockIndex(m_texture_shadow_cook_torrance_shader, "MaterialUniformBlock");
-    glUniformBlockBinding(m_texture_shadow_cook_torrance_shader, material_buffer_block, 0);
-    glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_materials_buffer);
 
     //Selecting the VAO of the mesh
     glBindVertexArray(m_mesh_vao);

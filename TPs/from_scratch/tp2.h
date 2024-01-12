@@ -125,7 +125,7 @@ public:
 	inline static const int SKYSPHERE_UNIT = 1;
 	inline static const int DIFFUSE_IRRADIANCE_MAP_UNIT = 2;
     inline static const int BASE_COLOR_TEXTURE_ARRAY_UNIT = 3;
-    inline static const int PECULAR_TEXTURE_ARRAY_UNIT = 4;
+    inline static const int SPECULAR_TEXTURE_ARRAY_UNIT = 4;
     inline static const int NORMAL_MAP_TEXTURE_ARRAY_UNIT = 5;
     inline static const int SHADOW_MAP_UNIT = 6;
 

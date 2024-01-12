@@ -1,4 +1,4 @@
-#version 330
+#version 430
 
 #ifdef VERTEX_SHADER
 
@@ -60,12 +60,7 @@ struct Material
     int normal_map_texture_id;
 };
 
-layout(std430) uniform MaterialIndicesBlock
-{
-    int material_indices[];
-};
-
-layout(std430) uniform MaterialUniformBlock
+layout(std430, binding = 0) buffer MaterialUniformBlock
 {
     Material material_buffer[];
 };
@@ -84,6 +79,8 @@ in vec3 vs_position;
 in vec2 vs_texcoords;
 flat in int vs_gl_InstanceID;
 
+out vec4 frag_color;
+
 float percentage_closer_filtering(sampler2D shadow_map, vec2 texcoords, float scene_depth, float bias)
 {
     ivec2 texture_size = textureSize(shadow_map, 0);
@@ -94,7 +91,7 @@ float percentage_closer_filtering(sampler2D shadow_map, vec2 texcoords, float sc
     {
         for (int j = -1; j <= 1; j++)
         {
-            float shadow_map_depth = texture2D(shadow_map, texcoords + vec2(i, j) * texel_size).r;
+            float shadow_map_depth = texture(shadow_map, texcoords + vec2(i, j) * texel_size).r;
             shadow_sum += scene_depth - bias > shadow_map_depth ? u_shadow_intensity : 1.0f;
         }
     }
@@ -150,7 +147,7 @@ vec3 sample_irradiance_map(vec3 normal)
         float u = 0.5 + atan(vs_normal.z, vs_normal.x) / (2.0f * M_PI);
         float v = 0.5 + asin(vs_normal.y) / M_PI;
 
-        return texture2D(u_irradiance_map, vec2(u, v)).rgb;
+        return texture(u_irradiance_map, vec2(u, v)).rgb;
     }
     else
         return vec3(0.0f);
@@ -171,7 +168,7 @@ void branchlessONB(in vec3 n, out vec3 tangent, out vec3 bitangent)
     bitangent = vec3(b, nz_sign + n.y * n.y * a, -n.y);
 }
 
-vec3 normal_mapping(vec2 normal_map_uv)
+vec3 normal_mapping(vec2 normal_map_uv, int normal_map_index)
 {
     //Building the ONB around the surface normal
     vec3 tangent, bitangent;
@@ -182,7 +179,7 @@ vec3 normal_mapping(vec2 normal_map_uv)
                     normalize(bitangent),
                     normalize(vs_normal));
 
-    vec3 texture_normal = normalize(texture2D(u_mesh_normal_map, normal_map_uv).rgb * 2.0f - 1.0f);
+    vec3 texture_normal = normalize(texture(u_normal_map_texture_array, vec3(normal_map_uv, normal_map_index)).rgb * 2.0f - 1.0f);
     return ONB * texture_normal;
 }
 
@@ -190,13 +187,17 @@ void main()
 {
     Material material = material_buffer[vs_gl_InstanceID];
 
-    vec4 base_color = texture2D(u_mesh_base_color_texture, vs_texcoords);
-    vec3 irradiance_map_color = texture2D(u_irradiance_map, vs_texcoords).rgb;
+    vec4 base_color;
+    if (material.base_color_texture_id != -1)
+        base_color = texture(u_base_color_texture_array, vec3(vs_texcoords, material.base_color_texture_id));
+    else
+        base_color = vec4(material.base_color, 1.0f);
+    vec3 irradiance_map_color = texture(u_irradiance_map, vs_texcoords).rgb;
     base_color = vec4(1.0, 0.71, 0.29, 1); //Hardcoded gold color
 
     vec3 surface_normal = vs_normal;
-    if (material.normal_map_index != -1)
-        surface_normal = normal_mapping(vs_texcoords);
+    if (material.normal_map_texture_id != -1)
+        surface_normal = normal_mapping(vs_texcoords, material.normal_map_texture_id);
 
     vec3 light_direction = normalize(u_light_position - vs_position);
     light_direction = normalize(vec3(-0.5f, -1.0f, 0.0f));
@@ -217,8 +218,18 @@ void main()
 
         if (NoV > 0 && NoL > 0 && NoH > 0)
         {
-            float metalness = texture2D(u_mesh_specular_texture, vs_texcoords).b;
-            float roughness = texture2D(u_mesh_specular_texture, vs_texcoords).g;
+            float metalness, roughness;
+
+            if (material.specular_texture_id != -1)
+            {
+                metalness = texture(u_specular_texture_array, vec3(vs_texcoords, material.specular_texture_id)).b;
+                roughness = texture(u_specular_texture_array, vec3(vs_texcoords, material.specular_texture_id)).g;
+            }
+            else
+            {
+                metalness = material.metalness;
+                roughness = material.roughness;
+            }
 
             if (u_override_material)
             {
@@ -246,18 +257,18 @@ void main()
             vec3 diffuse_part = kD * base_color.rgb / M_PI;
             vec3 specular_part = (F * D * G) / (4.0f * NoV * NoL);
 
-            gl_FragColor = vec4(diffuse_part + specular_part, 1);
+            frag_color = vec4(diffuse_part + specular_part, 1);
 
             // Sampling the irradiance map with the microfacet normal
             irradiance_map_color = sample_irradiance_map(halfway_vector);
         }
         else
-            gl_FragColor = vec4(0, 0, 0, 1);
+            frag_color = vec4(0, 0, 0, 1);
     }
 
-    gl_FragColor += vec4(base_color.rgb * irradiance_map_color, 0);// Ambient lighting
-    gl_FragColor *= compute_shadow(vs_position_light_space, normalize(surface_normal), light_direction);
-    gl_FragColor.a = 1.0f;
+    frag_color += vec4(base_color.rgb * irradiance_map_color, 0);// Ambient lighting
+    frag_color *= compute_shadow(vs_position_light_space, normalize(surface_normal), light_direction);
+    frag_color.a = 1.0f;
 }
 
 #endif
