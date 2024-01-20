@@ -152,18 +152,50 @@ GLuint TP2::create_opengl_texture(std::string& filepath, int GL_tex_format, floa
     return texture_id;
 }
 
-void create_opengl_texture_array_2D(GLuint& texture_array, int unit, bool is_srgb, int texture_width, int texture_height, int texture_count, const std::vector<ImageData>& data)
+void create_opengl_texture_array_2D(GLuint& texture_array, int unit, bool is_srgb, int texture_width, int texture_height, const std::vector<ImageData>& data)
 {
+    int texture_count = data.size();
+
+    int internal_format;
+    int format;
+
+    if (data[0].channels == 4)
+    {
+        if (is_srgb)
+        {
+            internal_format = GL_SRGB8_ALPHA8;
+            format = GL_RGBA;
+        }
+        else
+        {
+            internal_format = GL_RGBA8;
+            format = GL_RGBA;
+        }
+    }
+    else
+    {
+        if (is_srgb)
+        {
+            internal_format = GL_SRGB8;
+            format = GL_RGB;
+        }
+        else
+        {
+            internal_format = GL_RGB8;
+            format = GL_RGB;
+        }
+    }
+     
     glGenTextures(1, &texture_array);
     glActiveTexture(GL_TEXTURE0 + unit);
     glBindTexture(GL_TEXTURE_2D_ARRAY, texture_array);
-    glTexStorage3D(GL_TEXTURE_2D_ARRAY, 1, is_srgb ? GL_SRGB8_ALPHA8 : GL_RGBA8, texture_width, texture_height, texture_count);
-    for (size_t i = 0; i < texture_count; i++)
-       glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i, texture_width, texture_height, 1, GL_RGBA, GL_UNSIGNED_BYTE, data[i].data());
+    glTexStorage3D(GL_TEXTURE_2D_ARRAY, 1, internal_format, texture_width, texture_height, texture_count);
+    for (int i = 0; i < texture_count; i++)
+       glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i, texture_width, texture_height, 1, format, GL_UNSIGNED_BYTE, data[i].data());
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
 }
 
@@ -175,32 +207,24 @@ std::vector<TP2::CookTorranceMaterial> TP2::load_and_create_textures()
     // Counters used to keep track of the current index of the texture we're going
     // to use in the texture2DArray
     std::vector<ImageData> diffuse_textures, specular_textures, normal_maps_textures;
-    int diffuse_texture_count = 0, specular_texture_count = 0, normal_map_count = 0;
     for (Material& mat : m_mesh.materials().materials)
     {
         int diffuse_texture_index = mat.diffuse_texture;
         int specular_texture_index = mat.specular_texture;
         int normal_map_index = mat.normal_map;
 
-        diffuse_texture_count++;
-        specular_texture_count++;
-        normal_map_count++;
-
         ImageData diffuse_color_texture_data;
         ImageData specular_texture_data;
+        ImageData normal_texture_data;
 
         if (diffuse_texture_index != -1)
-        {
             diffuse_color_texture_data = read_image_data(m_mesh.materials().texture_filenames[diffuse_texture_index].c_str());
-        }
 
         if (specular_texture_index != -1)
-        {
             specular_texture_data = read_image_data(m_mesh.materials().texture_filenames[specular_texture_index].c_str());
-        }
 
         if (normal_map_index != -1)
-            normal_maps_textures.push_back(read_image_data(m_mesh.materials().texture_filenames[normal_map_index].c_str()));
+            normal_texture_data = read_image_data(m_mesh.materials().texture_filenames[normal_map_index].c_str());
 
         TP2::CookTorranceMaterial cook_torrance_material;
         cook_torrance_material.base_color_texture_id = diffuse_texture_index;
@@ -219,9 +243,6 @@ std::vector<TP2::CookTorranceMaterial> TP2::load_and_create_textures()
             base_color.x = diffuse_color_texture_data.pixels[1];
             base_color.x = diffuse_color_texture_data.pixels[2];
             cook_torrance_material.base_color = base_color;
-
-            // This texture does not count as a texture
-            diffuse_texture_count--;
         }
         else
             // Pushing the texture in a temporary array that will be used to populate the
@@ -238,27 +259,37 @@ std::vector<TP2::CookTorranceMaterial> TP2::load_and_create_textures()
 
             cook_torrance_material.metalness = metalness;
             cook_torrance_material.roughness = roughness;
-
-            // This texture does not count as a specular texture
-            specular_texture_count--;
         }
         else
             // Pushing the texture in a temporary array that will be used to populate the
             // OpenGL texture2DArray later
             specular_textures.push_back(specular_texture_data);
 
+        if (normal_texture_data.width == 1)
+        {
+            Vector normal;
+            normal.x = normal_texture_data.pixels[0];
+            normal.y = normal_texture_data.pixels[1];
+            normal.z = normal_texture_data.pixels[2];
+            normal = normal * 2.0f - Vector(1.0f, 1.0f, 1.0f);
+
+            cook_torrance_material.normal = vec3(normalize(normal));
+        }
+        else
+            normal_maps_textures.push_back(normal_texture_data);
+
         materials_buffer.push_back(cook_torrance_material);
     }
 
     int texture_width = 2048, texture_height = 2048;
     int max_texture_count_per_array = 2000000000 / (4 * texture_height * texture_width);
-    create_opengl_texture_array_2D(m_diffuse_texture_array, TP2::BASE_COLOR_TEXTURE_ARRAY_UNIT, true, texture_width, texture_height, diffuse_texture_count, diffuse_textures);
-    create_opengl_texture_array_2D(m_specular_texture_array, TP2::SPECULAR_TEXTURE_ARRAY_UNIT, false, texture_width, texture_height, specular_texture_count, specular_textures);
-    create_opengl_texture_array_2D(m_normal_map_texture_array, TP2::NORMAL_MAP_TEXTURE_ARRAY_UNIT, false, texture_width, texture_height, normal_map_count, normal_maps_textures);
+    create_opengl_texture_array_2D(m_diffuse_texture_array, TP2::BASE_COLOR_TEXTURE_ARRAY_UNIT, true, texture_width, texture_height, diffuse_textures);
+    create_opengl_texture_array_2D(m_specular_texture_array, TP2::SPECULAR_TEXTURE_ARRAY_UNIT, false, texture_width, texture_height, specular_textures);
+    create_opengl_texture_array_2D(m_normal_map_texture_array, TP2::NORMAL_MAP_TEXTURE_ARRAY_UNIT, false, texture_width, texture_height, normal_maps_textures);
 
     // Cleaning
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
-    glActiveTexture(0);
+    glActiveTexture(GL_TEXTURE0);
 
     return materials_buffer;
 }
@@ -661,6 +692,10 @@ int TP2::init()
     GLint normal_attribute = 1;//glGetAttribLocation(m_diffuse_texture_shader, "normal");
     GLint texcoord_attribute = 2;//glGetAttribLocation(m_diffuse_texture_shader, "texcoords");
 
+    glGenBuffers(1, &m_mdi_draw_params_buffer);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_mdi_draw_params_buffer);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(TP2::MultiDrawIndirectParam)* m_mesh_triangles_group.size(), nullptr, GL_DYNAMIC_DRAW);
+
     glVertexAttribPointer(position_attribute, /* size */ 3, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ 0);
     glEnableVertexAttribArray(position_attribute);
     glVertexAttribPointer(normal_attribute, /* size */ 3, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ (GLvoid*)position_size);
@@ -700,10 +735,6 @@ int TP2::init()
 
     // ---------- Preparing for multi-draw indirect: ---------- //
     glUseProgram(m_frustum_culling_shader);
-
-    glGenBuffers(1, &m_mdi_draw_params_buffer);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_mdi_draw_params_buffer);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(TP2::MultiDrawIndirectParam) * m_mesh_triangles_group.size(), nullptr, GL_DYNAMIC_DRAW);
 
     glGenBuffers(1, &m_culling_objects_id_to_draw);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_objects_id_to_draw);

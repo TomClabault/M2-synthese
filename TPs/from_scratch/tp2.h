@@ -39,9 +39,10 @@ public:
 
     struct alignas(16) CookTorranceMaterial
     {
-        vec3 base_color; //Used only if the object doesn't have a base color texture
-        float metalness; //Used only if the object doesn't have a specular texture
-        float roughness; //Used only if the object doesn't have a specular texture
+        vec3 base_color; // Used only if the object doesn't have a base color texture
+        float metalness; // Used only if the object doesn't have a specular texture
+        vec3 normal = vec3(-1.0f, -1.0f, -1.0f); // Used only if the object doesn't have a normal texture
+        float roughness; // Used only if the object doesn't have a specular texture
 
         int base_color_texture_id;
         int specular_texture_id;

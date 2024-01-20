@@ -53,6 +53,7 @@ struct Material
 {
     vec3 base_color; //Used only if the object doesn't have a base color texture
     float metalness; //Used only if the object doesn't have a specular texture
+    vec3 normal;
     float roughness; //Used only if the object doesn't have a specular texture
 
     int base_color_texture_id;
@@ -198,6 +199,8 @@ void main()
     vec3 surface_normal = vs_normal;
     if (material.normal_map_texture_id != -1)
         surface_normal = normal_mapping(vs_texcoords, material.normal_map_texture_id);
+    else if (material.normal.xyz != vec3(-1.0f, -1.0f, -1.0f))
+        surface_normal = material.normal;
 
     vec3 light_direction = normalize(u_light_position - vs_position);
     light_direction = normalize(vec3(-0.5f, -1.0f, 0.0f));
