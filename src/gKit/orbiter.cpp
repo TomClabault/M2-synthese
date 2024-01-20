@@ -39,9 +39,9 @@ void Orbiter::move( const float z )
 
 Transform Orbiter::view( ) const
 {
-    return Translation( -m_position.x, -m_position.y, -m_size ) 
-        * RotationX(m_rotation.x) * RotationY(m_rotation.y) 
-        * Translation( -m_center.x, -m_center.y, -m_center.z ); 
+    return Translation( -m_position.x, -m_position.y, -m_size )
+            * RotationX(m_rotation.x) * RotationY(m_rotation.y)
+            * Translation( -m_center.x, -m_center.y, -m_center.z );
 }
 
 Transform Orbiter::projection( const int width, const int height, const float fov )
@@ -55,6 +55,7 @@ Transform Orbiter::projection( const int width, const int height, const float fo
 
 float Orbiter::znear( ) const
 {
+    return 0.1f;
     // calcule la distance entre le centre de l'objet et la camera
     float d= distance(m_center, Point(m_position.x, m_position.y, m_size));
     return std::max(float(0.1), d - m_radius);
@@ -62,9 +63,16 @@ float Orbiter::znear( ) const
 
 float Orbiter::zfar( ) const
 {
+    return 200.0f;
     // calcule la distance entre le centre de l'objet et la camera
     float d= distance(m_center, Point(m_position.x, m_position.y, m_size));
     return std::max(float(1), d + m_radius);
+}
+
+float Orbiter::linearize_depth(float depth) const
+{
+    float z_n = 2.0 * depth - 1.0;
+    return 2.0 * znear() * zfar() / (zfar() + znear() - z_n * (zfar() - znear()));
 }
 
 
@@ -76,7 +84,7 @@ Transform Orbiter::projection( ) const
     //~ float d= -c.z;
     //~ float d= distance(m_center, Point(m_position.x, m_position.y, m_size));     // meme resultat plus rapide a calculer
     
-    // regle near et far en fonction du centre et du rayon englobant l'objet 
+    // regle near et far en fonction du centre et du rayon englobant l'objet
     return Perspective(m_fov, m_width / m_height, znear(), zfar());
 }
 
@@ -133,7 +141,7 @@ int Orbiter::read_orbiter( const char *filename )
         errors= true;
     if(fscanf(in, "s %f %f\n", &m_size, &m_radius) != 2)
         errors= true;
-        
+
     if(fscanf(in, "f %f %f %f\n", &m_fov, &m_width, &m_height) != 3)
         errors= true;
     

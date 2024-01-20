@@ -571,8 +571,8 @@ void Utils::get_object_screen_space_bounding_box(const Transform& mvpv_matrix, c
     object_screen_space_bbox_points[6] = mvpv_matrix(Point(object.min.x, object.max.y, object.max.z));
     object_screen_space_bbox_points[7] = mvpv_matrix(Point(object.max));
 
-    out_bbox_min = Point(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
-    out_bbox_max = Point(-std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(), -std::numeric_limits<float>::max());
+    out_bbox_min = object_screen_space_bbox_points[0];
+    out_bbox_max = object_screen_space_bbox_points[0];
     for (int i = 0; i < 8; i++)
     {
         out_bbox_min = min(out_bbox_min, object_screen_space_bbox_points[i]);

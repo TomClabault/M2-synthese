@@ -30,6 +30,8 @@ public:
     float znear( ) const;
     //! revnvoie le plan loin de la projection. distance max des points dans le frustum de la camera (valeur dans le repere camera).
     float zfar( ) const;
+
+    float linearize_depth(float depth) const;
     
     //! change le point de vue / la direction d'observation.
     void rotation( const float x, const float y );

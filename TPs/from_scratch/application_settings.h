@@ -37,7 +37,7 @@ struct ApplicationSettings
 //    int irradiance_map_precomputation_downscale_factor = 64;
 //    std::string irradiance_map_file_path = "data/TPs/evening_road_01_puresky_2k.hdr";
 
-    int irradiance_map_precomputation_samples = 16384;
+    int irradiance_map_precomputation_samples = 16384 * 4;
     int irradiance_map_precomputation_downscale_factor = 64;
     std::string irradiance_map_file_path = "data/TPs/above_clouds_4k.hdr";
 
