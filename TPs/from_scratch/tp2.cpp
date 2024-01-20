@@ -121,11 +121,6 @@ void TP2::update_ambient_uniforms()
 
     GLuint use_irradiance_map_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_use_irradiance_map");
     glUniform1i(use_irradiance_map_location, m_application_settings.use_irradiance_map);
-
-    //TODO remove
-    //    //TODO supprimer ambient color parce qu'on utilise que l'irradiance map, pas de ambient color a deux balles
-    //    GLuint ambient_color_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_ambient_color");
-    //    glUniform4f(ambient_color_location, m_application_settings.ambient_color.r, m_application_settings.ambient_color.g, m_application_settings.ambient_color.b, m_application_settings.ambient_color.a);
 }
 
 GLuint TP2::create_opengl_texture(std::string& filepath, int GL_tex_format, float anisotropy)
@@ -336,22 +331,21 @@ bool TP2::rejection_test_bbox_frustum_culling_scene(const CullObject& object, co
     return false;
 }
 
-bool TP2::occlusion_cull_cpu(const Transform& mvp_matrix, CullObject& object, int depth_buffer_width, int depth_buffer_height, const std::vector<std::vector<float> >& z_buffer_mipmaps, const std::vector<std::pair<int, int>>& mipmaps_widths_heights)
+bool TP2::occlusion_cull_cpu(const Transform& mvpv_matrix, CullObject& object, int depth_buffer_width, int depth_buffer_height, const std::vector<std::vector<float> >& z_buffer_mipmaps, const std::vector<std::pair<int, int>>& mipmaps_widths_heights)
 {
     Point screen_space_bbox_min, screen_space_bbox_max;
     float nearest_depth;
 
     int visibility = Utils::get_visibility_of_object_from_camera(m_camera.view(), object);
     if (visibility == 2) //Partially visible, we're going to assume
-        //that the bounding box of the object
-        //spans the whole image
+        //that the bounding box of the object spans the whole image
     {
         screen_space_bbox_min = Point(0, 0, 0);
         screen_space_bbox_max = Point(depth_buffer_width - 1, depth_buffer_height - 1, 0);
     }
     else if (visibility == 1) //Entirely visible
     {
-        Utils::get_object_screen_space_bounding_box(m_camera.viewport() * mvp_matrix, object, screen_space_bbox_min, screen_space_bbox_max);
+        Utils::get_object_screen_space_bounding_box(mvpv_matrix, object, screen_space_bbox_min, screen_space_bbox_max);
 
         //Clamping the points to the image limits
         screen_space_bbox_min = max(screen_space_bbox_min, Point(0, 0, -std::numeric_limits<float>::max()));
@@ -365,6 +359,54 @@ bool TP2::occlusion_cull_cpu(const Transform& mvp_matrix, CullObject& object, in
     //Because the closest depth is the biggest z, we're querrying the max point of the bbox
     nearest_depth = screen_space_bbox_min.z;
 
+    //TODO remove
+    /*{
+        std::cout << nearest_depth << " ; " << screen_space_bbox_max.z << std::endl;
+
+        std::vector<float> debug_z_buffer = Utils::get_z_buffer(window_width(), window_height(), m_hdr_framebuffer);
+
+        auto& io = ImGui::GetIO();
+        if (!io.WantCaptureKeyboard)
+        {
+            if (key_state('d') && object.vertex_count > 6)
+            {
+                Image z_buffer_image = Image(window_width(), window_height());
+                for (int y = 0; y < window_height(); y++)
+                    for (int x = 0; x < window_width(); x++)
+                        z_buffer_image(x, y) = Color(m_camera.linearize_depth(debug_z_buffer[y * window_width() + x]) / m_camera.zfar());
+
+                int mipmap_level = 0;
+                int reduction_factor = std::pow(2, mipmap_level);
+                float reduction_factor_inverse = 1.0f / reduction_factor;
+                int min_y = std::min((int)std::floor(screen_space_bbox_min.y * reduction_factor_inverse), mipmaps_widths_heights[mipmap_level].second - 1);
+                int max_y = std::min((int)std::ceil(screen_space_bbox_max.y * reduction_factor_inverse), mipmaps_widths_heights[mipmap_level].second - 1);
+                int min_x = std::min((int)std::floor(screen_space_bbox_min.x * reduction_factor_inverse), mipmaps_widths_heights[mipmap_level].first - 1);
+                int max_x = std::min((int)std::ceil(screen_space_bbox_max.x * reduction_factor_inverse), mipmaps_widths_heights[mipmap_level].first - 1);
+                for (int y = min_y; y <= max_y; y++)
+                {
+                    for (int x = min_x; x <= max_x; x++)
+                    {
+                        if (x == min_x || y == min_y || x == max_x || y == max_y)
+                        {
+                            z_buffer_image(x, y) = Color(1.0f, 0.0f, 0.0f);
+                        }
+                        else
+                        {
+                            float depth_buffer_depth = debug_z_buffer[x + y * mipmaps_widths_heights[mipmap_level].first];
+
+                            if (depth_buffer_depth >= nearest_depth)
+                            {
+                                z_buffer_image(x, y) = Color(0.0f, 1.0f, 0.0f);
+                            }
+                        }
+                    }
+                }
+
+                write_image_hdr(z_buffer_image, "debug_z_buffer_cpu_bbox.hdr");
+            }
+        }
+    }*/
+
     //Computing which mipmap level to choose for the depth test so that the
     //screens space bounding rectangle of the object is approximately 4x4
     int mipmap_level = 0;
@@ -376,7 +418,6 @@ bool TP2::occlusion_cull_cpu(const Transform& mvp_matrix, CullObject& object, in
     else //The extent of the bounding rectangle already is small enough
         ;
     mipmap_level = std::min(mipmap_level, (int)z_buffer_mipmaps.size() - 1);
-    mipmap_level = 0;
     int reduction_factor = std::pow(2, mipmap_level);
     float reduction_factor_inverse = 1.0f / reduction_factor;
 
@@ -410,7 +451,7 @@ bool TP2::occlusion_cull_cpu(const Transform& mvp_matrix, CullObject& object, in
     return !one_pixel_visible;
 }
 
-void TP2::occlusion_cull_gpu(const Transform& mvp_matrix, GLuint object_ids_to_cull_buffer, int number_of_objects_to_cull)
+void TP2::occlusion_cull_gpu(const Transform& mvp_matrix, const Transform& view_matrix, const Transform& viewport_matrix, GLuint object_ids_to_cull_buffer, int number_of_objects_to_cull)
 {
     std::vector<unsigned int> init(m_mesh_triangles_group.size(), -1);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_passing_ids);
@@ -422,8 +463,8 @@ void TP2::occlusion_cull_gpu(const Transform& mvp_matrix, GLuint object_ids_to_c
 
     glUseProgram(m_occlusion_culling_shader);
     glUniformMatrix4fv(glGetUniformLocation(m_occlusion_culling_shader, "u_mvp_matrix"), 1, GL_TRUE, mvp_matrix.data());
-    glUniformMatrix4fv(glGetUniformLocation(m_occlusion_culling_shader, "u_mvpv_matrix"), 1, GL_TRUE, (m_camera.viewport() * mvp_matrix).data());
-    glUniformMatrix4fv(glGetUniformLocation(m_occlusion_culling_shader, "u_view_matrix"), 1, GL_TRUE, m_camera.view().data());
+    glUniformMatrix4fv(glGetUniformLocation(m_occlusion_culling_shader, "u_mvpv_matrix"), 1, GL_TRUE, (viewport_matrix * mvp_matrix).data());
+    glUniformMatrix4fv(glGetUniformLocation(m_occlusion_culling_shader, "u_view_matrix"), 1, GL_TRUE, view_matrix.data());
     glUniform1i(glGetUniformLocation(m_occlusion_culling_shader, "u_nb_mipmaps"), m_z_buffer_mipmaps_count);
     glUniform1i(glGetUniformLocation(m_occlusion_culling_shader, "u_nb_objects_to_cull"), number_of_objects_to_cull);
 
@@ -465,7 +506,7 @@ int TP2::init()
     ImGui_ImplSdlGL3_Init(m_window);
 
     //Positioning the camera to a default state
-    m_camera.read_orbiter("data/TPs/start_camera_bistro.txt");
+    //m_camera.read_orbiter("data/TPs/start_camera_bistro.txt");
     m_light_camera.read_orbiter("data/TPs/light_camera_bistro.txt");
     m_lp_light_transform = TP2::LIGHT_CAMERA_ORTHO_PROJ_BISTRO * m_light_camera.view();
 
@@ -474,7 +515,7 @@ int TP2::init()
     //TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
     //TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
-    TIME(m_mesh = read_mesh("data/TPs/cube_occlusion_culling_3.obj"), "Load OBJ Time: ");
+    TIME(m_mesh = read_mesh("data/TPs/cube_occlusion_culling_4.obj"), "Load OBJ Time: ");
     if (m_mesh.positions().size() == 0)
     {
         std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
@@ -490,7 +531,6 @@ int TP2::init()
 
     glDepthFunc(GL_LEQUAL);                       // ztest, conserver l'intersection la plus proche de la camera
     glEnable(GL_DEPTH_TEST);                    // activer le ztest
-
 
 
     m_fullscreen_quad_texture_shader = read_program("data/TPs/shaders/shader_fullscreen_quad_texture.glsl");
@@ -1177,10 +1217,10 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         draw_multi_draw_indirect_from_ids(objects_to_fill_zbuffer);
 
         Utils::compute_mipmaps_gpu(m_hdr_depth_buffer_texture, window_width(), window_height(), m_z_buffer_mipmaps_texture);
-        occlusion_cull_gpu(mvp_matrix, m_culling_objects_id_to_draw, nb_accepted_objects);
+        occlusion_cull_gpu(mvp_matrix, m_camera.view(), m_camera.viewport(), m_culling_objects_id_to_draw, nb_accepted_objects);
 
         //TODO remove
-        {
+        /*{
             std::vector<float> debug_z_buffer = Utils::get_z_buffer(window_width(), window_height(), m_hdr_framebuffer);
 
             auto& io = ImGui::GetIO();
@@ -1190,13 +1230,8 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
                 {
                     Image z_buffer_image = Image(window_width(), window_height());
                     for (int y = 0; y < window_height(); y++)
-                    {
                         for (int x = 0; x < window_width(); x++)
-                        {
-                            //z_buffer_image(x, y) = Color(m_camera.linearize_depth(debug_z_buffer[y * window_width() + x]));
-                            z_buffer_image(x, y) = Color(debug_z_buffer[y * window_width() + x]);
-                        }
-                    }
+                            z_buffer_image(x, y) = Color(m_camera.linearize_depth(debug_z_buffer[y * window_width() + x]) / m_camera.zfar());
 
                     write_image_hdr(z_buffer_image, "debug_z_buffer_cpu.hdr");
                 }
@@ -1210,12 +1245,12 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
             {
                 CullObject object = m_cull_objects[i];
 
-                if(!occlusion_cull_cpu(mvp_matrix, object, window_width(), window_height(), mipmaps_cpu, widths_heights))
+                if(!occlusion_cull_cpu(Viewport(window_width(), window_height()) * m_camera.projection(window_width(), window_height(), 45) * m_camera.view() * Identity(), object, window_width(), window_height(), mipmaps_cpu, widths_heights))
                     nb_visible++;
             }
 
             std::cout << nb_visible << std::endl;
-        }
+        }*/
 
         // Getting the number of objects drawn
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_nb_objects_passed_buffer);
@@ -1227,11 +1262,7 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         m_objects_drawn_last_frame.resize(m_mesh_groups_drawn);
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_passing_ids);
         glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, m_mesh_groups_drawn * sizeof(unsigned int), m_objects_drawn_last_frame.data());
-
-        glUseProgram(m_texture_shadow_cook_torrance_shader);
-        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_mdi_draw_params_buffer);
-        glBindBuffer(GL_PARAMETER_BUFFER_ARB, m_culling_nb_objects_passed_buffer);
-        glMultiDrawArraysIndirectCountARB(GL_TRIANGLES, 0, 0, m_cull_objects.size(), 0);
+        //glMultiDrawArraysIndirectCountARB(GL_TRIANGLES, 0, 0, m_cull_objects.size(), 0);
     }
 
     //    //TODO remove debug

@@ -66,8 +66,8 @@ public:
      * @return True if the object has been culled and is not visible.
      * False if it is visible
      */
-    bool occlusion_cull_cpu(const Transform &mvp_matrix, CullObject& object, int depth_buffer_width, int depth_buffer_height, const std::vector<std::vector<float>>& z_buffer_mipmaps, const std::vector<std::pair<int, int>>& mipmaps_widths_heights);
-    void occlusion_cull_gpu(const Transform& mvp_matrix, GLuint object_ids_to_cull_buffer, int number_of_objects_to_cull);
+    bool occlusion_cull_cpu(const Transform &mvpv_matrix, CullObject& object, int depth_buffer_width, int depth_buffer_height, const std::vector<std::vector<float>>& z_buffer_mipmaps, const std::vector<std::pair<int, int>>& mipmaps_widths_heights);
+    void occlusion_cull_gpu(const Transform& mvp_matrix, const Transform& view_matrix, const Transform& viewport_matrix, GLuint object_ids_to_cull_buffer, int number_of_objects_to_cull);
 
 	// creation des objets de l'application
 	int init();

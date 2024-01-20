@@ -27,19 +27,19 @@ struct ApplicationSettings
 
     /*int irradiance_map_precomputation_samples = 16384 * 32;
     int irradiance_map_precomputation_downscale_factor = 64;
-    std::string irradiance_map_file_path = "data/TPs/blaubeuren_night_8k.hdr";*/
+    std::string irradiance_map_file_path = "data/TPs/skyspheres/blaubeuren_night_8k.hdr";*/
 
     /*int irradiance_map_precomputation_samples = 16384;
     int irradiance_map_precomputation_downscale_factor = 64;
-    std::string irradiance_map_file_path = "data/TPs/the_sky_is_on_fire_8k.hdr";*/
+    std::string irradiance_map_file_path = "data/TPs/skyspheres/the_sky_is_on_fire_8k.hdr";*/
 
 //    int irradiance_map_precomputation_samples = 16384*32;
 //    int irradiance_map_precomputation_downscale_factor = 64;
-//    std::string irradiance_map_file_path = "data/TPs/evening_road_01_puresky_2k.hdr";
+//    std::string irradiance_map_file_path = "data/TPs/skyspheres/evening_road_01_puresky_2k.hdr";
 
     int irradiance_map_precomputation_samples = 16384 * 4;
     int irradiance_map_precomputation_downscale_factor = 64;
-    std::string irradiance_map_file_path = "data/TPs/above_clouds_4k.hdr";
+    std::string irradiance_map_file_path = "data/TPs/skyspheres/above_clouds_4k.hdr";
 
     //Whether or not to use the metalness and roughness here for the material shading
     //If true, these values are going to be used. If false, the values found in

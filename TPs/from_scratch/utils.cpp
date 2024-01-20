@@ -99,7 +99,7 @@ Image Utils::precompute_and_load_associated_irradiance_gpu(const char* skysphere
 
     //Creating the complete (path + image file name) file name of the irradiance map
     std::filesystem::create_directory(TP::IRRADIANCE_MAPS_CACHE_FOLDER);
-    std::string irradiance_map_name = skysphere_file_string.substr(0, skysphere_file_string.rfind('/')) + "/irradiance_maps_cache/" + skysphere_image_file_name + "_Irradiance_" + std::to_string(samples) + "x_Down" + std::to_string(downscale_factor) + "x.hdr";
+    std::string irradiance_map_name = skysphere_file_string.substr(0, skysphere_file_string.rfind('/') - 11) + "/irradiance_maps_cache/" + skysphere_image_file_name + "_Irradiance_" + std::to_string(samples) + "x_Down" + std::to_string(downscale_factor) + "x.hdr";
 
     //Checking whether the irradiance map already exists or not
     std::ifstream input_irradiance(irradiance_map_name);
