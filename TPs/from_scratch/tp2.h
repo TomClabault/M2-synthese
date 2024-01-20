@@ -163,7 +163,7 @@ protected:
     GLuint m_frustum_culling_shader;
     GLuint m_mdi_draw_params_buffer;
     GLuint m_culling_objects_id_to_draw;
-    GLuint m_culling_passing_ids; //TODO remove (should be able to, not 100% sure though)
+    GLuint m_culling_passing_ids;
     GLuint m_culling_input_object_buffer;
     GLuint m_culling_nb_objects_passed_buffer;
 
