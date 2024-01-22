@@ -5,7 +5,7 @@
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
 layout(location = 2) in vec2 texcoords;
-layout(location = 3) in int draw_id;
+layout(location = 3) in int material_id;
 
 uniform mat4 u_model_matrix;
 uniform mat4 u_vp_matrix;
@@ -16,7 +16,7 @@ out vec4 vs_position_light_space;
 out vec3 vs_position;
 out vec3 vs_normal;
 out vec2 vs_texcoords;
-flat out int vs_gl_InstanceID;
+flat out int vs_material_id;
 
 void main()
 {
@@ -26,7 +26,7 @@ void main()
     vs_normal = normalize(vec3(transpose(inverse(u_model_matrix)) * vec4(normal, 0.0f)));
     vs_position = vec3(u_model_matrix * vec4(position, 1.0f));
     vs_texcoords = texcoords;
-    vs_gl_InstanceID = draw_id;
+    vs_material_id = material_id;
 
     vs_position_light_space = u_lp_matrix * u_model_matrix * vec4(position, 1);
 
@@ -37,17 +37,6 @@ void main()
 #ifdef FRAGMENT_SHADER
 
 const float M_PI = 3.1415926535897932384626433832795f;
-
-uniform vec3 u_camera_position;
-uniform vec3 u_light_position;
-
-uniform bool u_use_irradiance_map;
-
-uniform sampler2D u_irradiance_map;
-
-uniform sampler2DArray u_base_color_texture_array;
-uniform sampler2DArray u_specular_texture_array;
-uniform sampler2DArray u_normal_map_texture_array;
 
 struct Material
 {
@@ -66,6 +55,17 @@ layout(std430, binding = 0) buffer MaterialUniformBlock
     Material material_buffer[];
 };
 
+uniform vec3 u_camera_position;
+uniform vec3 u_light_position;
+
+uniform bool u_use_irradiance_map;
+
+uniform sampler2D u_irradiance_map;
+
+uniform sampler2DArray u_base_color_texture_array;
+uniform sampler2DArray u_specular_texture_array;
+uniform sampler2DArray u_normal_map_texture_array;
+
 uniform sampler2D u_shadow_map;
 uniform float u_shadow_intensity;
 
@@ -78,7 +78,7 @@ in vec4 vs_position_light_space;
 in vec3 vs_normal;
 in vec3 vs_position;
 in vec2 vs_texcoords;
-flat in int vs_gl_InstanceID;
+flat in int vs_material_id;
 
 out vec4 frag_color;
 
@@ -186,11 +186,10 @@ vec3 normal_mapping(vec2 normal_map_uv, int normal_map_index)
 
 void main()
 {
-    frag_color = vec4(vec3(vs_gl_InstanceID) / 128.0f, 1.0f);
-    return;
+    //frag_color = vec4(vec3(vs_material_id / 128.0f), 1.0f);
+    //return;
 
-    Material material = material_buffer[vs_gl_InstanceID];
-
+    Material material = material_buffer[vs_material_id];
 
     vec4 base_color;
     if (material.base_color_texture_id != -1)

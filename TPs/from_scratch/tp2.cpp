@@ -20,6 +20,8 @@
 #include <filesystem>
 #include <thread>
 
+#define TIME(x, message) { auto __start_timer = std::chrono::high_resolution_clock::now(); x; auto __stop_timer = std::chrono::high_resolution_clock::now(); std::cout << message << std::chrono::duration_cast<std::chrono::milliseconds>(__stop_timer - __start_timer).count() << "ms" << std::endl;}
+
 // constructeur : donner les dimensions de l'image, et eventuellement la version d'openGL.
 TP2::TP2() : AppCamera(1280, 720, 4, 3, 8)
 {
@@ -326,6 +328,380 @@ void TP2::compute_bounding_boxes_of_groups(std::vector<TriangleGroup>& groups)
     }
 }
 
+std::vector<int> TP2::create_material_ids_data()
+{
+    std::vector<int> material_ids;
+    material_ids.reserve(m_mesh.positions().size());
+
+    int material_index = 0;
+    for (const TriangleGroup& group : m_mesh_triangles_group)
+    {
+        for (int i = 0; i < group.n; i++)
+            material_ids.push_back(material_index);
+
+        material_index++;
+    }
+
+    return material_ids;
+}
+
+int TP2::create_hdr_frame()
+{
+    glGenTextures(1, &m_hdr_shader_output_texture);
+    glBindTexture(GL_TEXTURE_2D, m_hdr_shader_output_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, window_width(), window_height(), 0, GL_RGBA, GL_FLOAT, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
+    glGenTextures(1, &m_hdr_depth_buffer_texture);
+    glBindTexture(GL_TEXTURE_2D, m_hdr_depth_buffer_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, window_width(), window_height(), 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glGenFramebuffers(1, &m_hdr_framebuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_hdr_framebuffer);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, m_hdr_depth_buffer_texture, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_hdr_shader_output_texture, 0);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        return -1;
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0); //Cleaning
+
+    return 0;
+}
+
+void TP2::create_z_buffer_mipmaps_textures(int width, int height)
+{
+    //We're going to create the mipmaps without the very first level so that's why
+    //the mipmaps start at new_width and new_height
+    int new_width = std::max(1, width / 2);
+    int new_height = std::max(1, height / 2);
+
+    glGenTextures(1, &m_z_buffer_mipmaps_texture);
+    glBindTexture(GL_TEXTURE_2D, m_z_buffer_mipmaps_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, new_width, new_height, 0, GL_RED, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    //How many mipmaps we're actually going to use
+    m_z_buffer_mipmaps_count = 1; // Counting the level 0
+    while (width > 4 && height > 4)//Stop at a 4*4 mipmap
+    {
+        width = std::max(1, width / 2);
+        height = std::max(1, height / 2);
+
+        m_z_buffer_mipmaps_count++;
+    }
+}
+
+int TP2::resize_hdr_frame()
+{
+    glDeleteTextures(1, &m_hdr_shader_output_texture);
+    glDeleteFramebuffers(1, &m_hdr_framebuffer);
+
+    return create_hdr_frame();
+}
+
+void TP2::resize_z_buffer_mipmaps()
+{
+    glDeleteTextures(1, &m_z_buffer_mipmaps_texture);
+    create_z_buffer_mipmaps_textures(window_width(), window_height());
+}
+
+int TP2::create_shadow_map()
+{
+    glGenTextures(1, &m_shadow_map);
+    glBindTexture(GL_TEXTURE_2D, m_shadow_map);
+
+    glTexImage2D(GL_TEXTURE_2D, 0,
+        GL_DEPTH_COMPONENT32F, TP2::SHADOW_MAP_RESOLUTION, TP2::SHADOW_MAP_RESOLUTION, 0,
+        GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+
+    float border_color[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border_color);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    glGenFramebuffers(1, &m_shadow_map_framebuffer);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_shadow_map_framebuffer);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    glFramebufferTexture(GL_DRAW_FRAMEBUFFER, /* attachment */ GL_DEPTH_ATTACHMENT, m_shadow_map, /* mipmap */ 0);
+
+    if (glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        return -1;
+
+    //Cleaning
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+
+    return 0;
+}
+
+void TP2::draw_shadow_map()
+{
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_shadow_map_framebuffer);
+    glViewport(0, 0, TP2::SHADOW_MAP_RESOLUTION, TP2::SHADOW_MAP_RESOLUTION);
+    glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+    glCullFace(GL_FRONT);
+
+    glUseProgram(m_shadow_map_program);
+    GLint mlp_matrix_uniform_location = glGetUniformLocation(m_shadow_map_program, "mlp_matrix");
+    if (m_application_settings.bind_light_camera_to_camera)
+        glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, (m_camera.projection() * m_camera.view()).data());
+    else
+        glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, m_lp_light_transform.data());
+
+    glBindVertexArray(m_mesh_vao);
+    glDrawArrays(GL_TRIANGLES, 0, m_mesh.triangle_count() * 3);
+
+    //Cleaning
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    glViewport(0, 0, window_width(), window_height());
+    glBindVertexArray(0);
+    glCullFace(GL_BACK);
+}
+
+int TP2::init()
+{
+    //Setting ImGUI up
+    ImGui::CreateContext();
+
+    m_imgui_io = ImGui::GetIO();
+    ImGui_ImplSdlGL3_Init(m_window);
+
+    //Positioning the camera to a default state
+    //m_camera.read_orbiter("data/TPs/start_camera_bistro.txt");
+    m_light_camera.read_orbiter("data/TPs/light_camera_bistro.txt");
+    m_lp_light_transform = TP2::LIGHT_CAMERA_ORTHO_PROJ_BISTRO * m_light_camera.view();
+
+    //Reading the mesh displayed
+    //TIME(m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj"), "Load OBJ Time: ");
+    TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
+    //TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
+    //TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
+    //TIME(m_mesh = read_mesh("data/TPs/cube_occlusion_culling_4.obj"), "Load OBJ Time: ");
+    if (m_mesh.positions().size() == 0)
+    {
+        std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
+
+        exit(-1);
+    }
+
+
+
+    // etat openGL par defaut
+    glClearColor(0.2f, 0.2f, 0.2f, 1.f);        // couleur par defaut de la fenetre
+    glClearDepth(1.f);                          // profondeur par defaut
+
+    glDepthFunc(GL_LEQUAL);                       // ztest, conserver l'intersection la plus proche de la camera
+    glEnable(GL_DEPTH_TEST);                    // activer le ztest
+
+    m_fullscreen_quad_texture_shader = read_program("data/TPs/shaders/shader_fullscreen_quad_texture.glsl");
+    program_print_errors(m_fullscreen_quad_texture_shader);
+
+    m_fullscreen_quad_texture_hdr_exposure_shader = read_program("data/TPs/shaders/shader_fullscreen_quad_texture_hdr_exposure.glsl");
+    program_print_errors(m_fullscreen_quad_texture_hdr_exposure_shader);
+
+    m_texture_shadow_cook_torrance_shader = read_program("data/TPs/shaders/shader_texture_shadow_cook_torrance_shader.glsl");
+    program_print_errors(m_texture_shadow_cook_torrance_shader);
+
+    GLint use_irradiance_map_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_use_irradiance_map");
+    glUniform1i(use_irradiance_map_location, m_application_settings.use_irradiance_map);
+
+    GLint base_color_texture_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_base_color_texture_array");
+    glUniform1i(base_color_texture_uniform_location, TP2::BASE_COLOR_TEXTURE_ARRAY_UNIT);
+
+    GLint specular_texture_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_specular_texture_array");
+    glUniform1i(specular_texture_uniform_location, TP2::SPECULAR_TEXTURE_ARRAY_UNIT);
+
+    GLint normal_map_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_normal_map_texture_array");
+    glUniform1i(normal_map_uniform_location, TP2::NORMAL_MAP_TEXTURE_ARRAY_UNIT);
+
+    m_shadow_map_program = read_program("data/TPs/shaders/shader_shadow_map.glsl");
+    program_print_errors(m_shadow_map_program);
+
+    m_cubemap_shader = read_program("data/TPs/shaders/shader_cubemap.glsl");
+    program_print_errors(m_cubemap_shader);
+
+    GLint skysphere_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_skysphere");
+    glUniform1i(skysphere_uniform_location, TP2::SKYSPHERE_UNIT);
+
+    m_frustum_culling_shader = read_program("data/TPs/shaders/TPCG/frustum_culling.glsl");
+    program_print_errors(m_frustum_culling_shader);
+
+    m_occlusion_culling_shader = read_program("data/TPs/shaders/TPCG/occlusion_culling.glsl");
+    program_print_errors(m_occlusion_culling_shader);
+
+
+
+
+    auto start = std::chrono::high_resolution_clock::now();
+    std::vector<TP2::CookTorranceMaterial> materials_buffer = load_and_create_textures();
+    auto stop = std::chrono::high_resolution_clock::now();
+    std::cout << "Texture loading time: " << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << "ms" << std::endl;
+
+    //Generating the default textures that the triangle groups that don't have texture will use
+    // Unused since multi draw indirect
+    /*unsigned char default_texture_data[3] = { 255, 255, 255 };
+    glGenTextures(1, &m_default_texture);
+    glBindTexture(GL_TEXTURE_2D, m_default_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGB, GL_UNSIGNED_BYTE, default_texture_data);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_REPEAT);
+    glGenerateMipmap(GL_TEXTURE_2D);*/
+
+    //Creating the VAO for the mesh that will be displayed
+    glGenVertexArrays(1, &m_mesh_vao);
+    //Selecting the VAO that we're going to configure
+    glBindVertexArray(m_mesh_vao);
+
+    //Creation du vertex buffer
+    GLuint mesh_buffer;
+    glGenBuffers(1, &mesh_buffer);
+    //On selectionne le position buffer
+    glBindBuffer(GL_ARRAY_BUFFER, mesh_buffer);
+
+    std::vector<int> material_ids = create_material_ids_data();
+    size_t total_size = m_mesh.normal_buffer_size() + m_mesh.positions().size() * sizeof(vec3) + m_mesh.texcoord_buffer_size() + material_ids.size() * sizeof(int);
+    // Creating the vertex buffer
+    glBufferData(GL_ARRAY_BUFFER, total_size, nullptr, GL_STATIC_DRAW);
+
+    //Envoie des positions
+    glBufferSubData(GL_ARRAY_BUFFER, 0, m_mesh.positions().size() * sizeof(vec3), m_mesh.positions().data());
+    size_t position_size = m_mesh.positions().size() * sizeof(vec3);
+
+    //Envoie des normales
+    glBufferSubData(GL_ARRAY_BUFFER, position_size, m_mesh.normal_buffer_size(), m_mesh.normal_buffer());
+    size_t normal_size = m_mesh.normal_buffer_size();
+
+    //Envoie des texcoords
+    glBufferSubData(GL_ARRAY_BUFFER, position_size + normal_size, m_mesh.texcoord_buffer_size(), m_mesh.texcoord_buffer());
+    size_t texcoord_size = m_mesh.texcoord_buffer_size();
+
+    //Envoie des material ids
+    glBufferSubData(GL_ARRAY_BUFFER, position_size + normal_size + texcoord_size, material_ids.size(), material_ids.data());
+
+
+    glUseProgram(m_texture_shadow_cook_torrance_shader);
+    //Setting the id of the attributes (set using layout in the shader)
+    GLint position_attribute = glGetAttribLocation(m_texture_shadow_cook_torrance_shader, "position");
+    GLint normal_attribute = glGetAttribLocation(m_texture_shadow_cook_torrance_shader, "normal");
+    GLint texcoord_attribute = glGetAttribLocation(m_texture_shadow_cook_torrance_shader, "texcoords");
+    GLint material_id_attribute = glGetAttribLocation(m_texture_shadow_cook_torrance_shader, "material_id");
+
+    glVertexAttribPointer(position_attribute, /* size */ 3, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ 0);
+    glEnableVertexAttribArray(position_attribute);
+    glVertexAttribPointer(normal_attribute, /* size */ 3, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ (GLvoid*)position_size);
+    glEnableVertexAttribArray(normal_attribute);
+    glVertexAttribPointer(texcoord_attribute, /* size */ 2, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ (GLvoid*)(position_size + normal_size));
+    glEnableVertexAttribArray(texcoord_attribute);
+    glVertexAttribIPointer(material_id_attribute, /* size */ 1, /* type */ GL_INT, /* stride */ 0, /* offset */ (GLvoid*)(position_size + normal_size + texcoord_size));
+    glEnableVertexAttribArray(material_id_attribute);
+
+    // Creating an empty VAO that will be used for the cubemap
+    // Empty because we're hardcoding the triangles of the wholescreen cubemap into the vertex shader
+    glGenVertexArrays(1, &m_cubemap_vao);
+
+    compute_bounding_boxes_of_groups(m_mesh_triangles_group);
+
+    //Reading the faces of the skybox and creating the OpenGL Cubemap
+    std::vector<ImageData> cubemap_data;
+    Image skysphere_image, irradiance_map_image;
+
+    std::thread load_thread_cubemap = std::thread([&] {cubemap_data = Utils::read_cubemap_data("data/TPs/skybox", ".jpg"); });
+    std::thread load_thread_skypshere = std::thread([&] {skysphere_image = Utils::read_skysphere_image(m_application_settings.irradiance_map_file_path.c_str()); });
+    irradiance_map_image = Utils::precompute_and_load_associated_irradiance_gpu(m_application_settings.irradiance_map_file_path.c_str(), m_application_settings.irradiance_map_precomputation_samples, m_application_settings.irradiance_map_precomputation_downscale_factor);
+
+    load_thread_cubemap.join();
+    load_thread_skypshere.join();
+
+    m_cubemap = Utils::create_cubemap_texture_from_data(cubemap_data);
+    m_skysphere = Utils::create_skysphere_texture_hdr(skysphere_image, TP2::SKYSPHERE_UNIT);
+    m_irradiance_map = Utils::create_skysphere_texture_hdr(irradiance_map_image, TP2::DIFFUSE_IRRADIANCE_MAP_UNIT);
+
+    // ---------- Preparing for multi-draw indirect: ---------- //
+    glUseProgram(m_frustum_culling_shader);
+
+    glGenBuffers(1, &m_mdi_draw_params_buffer);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_mdi_draw_params_buffer);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(TP2::MultiDrawIndirectParam)* m_mesh_triangles_group.size(), nullptr, GL_DYNAMIC_DRAW);
+
+    glGenBuffers(1, &m_culling_objects_id_to_draw);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_objects_id_to_draw);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int)* m_mesh_triangles_group.size(), nullptr, GL_DYNAMIC_DRAW);
+
+    glGenBuffers(1, &m_culling_passing_ids);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_passing_ids);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int)* m_mesh_triangles_group.size(), nullptr, GL_DYNAMIC_DRAW);
+
+    glGenBuffers(1, &m_culling_input_object_buffer);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_input_object_buffer);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(TP2::CullObject) * m_cull_objects.size(), nullptr, GL_STATIC_DRAW);
+    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(TP2::CullObject) * m_cull_objects.size(), m_cull_objects.data());
+
+    glGenBuffers(1, &m_culling_nb_objects_passed_buffer);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_nb_objects_passed_buffer);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int), nullptr, GL_DYNAMIC_DRAW);
+
+    glUseProgram(m_texture_shadow_cook_torrance_shader);
+    glGenBuffers(1, &m_materials_buffer);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_materials_buffer);
+    // The materials buffer has been created earlier, when parsing the materials
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(TP2::CookTorranceMaterial) * m_mesh_triangles_group.size(), materials_buffer.data(), GL_STATIC_DRAW);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_materials_buffer);
+
+    //Cleaning (repositionning the buffers that have been selected to their default value)
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+    Point p_min, p_max;
+    m_mesh.bounds(p_min, p_max);
+    m_camera.read_orbiter("debug_app_orbiter.txt");
+
+    if (create_shadow_map() == -1)
+        return -1;
+    draw_shadow_map();
+
+    if (create_hdr_frame() == -1)
+        return -1;
+
+    create_z_buffer_mipmaps_textures(window_width(), window_height());
+
+    return 0;
+}
+
+std::vector<TP2::MultiDrawIndirectParam> TP2::generate_draw_params_from_object_ids(std::vector<int> object_ids)
+{
+    std::vector<TP2::MultiDrawIndirectParam> draw_params;
+    draw_params.reserve(object_ids.size());
+
+    for (int object_id : object_ids)
+    {
+        TP2::MultiDrawIndirectParam draw_param;
+        draw_param.instance_base = 0;
+        draw_param.instance_count = 1;
+        draw_param.vertex_base = m_cull_objects[object_id].vertex_base;
+        draw_param.vertex_count = m_cull_objects[object_id].vertex_count;
+
+        draw_params.push_back(draw_param);
+    }
+
+    return draw_params;
+}
+
 bool TP2::rejection_test_bbox_frustum_culling(const TP2::CullObject& object, const Transform& mvpMatrix)
 {
     /*
@@ -556,374 +932,6 @@ void TP2::occlusion_cull_gpu(const Transform& mvp_matrix, const Transform& view_
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 }
 
-#define TIME(x, message) { auto __start_timer = std::chrono::high_resolution_clock::now(); x; auto __stop_timer = std::chrono::high_resolution_clock::now(); std::cout << message << std::chrono::duration_cast<std::chrono::milliseconds>(__stop_timer - __start_timer).count() << "ms" << std::endl;}
-
-int TP2::init()
-{
-    //Setting ImGUI up
-    ImGui::CreateContext();
-
-    m_imgui_io = ImGui::GetIO();
-    ImGui_ImplSdlGL3_Init(m_window);
-
-    //Positioning the camera to a default state
-    //m_camera.read_orbiter("data/TPs/start_camera_bistro.txt");
-    m_light_camera.read_orbiter("data/TPs/light_camera_bistro.txt");
-    m_lp_light_transform = TP2::LIGHT_CAMERA_ORTHO_PROJ_BISTRO * m_light_camera.view();
-
-    //Reading the mesh displayed
-    //TIME(m_mesh = read_mesh("data/TPs/bistro-small-export/export.obj"), "Load OBJ Time: ");
-    TIME(m_mesh = read_mesh("data/TPs/bistro-big/exterior.obj"), "Load OBJ Time: ");
-    //TIME(m_mesh = read_mesh("data/sphere_high.obj"), "Load OBJ Time: ");
-    //TIME(m_mesh = read_mesh("data/simple_plane.obj"), "Load OBJ Time: ");
-    //TIME(m_mesh = read_mesh("data/TPs/cube_occlusion_culling_4.obj"), "Load OBJ Time: ");
-    if (m_mesh.positions().size() == 0)
-    {
-        std::cout << "The read mesh has 0 positions. Either the mesh file is incorrect or the mesh file wasn't found (incorrect path)" << std::endl;
-
-        exit(-1);
-    }
-
-
-
-    // etat openGL par defaut
-    glClearColor(0.2f, 0.2f, 0.2f, 1.f);        // couleur par defaut de la fenetre
-    glClearDepth(1.f);                          // profondeur par defaut
-
-    glDepthFunc(GL_LEQUAL);                       // ztest, conserver l'intersection la plus proche de la camera
-    glEnable(GL_DEPTH_TEST);                    // activer le ztest
-
-    m_fullscreen_quad_texture_shader = read_program("data/TPs/shaders/shader_fullscreen_quad_texture.glsl");
-    program_print_errors(m_fullscreen_quad_texture_shader);
-
-    m_fullscreen_quad_texture_hdr_exposure_shader = read_program("data/TPs/shaders/shader_fullscreen_quad_texture_hdr_exposure.glsl");
-    program_print_errors(m_fullscreen_quad_texture_hdr_exposure_shader);
-
-    m_texture_shadow_cook_torrance_shader = read_program("data/TPs/shaders/shader_texture_shadow_cook_torrance_shader.glsl");
-    program_print_errors(m_texture_shadow_cook_torrance_shader);
-
-    GLint use_irradiance_map_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_use_irradiance_map");
-    glUniform1i(use_irradiance_map_location, m_application_settings.use_irradiance_map);
-
-    GLint base_color_texture_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_base_color_texture_array");
-    glUniform1i(base_color_texture_uniform_location, TP2::BASE_COLOR_TEXTURE_ARRAY_UNIT);
-
-    GLint specular_texture_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_specular_texture_array");
-    glUniform1i(specular_texture_uniform_location, TP2::SPECULAR_TEXTURE_ARRAY_UNIT);
-
-    GLint normal_map_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_normal_map_texture_array");
-    glUniform1i(normal_map_uniform_location, TP2::NORMAL_MAP_TEXTURE_ARRAY_UNIT);
-
-    m_shadow_map_program = read_program("data/TPs/shaders/shader_shadow_map.glsl");
-    program_print_errors(m_shadow_map_program);
-
-    m_cubemap_shader = read_program("data/TPs/shaders/shader_cubemap.glsl");
-    program_print_errors(m_cubemap_shader);
-
-    //The skysphere is on texture unit 1 so we're using 1 for the value of the uniform
-    GLint skysphere_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_skysphere");
-    glUniform1i(skysphere_uniform_location, 1);
-
-    m_frustum_culling_shader = read_program("data/TPs/shaders/TPCG/frustum_culling.glsl");
-    program_print_errors(m_frustum_culling_shader);
-
-    m_occlusion_culling_shader = read_program("data/TPs/shaders/TPCG/occlusion_culling.glsl");
-    program_print_errors(m_occlusion_culling_shader);
-
-
-
-
-
-    //Loading the textures on another thread
-    //std::thread texture_thread(&TP2::load_mesh_textures_thread_function, this, std::ref(m_mesh.materials()));
-
-    auto start = std::chrono::high_resolution_clock::now();
-    std::vector<TP2::CookTorranceMaterial> materials_buffer = load_and_create_textures();
-    auto stop = std::chrono::high_resolution_clock::now();
-    std::cout << "Texture loading time: " << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << "ms" << std::endl;
-
-    //Generating the default textures that the triangle groups that don't have texture will use
-    unsigned char default_texture_data[3] = { 255, 255, 255 };
-    glGenTextures(1, &m_default_texture);
-    glBindTexture(GL_TEXTURE_2D, m_default_texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGB, GL_UNSIGNED_BYTE, default_texture_data);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_REPEAT);
-    glGenerateMipmap(GL_TEXTURE_2D);
-
-    //Creating the VAO for the mesh that will be displayed
-    glGenVertexArrays(1, &m_mesh_vao);
-    //Selecting the VAO that we're going to configure
-    glBindVertexArray(m_mesh_vao);
-
-    //Creation du position buffer
-    GLuint mesh_buffer;
-    glGenBuffers(1, &mesh_buffer);
-    //On selectionne le position buffer
-    glBindBuffer(GL_ARRAY_BUFFER, mesh_buffer);
-    size_t total_size = m_mesh.normal_buffer_size() + m_mesh.positions().size() * sizeof(vec3) + m_mesh.texcoord_buffer_size();
-    //On definit la taille du buffer selectionne (le position buffer)
-    glBufferData(GL_ARRAY_BUFFER, total_size, nullptr, GL_STATIC_DRAW);
-
-    //Envoie des positions
-    glBufferSubData(GL_ARRAY_BUFFER, 0, m_mesh.positions().size() * sizeof(vec3), m_mesh.positions().data());
-    size_t position_size = m_mesh.positions().size() * sizeof(vec3);
-
-    //Envoie des normales
-    glBufferSubData(GL_ARRAY_BUFFER, position_size, m_mesh.normal_buffer_size(), m_mesh.normal_buffer());
-    size_t normal_size = m_mesh.normal_buffer_size();
-
-    //Envoie des texcoords
-    glBufferSubData(GL_ARRAY_BUFFER, position_size + normal_size, m_mesh.texcoord_buffer_size(), m_mesh.texcoord_buffer());
-
-
-    glUseProgram(m_texture_shadow_cook_torrance_shader);
-    //Setting the id of the attributes (set using layout in the shader)
-    GLint position_attribute = 0;//glGetAttribLocation(m_diffuse_texture_shader, "position");
-    GLint normal_attribute = 1;//glGetAttribLocation(m_diffuse_texture_shader, "normal");
-    GLint texcoord_attribute = 2;//glGetAttribLocation(m_diffuse_texture_shader, "texcoords");
-
-    glGenBuffers(1, &m_mdi_draw_params_buffer);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_mdi_draw_params_buffer);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(TP2::MultiDrawIndirectParam)* m_mesh_triangles_group.size(), nullptr, GL_DYNAMIC_DRAW);
-
-    glVertexAttribPointer(position_attribute, /* size */ 3, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ 0);
-    glEnableVertexAttribArray(position_attribute);
-    glVertexAttribPointer(normal_attribute, /* size */ 3, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ (GLvoid*)position_size);
-    glEnableVertexAttribArray(normal_attribute);
-    glVertexAttribPointer(texcoord_attribute, /* size */ 2, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ (GLvoid*)(position_size + normal_size));
-    glEnableVertexAttribArray(texcoord_attribute);
-    // Configuring the gl_InstanceID attribute to use the base_instance parameter of the
-    // multi-draw commands
-    glBindBuffer(GL_ARRAY_BUFFER, m_mdi_draw_params_buffer);
-    glEnableVertexAttribArray(3);
-    glVertexAttribIPointer(3, 1, GL_UNSIGNED_INT,
-                           sizeof(TP2::MultiDrawIndirectParam),
-                           (void*)(offsetof(TP2::MultiDrawIndirectParam, instance_base)));
-    glVertexAttribDivisor(3, 1); //only once per instance
-
-    //Creating an empty VAO that will be used for the cubemap
-    glGenVertexArrays(1, &m_cubemap_vao);
-
-    //TODO sur un thread
-    compute_bounding_boxes_of_groups(m_mesh_triangles_group);
-    //TODO sur un thread
-
-    //Reading the faces of the skybox and creating the OpenGL Cubemap
-    std::vector<ImageData> cubemap_data;
-    Image skysphere_image, irradiance_map_image;
-
-    std::thread load_thread_cubemap = std::thread([&] {cubemap_data = Utils::read_cubemap_data("data/TPs/skybox", ".jpg"); });
-    std::thread load_thread_skypshere = std::thread([&] {skysphere_image = Utils::read_skysphere_image(m_application_settings.irradiance_map_file_path.c_str()); });
-    irradiance_map_image = Utils::precompute_and_load_associated_irradiance_gpu(m_application_settings.irradiance_map_file_path.c_str(), m_application_settings.irradiance_map_precomputation_samples, m_application_settings.irradiance_map_precomputation_downscale_factor);
-
-    load_thread_cubemap.join();
-    load_thread_skypshere.join();
-
-    m_cubemap = Utils::create_cubemap_texture_from_data(cubemap_data);
-    m_skysphere = Utils::create_skysphere_texture_hdr(skysphere_image, TP2::SKYSPHERE_UNIT);
-    m_irradiance_map = Utils::create_skysphere_texture_hdr(irradiance_map_image, TP2::DIFFUSE_IRRADIANCE_MAP_UNIT);
-
-    // ---------- Preparing for multi-draw indirect: ---------- //
-    glUseProgram(m_frustum_culling_shader);
-
-    glGenBuffers(1, &m_culling_objects_id_to_draw);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_objects_id_to_draw);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int)* m_mesh_triangles_group.size(), nullptr, GL_DYNAMIC_DRAW);
-
-    glGenBuffers(1, &m_culling_passing_ids);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_passing_ids);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int)* m_mesh_triangles_group.size(), nullptr, GL_DYNAMIC_DRAW);
-
-    glGenBuffers(1, &m_culling_input_object_buffer);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_input_object_buffer);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(TP2::CullObject) * m_cull_objects.size(), nullptr, GL_STATIC_DRAW);
-    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(TP2::CullObject) * m_cull_objects.size(), m_cull_objects.data());
-
-    glGenBuffers(1, &m_culling_nb_objects_passed_buffer);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_culling_nb_objects_passed_buffer);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int), nullptr, GL_DYNAMIC_DRAW);
-
-    glUseProgram(m_texture_shadow_cook_torrance_shader);
-    glGenBuffers(1, &m_materials_buffer);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_materials_buffer);
-    // The materials buffer has been created earlier, when parsing the materials
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(TP2::CookTorranceMaterial) * m_mesh_triangles_group.size(), materials_buffer.data(), GL_STATIC_DRAW);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_materials_buffer);
-
-    //Cleaning (repositionning the buffers that have been selected to their default value)
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-
-    Point p_min, p_max;
-    m_mesh.bounds(p_min, p_max);
-    m_camera.read_orbiter("debug_app_orbiter.txt");
-
-    if (create_shadow_map() == -1)
-        return -1;
-    draw_shadow_map();
-
-    if (create_hdr_frame() == -1)
-        return -1;
-
-    create_z_buffer_mipmaps_textures(window_width(), window_height());
-
-    return 0;
-}
-
-int TP2::quit()
-{
-    return 0;//Error code 0 = no error
-}
-
-int TP2::create_hdr_frame()
-{
-    glGenTextures(1, &m_hdr_shader_output_texture);
-    glBindTexture(GL_TEXTURE_2D, m_hdr_shader_output_texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, window_width(), window_height(), 0, GL_RGBA, GL_FLOAT, 0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-
-    glGenTextures(1, &m_hdr_depth_buffer_texture);
-    glBindTexture(GL_TEXTURE_2D, m_hdr_depth_buffer_texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, window_width(), window_height(), 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    glGenFramebuffers(1, &m_hdr_framebuffer);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_hdr_framebuffer);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, m_hdr_depth_buffer_texture, 0);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_hdr_shader_output_texture, 0);
-
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-        return -1;
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0); //Cleaning
-
-    return 0;
-}
-
-void TP2::create_z_buffer_mipmaps_textures(int width, int height)
-{
-    //We're going to create the mipmaps without the very first level so that's why
-    //the mipmaps start at new_width and new_height
-    int new_width = std::max(1, width / 2);
-    int new_height = std::max(1, height / 2);
-
-    glGenTextures(1, &m_z_buffer_mipmaps_texture);
-    glBindTexture(GL_TEXTURE_2D, m_z_buffer_mipmaps_texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, new_width, new_height, 0, GL_RED, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glGenerateMipmap(GL_TEXTURE_2D);
-
-    //How many mipmaps we're actually going to use
-    m_z_buffer_mipmaps_count = 1; // Counting the level 0
-    while (width > 4 && height > 4)//Stop at a 4*4 mipmap
-    {
-        width = std::max(1, width / 2);
-        height = std::max(1, height / 2);
-
-        m_z_buffer_mipmaps_count++;
-    }
-}
-
-int TP2::resize_hdr_frame()
-{
-    glDeleteTextures(1, &m_hdr_shader_output_texture);
-    glDeleteFramebuffers(1, &m_hdr_framebuffer);
-
-    return create_hdr_frame();
-}
-
-void TP2::resize_z_buffer_mipmaps()
-{
-    glDeleteTextures(1, &m_z_buffer_mipmaps_texture);
-    create_z_buffer_mipmaps_textures(window_width(), window_height());
-}
-
-int TP2::create_shadow_map()
-{
-    glGenTextures(1, &m_shadow_map);
-    glBindTexture(GL_TEXTURE_2D, m_shadow_map);
-
-    glTexImage2D(GL_TEXTURE_2D, 0,
-                 GL_DEPTH_COMPONENT32F, TP2::SHADOW_MAP_RESOLUTION, TP2::SHADOW_MAP_RESOLUTION, 0,
-                 GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
-
-    float border_color[] = { 1.0f, 1.0f, 1.0f, 1.0f };
-    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border_color);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-
-    glGenerateMipmap(GL_TEXTURE_2D);
-
-    glGenFramebuffers(1, &m_shadow_map_framebuffer);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_shadow_map_framebuffer);
-    glDrawBuffer(GL_NONE);
-    glReadBuffer(GL_NONE);
-    glFramebufferTexture(GL_DRAW_FRAMEBUFFER, /* attachment */ GL_DEPTH_ATTACHMENT, m_shadow_map, /* mipmap */ 0);
-
-    if (glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-        return -1;
-
-    //Cleaning
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-
-    return 0;
-}
-
-void TP2::draw_shadow_map()
-{
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_shadow_map_framebuffer);
-    glViewport(0, 0, TP2::SHADOW_MAP_RESOLUTION, TP2::SHADOW_MAP_RESOLUTION);
-    glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
-    glCullFace(GL_FRONT);
-
-    glUseProgram(m_shadow_map_program);
-    GLint mlp_matrix_uniform_location = glGetUniformLocation(m_shadow_map_program, "mlp_matrix");
-    if (m_application_settings.bind_light_camera_to_camera)
-        glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, (m_camera.projection() * m_camera.view()).data());
-    else
-        glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, m_lp_light_transform.data());
-
-    glBindVertexArray(m_mesh_vao);
-    glDrawArrays(GL_TRIANGLES, 0, m_mesh.triangle_count() * 3);
-
-    //Cleaning
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-    glViewport(0, 0, window_width(), window_height());
-    glBindVertexArray(0);
-    glCullFace(GL_BACK);
-}
-
-std::vector<TP2::MultiDrawIndirectParam> TP2::generate_draw_params_from_object_ids(std::vector<int> object_ids)
-{
-    std::vector<TP2::MultiDrawIndirectParam> draw_params;
-    draw_params.reserve(object_ids.size());
-
-    for (int object_id : object_ids)
-    {
-        TP2::MultiDrawIndirectParam draw_param;
-        draw_param.instance_base = object_id;
-        draw_param.instance_count = 1;
-        draw_param.vertex_base = m_cull_objects[object_id].vertex_base;
-        draw_param.vertex_count = m_cull_objects[object_id].vertex_count;
-
-        draw_params.push_back(draw_param);
-    }
-
-    return draw_params;
-}
-
 void TP2::draw_by_groups_cpu_frustum_culling(const Transform& vp_matrix, const Transform& mvp_matrix_inverse)
 {
     /*m_mesh_groups_drawn = 0;
@@ -1094,7 +1102,7 @@ void TP2::cpu_mdi_selective_frustum_culling(const std::vector<int>& objects_id, 
         //The object has not been culled, we're going to push the params
         //for the object to be drawn by the future MDI call
         TP2::MultiDrawIndirectParam object_draw_params;
-        object_draw_params.instance_base = object_id;
+        object_draw_params.instance_base = 0;
         object_draw_params.instance_count = 1;
         object_draw_params.vertex_base = m_cull_objects[object_id].vertex_base;
         object_draw_params.vertex_count = m_cull_objects[object_id].vertex_count;
@@ -1608,4 +1616,9 @@ int TP2::render()
     m_frame_number++;
 
     return 1;
+}
+
+int TP2::quit()
+{
+    return 0;//Error code 0 = no error
 }

@@ -102,8 +102,8 @@ struct TriangleData
 struct TriangleGroup
 {
     int index;  //!< indice de la "propriete"du groupe de triangles, par defaut : indice de la matiere
-    int first;  //!< premier triangle du groupe
-    int n;      //!< nombre de triangles du groupe
+    int first;  //!< premier vertex du groupe
+    int n;      //!< nombre de vertex du groupe
 };
 
 
