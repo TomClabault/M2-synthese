@@ -213,7 +213,7 @@ void main()
         output_draw_commands[index].vertex_count = object.vertex_count;
         output_draw_commands[index].vertex_base = object.vertex_base;
         output_draw_commands[index].instance_count = 1;
-        output_draw_commands[index].instance_base = 0;
+        output_draw_commands[index].instance_base = object_id;
     }
 }
 

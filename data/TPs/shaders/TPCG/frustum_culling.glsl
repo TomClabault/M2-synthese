@@ -115,7 +115,7 @@ void main()
     output_draw_params[index].vertex_count = input_cull_objects[thread_id].vertex_count;
     output_draw_params[index].vertex_base = input_cull_objects[thread_id].vertex_base;
     output_draw_params[index].instance_count = 1;
-    output_draw_params[index].instance_base = 0;
+    output_draw_params[index].instance_base = thread_id;
 
     output_objects_drawn_id[index] = thread_id;
 }

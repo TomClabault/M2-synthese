@@ -78,8 +78,8 @@ public:
      * @return True if the object has been culled and is not visible.
      * False if it is visible
      */
-    bool occlusion_cull_cpu(const Transform &mvp_matrix, CullObject& object, int depth_buffer_width, int depth_buffer_height, const std::vector<std::vector<float>>& z_buffer_mipmaps, const std::vector<std::pair<int, int>>& mipmaps_widths_heights, int object_id=-1);
-    void occlusion_cull_gpu(const Transform& mvp_matrix, GLuint object_ids_to_cull_buffer, int number_of_objects_to_cull);
+    bool occlusion_cull_cpu(const Transform &mvpv_matrix, CullObject& object, int depth_buffer_width, int depth_buffer_height, const std::vector<std::vector<float>>& z_buffer_mipmaps, const std::vector<std::pair<int, int>>& mipmaps_widths_heights);
+    void occlusion_cull_gpu(const Transform& mvp_matrix, const Transform& view_matrix, const Transform& viewport_matrix, GLuint object_ids_to_cull_buffer, int number_of_objects_to_cull);
 
 	// creation des objets de l'application
 	int init();
@@ -176,7 +176,7 @@ protected:
     GLuint m_frustum_culling_shader;
     GLuint m_mdi_draw_params_buffer;
     GLuint m_culling_objects_id_to_draw;
-    GLuint m_culling_passing_ids; //TODO remove (should be able to, not 100% sure though)
+    GLuint m_culling_passing_ids;
     GLuint m_culling_input_object_buffer;
     GLuint m_culling_nb_objects_passed_buffer;
 

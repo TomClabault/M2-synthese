@@ -186,7 +186,11 @@ vec3 normal_mapping(vec2 normal_map_uv, int normal_map_index)
 
 void main()
 {
+    frag_color = vec4(vec3(vs_gl_InstanceID) / 128.0f, 1.0f);
+    return;
+
     Material material = material_buffer[vs_gl_InstanceID];
+
 
     vec4 base_color;
     if (material.base_color_texture_id != -1)
@@ -194,7 +198,7 @@ void main()
     else
         base_color = vec4(material.base_color, 1.0f);
     vec3 irradiance_map_color = texture(u_irradiance_map, vs_texcoords).rgb;
-    base_color = vec4(1.0, 0.71, 0.29, 1); //Hardcoded gold color
+    //base_color = vec4(1.0, 0.71, 0.29, 1); //Hardcoded gold color
 
     vec3 surface_normal = vs_normal;
     if (material.normal_map_texture_id != -1)
