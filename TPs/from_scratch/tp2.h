@@ -37,7 +37,7 @@ public:
         unsigned int instance_base;
     };
 
-    struct alignas(16) CookTorranceMaterial
+    struct CookTorranceMaterial
     {
         vec3 base_color; // Used only if the object doesn't have a base color texture
         float metalness; // Used only if the object doesn't have a specular texture
@@ -59,10 +59,6 @@ public:
 
 	int prerender() override;
 	int postrender() override;
-
-	void update_ambient_uniforms();
-	void setup_diffuse_color_uniform();
-	void setup_roughness_uniform(const float roughness);
 
     GLuint create_opengl_texture(std::string& filepath, int GL_tex_format, float anisotropy = 0.0f);
     std::vector<TP2::CookTorranceMaterial> load_and_create_textures();
@@ -98,7 +94,6 @@ public:
     int create_shadow_map();
 
 	void draw_shadow_map();
-    void draw_light_camera_frustum();
     void draw_fullscreen_quad_texture(GLuint texture_to_draw);
     void draw_fullscreen_quad_texture_hdr_exposure(GLuint texture_to_draw);
 	void draw_skysphere();

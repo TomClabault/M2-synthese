@@ -117,14 +117,6 @@ int TP2::postrender()
     return 0;
 }
 
-void TP2::update_ambient_uniforms()
-{
-    glUseProgram(m_texture_shadow_cook_torrance_shader);
-
-    GLuint use_irradiance_map_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_use_irradiance_map");
-    glUniform1i(use_irradiance_map_location, m_application_settings.use_irradiance_map);
-}
-
 GLuint TP2::create_opengl_texture(std::string& filepath, int GL_tex_format, float anisotropy)
 {
     ImageData texture_data = read_image_data(filepath.c_str());
@@ -198,8 +190,6 @@ void create_opengl_texture_array_2D(GLuint& texture_array, int unit, bool is_srg
 
 std::vector<TP2::CookTorranceMaterial> TP2::load_and_create_textures()
 {
-    m_mesh_triangles_group = m_mesh.groups();
-
     std::vector<TP2::CookTorranceMaterial> materials_buffer;
     // Counters used to keep track of the current index of the texture we're going
     // to use in the texture2DArray
@@ -279,7 +269,6 @@ std::vector<TP2::CookTorranceMaterial> TP2::load_and_create_textures()
     }
 
     int texture_width = 2048, texture_height = 2048;
-    int max_texture_count_per_array = 2000000000 / (4 * texture_height * texture_width);
     create_opengl_texture_array_2D(m_diffuse_texture_array, TP2::BASE_COLOR_TEXTURE_ARRAY_UNIT, true, texture_width, texture_height, diffuse_textures);
     create_opengl_texture_array_2D(m_specular_texture_array, TP2::SPECULAR_TEXTURE_ARRAY_UNIT, false, texture_width, texture_height, specular_textures);
     create_opengl_texture_array_2D(m_normal_map_texture_array, TP2::NORMAL_MAP_TEXTURE_ARRAY_UNIT, false, texture_width, texture_height, normal_maps_textures);
@@ -455,10 +444,7 @@ void TP2::draw_shadow_map()
 
     glUseProgram(m_shadow_map_program);
     GLint mlp_matrix_uniform_location = glGetUniformLocation(m_shadow_map_program, "mlp_matrix");
-    if (m_application_settings.bind_light_camera_to_camera)
-        glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, (m_camera.projection() * m_camera.view()).data());
-    else
-        glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, m_lp_light_transform.data());
+    glUniformMatrix4fv(mlp_matrix_uniform_location, 1, GL_TRUE, m_lp_light_transform.data());
 
     glBindVertexArray(m_mesh_vao);
     glDrawArrays(GL_TRIANGLES, 0, m_mesh.triangle_count() * 3);
@@ -498,12 +484,11 @@ int TP2::init()
 
 
 
-    // etat openGL par defaut
-    glClearColor(0.2f, 0.2f, 0.2f, 1.f);        // couleur par defaut de la fenetre
-    glClearDepth(1.f);                          // profondeur par defaut
+    glClearColor(0.2f, 0.2f, 0.2f, 1.f);        // Default color
+    glClearDepth(1.f);                          // Default depth
 
-    glDepthFunc(GL_LEQUAL);                       // ztest, conserver l'intersection la plus proche de la camera
-    glEnable(GL_DEPTH_TEST);                    // activer le ztest
+    glDepthFunc(GL_LEQUAL);
+    glEnable(GL_DEPTH_TEST);
 
     m_fullscreen_quad_texture_shader = read_program("data/TPs/shaders/shader_fullscreen_quad_texture.glsl");
     program_print_errors(m_fullscreen_quad_texture_shader);
@@ -545,6 +530,7 @@ int TP2::init()
 
 
     auto start = std::chrono::high_resolution_clock::now();
+    m_mesh_triangles_group = m_mesh.groups();
     std::vector<TP2::CookTorranceMaterial> materials_buffer = load_and_create_textures();
     auto stop = std::chrono::high_resolution_clock::now();
     std::cout << "Texture loading time: " << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << "ms" << std::endl;
@@ -590,7 +576,7 @@ int TP2::init()
     size_t texcoord_size = m_mesh.texcoord_buffer_size();
 
     //Envoie des material ids
-    glBufferSubData(GL_ARRAY_BUFFER, position_size + normal_size + texcoord_size, material_ids.size(), material_ids.data());
+    glBufferSubData(GL_ARRAY_BUFFER, position_size + normal_size + texcoord_size, material_ids.size() * sizeof(int), material_ids.data());
 
 
     glUseProgram(m_texture_shadow_cook_torrance_shader);
@@ -615,7 +601,7 @@ int TP2::init()
 
     compute_bounding_boxes_of_groups(m_mesh_triangles_group);
 
-    //Reading the faces of the skybox and creating the OpenGL Cubemap
+    // Reading the faces of the skybox and creating the OpenGL Cubemap
     std::vector<ImageData> cubemap_data;
     Image skysphere_image, irradiance_map_image;
 
@@ -658,10 +644,16 @@ int TP2::init()
     glGenBuffers(1, &m_materials_buffer);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_materials_buffer);
     // The materials buffer has been created earlier, when parsing the materials
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(TP2::CookTorranceMaterial) * m_mesh_triangles_group.size(), materials_buffer.data(), GL_STATIC_DRAW);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_materials_buffer);
+    { // TODO remove
+        for (CookTorranceMaterial& mat : materials_buffer)
+        {
+            mat.base_color_texture_id = -1;
+            mat.base_color = vec3(0.0f, 1.0f, 0.0f);
+        }
+    }
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(TP2::CookTorranceMaterial) * materials_buffer.size(), materials_buffer.data(), GL_STATIC_DRAW);
 
-    //Cleaning (repositionning the buffers that have been selected to their default value)
+    // Cleaning (repositionning the buffers that have been selected to their default value)
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
@@ -1226,6 +1218,10 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
             //by the compute shader programes when we called the frustum/occlusion
             //culling compute shaders
             glUseProgram(m_texture_shadow_cook_torrance_shader);
+            // Binding the buffer of materials
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_materials_buffer);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_materials_buffer);
+
             draw_multi_draw_indirect_from_ids(objects_to_draw);
         }
     }
@@ -1266,6 +1262,9 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         //Filling the z-buffer with the objects that were visible last frame and that still
         //are visible
         glUseProgram(m_texture_shadow_cook_torrance_shader);
+        // Binding the buffer of materials
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_materials_buffer);
+
         draw_multi_draw_indirect_from_ids(objects_to_fill_zbuffer);
 
         Utils::compute_mipmaps_gpu(m_hdr_depth_buffer_texture, window_width(), window_height(), m_z_buffer_mipmaps_texture);
@@ -1364,16 +1363,6 @@ Mesh make_frustum()
     return camera;
 }
 
-void TP2::draw_light_camera_frustum()
-{
-    if (m_application_settings.draw_light_camera_frustum)
-    {
-        // affiche le frustum de la camera
-        Mesh frustum_mesh = make_frustum();
-        draw(frustum_mesh, m_lp_light_transform.inverse(), camera());
-    }
-}
-
 void TP2::draw_fullscreen_quad_texture(GLuint texture_to_draw)
 {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -1443,13 +1432,16 @@ void TP2::draw_lighting_window()
     ImGui::Separator();
     ImGui::Text("Sky & Irradiance");
     if (ImGui::Checkbox("Use Irradiance Map", &m_application_settings.use_irradiance_map))
-        update_ambient_uniforms();
+    {
+        glUseProgram(m_texture_shadow_cook_torrance_shader);
+
+        GLuint use_irradiance_map_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_use_irradiance_map");
+        glUniform1i(use_irradiance_map_location, m_application_settings.use_irradiance_map);
+    }
     ImGui::RadioButton("Use Skybox", &m_application_settings.cubemap_or_skysphere, 1); ImGui::SameLine();
     ImGui::RadioButton("Use Skysphere", &m_application_settings.cubemap_or_skysphere, 0);
     ImGui::Separator();
     ImGui::Checkbox("Draw Shadow Map", &m_application_settings.draw_shadow_map);
-    ImGui::Checkbox("Bind Light Camera to Camera", &m_application_settings.bind_light_camera_to_camera);
-    ImGui::Checkbox("Show Light Camera Frustum", &m_application_settings.draw_light_camera_frustum);
     ImGui::Separator();
     ImGui::SliderFloat3("Light Position", (float*)&m_light_pos, -100.0f, 100.0f);
     ImGui::PushItemWidth(256);
@@ -1552,7 +1544,7 @@ int TP2::render()
     glUseProgram(m_texture_shadow_cook_torrance_shader);
 
     //On update l'uniform mvpMatrix de notre shader
-    Transform model_matrix;// = RotationX(90);
+    Transform model_matrix;
     Transform mvp_matrix = m_camera.projection() * m_camera.view() * model_matrix;
     Transform mvp_matrix_inverse = mvp_matrix.inverse();
     GLint model_matrix_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_model_matrix");
@@ -1600,7 +1592,6 @@ int TP2::render()
 
     draw_mdi_occlusion_culling(mvp_matrix, mvp_matrix_inverse);
     draw_skysphere();
-    draw_light_camera_frustum();
     draw_fullscreen_quad_texture_hdr_exposure(m_hdr_shader_output_texture);
 
     ////////// ImGUI //////////
