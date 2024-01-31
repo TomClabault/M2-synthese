@@ -495,13 +495,13 @@ int TP2::init()
     glEnable(GL_DEPTH_TEST);                    // activer le ztest
 
 
-    m_fullscreen_quad_texture_shader = read_program("../data/shaders/shader_fullscreen_quad_texture.glsl");
+    m_fullscreen_quad_texture_shader = read_program("../data/shaders_tp/shader_fullscreen_quad_texture.glsl");
     program_print_errors(m_fullscreen_quad_texture_shader);
 
-    m_fullscreen_quad_texture_hdr_exposure_shader = read_program("../data/shaders/shader_fullscreen_quad_texture_hdr_exposure.glsl");
+    m_fullscreen_quad_texture_hdr_exposure_shader = read_program("../data/shaders_tp/shader_fullscreen_quad_texture_hdr_exposure.glsl");
     program_print_errors(m_fullscreen_quad_texture_hdr_exposure_shader);
 
-    m_texture_shadow_cook_torrance_shader = read_program("../data/shaders/shader_texture_shadow_cook_torrance_shader.glsl");
+    m_texture_shadow_cook_torrance_shader = read_program("../data/shaders_tp/shader_texture_shadow_cook_torrance_shader.glsl");
     program_print_errors(m_texture_shadow_cook_torrance_shader);
 
     GLint use_irradiance_map_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_use_irradiance_map");
@@ -516,20 +516,20 @@ int TP2::init()
     GLint normal_map_uniform_location = glGetUniformLocation(m_texture_shadow_cook_torrance_shader, "u_mesh_normal_map");
     glUniform1i(normal_map_uniform_location, TP2::TRIANGLE_GROUP_NORMAL_MAP_UNIT);
 
-    m_shadow_map_program = read_program("../data/shaders/shader_shadow_map.glsl");
+    m_shadow_map_program = read_program("../data/shaders_tp/shader_shadow_map.glsl");
     program_print_errors(m_shadow_map_program);
 
-    m_cubemap_shader = read_program("../data/shaders/shader_cubemap.glsl");
+    m_cubemap_shader = read_program("../data/shaders_tp/shader_cubemap.glsl");
     program_print_errors(m_cubemap_shader);
 
     //The skysphere is on texture unit 1 so we're using 1 for the value of the uniform
     GLint skysphere_uniform_location = glGetUniformLocation(m_cubemap_shader, "u_skysphere");
     glUniform1i(skysphere_uniform_location, 1);
 
-    m_frustum_culling_shader = read_program("../data/shaders/TPCG/frustum_culling.glsl");
+    m_frustum_culling_shader = read_program("../data/shaders_tp/TPCG/frustum_culling.glsl");
     program_print_errors(m_frustum_culling_shader);
 
-    m_occlusion_culling_shader = read_program("../data/shaders/TPCG/occlusion_culling.glsl");
+    m_occlusion_culling_shader = read_program("../data/shaders_tp/TPCG/occlusion_culling.glsl");
     program_print_errors(m_occlusion_culling_shader);
 
 
@@ -631,7 +631,7 @@ int TP2::init()
 
     std::thread load_thread_cubemap = std::thread([&] {cubemap_data = Utils::read_cubemap_data("../data/skybox", ".jpg"); });
     std::thread load_thread_skypshere = std::thread([&] {skysphere_image = Utils::read_skysphere_image(m_application_settings.irradiance_map_file_path.c_str()); });
-    irradiance_map_image = Utils::precompute_and_load_associated_irradiance_gpu(m_application_settings.irradiance_map_file_path.c_str(), m_application_settings.irradiance_map_precomputation_samples, m_application_settings.irradiance_map_precomputation_downscale_factor);
+    irradiance_map_image = Utils::precompute_and_load_associated_irradiance(m_application_settings.irradiance_map_file_path.c_str(), m_application_settings.irradiance_map_precomputation_samples, m_application_settings.irradiance_map_precomputation_downscale_factor);
 
     load_thread_cubemap.join();
     load_thread_skypshere.join();

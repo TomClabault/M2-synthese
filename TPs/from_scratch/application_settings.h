@@ -39,9 +39,9 @@ struct ApplicationSettings
 //    int irradiance_map_precomputation_downscale_factor = 64;
 //    std::string irradiance_map_file_path = "../data/skyspheres/above_clouds_4k.hdr";
 
-    int irradiance_map_precomputation_samples = 16384 * 4;
-    int irradiance_map_precomputation_downscale_factor = 64;
-    std::string irradiance_map_file_path = "../data/skyspheres/above_clouds_2k.hdr";
+    int irradiance_map_precomputation_samples = 16384 / 4;
+    int irradiance_map_precomputation_downscale_factor = 1;
+    std::string irradiance_map_file_path = "../data/skyspheres/above_clouds_4k.hdr";
 
     //Whether or not to use the metalness and roughness here for the material shading
     //If true, these values are going to be used. If false, the values found in

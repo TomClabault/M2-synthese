@@ -71,7 +71,7 @@ Image Utils::precompute_and_load_associated_irradiance(const char* skysphere_fil
 
     //Creating the complete (path + image file name) file name of the irradiance map
     std::filesystem::create_directory(TP2::IRRADIANCE_MAPS_CACHE_FOLDER);
-    std::string irradiance_map_name = skysphere_file_string.substr(0, skysphere_file_string.rfind('/')) + "/irradiance_maps_cache/" + skysphere_image_file_name + "_Irradiance_" + std::to_string(samples) + "x_Down" + std::to_string(downscale_factor) + "x.hdr";
+    std::string irradiance_map_name = skysphere_file_string.substr(0, skysphere_file_string.rfind('/') - 11) + "/irradiance_maps_cache/" + skysphere_image_file_name + "_Irradiance_" + std::to_string(samples) + "x_Down" + std::to_string(downscale_factor) + "x.hdr";
 
     //Checking whether the irradiance map already exists or not
     std::ifstream input_irradiance(irradiance_map_name);
@@ -195,7 +195,7 @@ Image Utils::precompute_irradiance_map_from_skysphere(const char* skysphere_path
 	//This variable is then used to print a completion purcentage on stdout
 	std::atomic<int> completed_lines(0);
 
-#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for
 		for (int y = 0; y < irradiance_map.height(); y++)
 		{
             float theta = M_PI * (1.0f - (float)y / irradiance_map.height());
@@ -266,7 +266,7 @@ GLuint Utils::precompute_irradiance_map_from_skysphere_gpu(const char* skysphere
 
     std::cout << "Skysphere loaded" << std::endl;
 
-    GLuint irradiance_map_precomputation_shader = read_program("../data/shaders/TPCG/irradiance_map_precomputation.glsl");
+    GLuint irradiance_map_precomputation_shader = read_program("../data/shaders_tp/TPCG/irradiance_map_precomputation.glsl");
     program_print_errors(irradiance_map_precomputation_shader);
     glUseProgram(irradiance_map_precomputation_shader);
 
@@ -326,6 +326,7 @@ GLuint Utils::precompute_irradiance_map_from_skysphere_gpu(const char* skysphere
 
     glDeleteTextures(1, &skysphere_texture);
     glDeleteProgram(irradiance_map_precomputation_shader);
+
 
     return irradiance_map_texture_output;
 }
@@ -472,13 +473,13 @@ std::vector<std::vector<float>> Utils::compute_mipmaps(const std::vector<float>&
         level++;
     }
 
-    return mipmaps;
+    return mipmaps; 
 }
 
 void Utils::compute_mipmaps_gpu(GLuint input_image, int width, int height, GLuint z_buffer_mipmap_texture)
 {
-    static GLuint compute_mipmap_shader_sampler = read_program("../data/shaders/TPCG/compute_mipmap_sampler.glsl");
-    static GLuint compute_mipmap_shader_image_unit = read_program("../data/shaders/TPCG/compute_mipmap_image_unit.glsl");
+    static GLuint compute_mipmap_shader_sampler = read_program("../data/shaders_tp/TPCG/compute_mipmap_sampler.glsl");
+    static GLuint compute_mipmap_shader_image_unit = read_program("../data/shaders_tp/TPCG/compute_mipmap_image_unit.glsl");
 
     int level = 0;
     while (width > 4 && height > 4)//Stop at a 4*4 mipmap
