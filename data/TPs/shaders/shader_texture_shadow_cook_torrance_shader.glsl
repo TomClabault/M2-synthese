@@ -88,7 +88,7 @@ float compute_shadow(vec4 light_space_fragment_position, vec3 normal, vec3 to_li
         return 1.0f;
 
     // Bias with a minimum of 0.001 for perpendicular angles. 0.002 for grazing angles
-    float bias = max((1.0f - dot(normal, light_direction)) * 0.001, 0.0008);
+    float bias = max((1.0f - dot(normal, to_light_direction)) * 0.001, 0.0008);
     float shadow_map_depth = percentage_closer_filtering(u_shadow_map, projected_point.xy, scene_projected_depth, bias);
 
     return shadow_map_depth;
@@ -164,20 +164,16 @@ vec3 normal_mapping(vec2 normal_map_uv)
 
 void main()
 {
-    vec4 base_color = texture2D(u_mesh_base_color_texture, vs_texcoords);
-    vec3 irradiance_map_color = texture2D(u_irradiance_map, vs_texcoords).rgb;
-    base_color = vec4(1.0, 0.71, 0.29, 1); //Hardcoded gold color
-
     vec3 surface_normal = vs_normal;
     if (u_has_normal_map && u_do_normal_mapping)
         surface_normal = normal_mapping(vs_texcoords);
 
+    vec4 base_color = texture2D(u_mesh_base_color_texture, vs_texcoords);
+    base_color = vec4(1.0, 0.71, 0.29, 1); //Hardcoded gold color
+    vec3 irradiance_map_color = sample_irradiance_map(surface_normal);
+
     vec3 light_direction = normalize(u_light_direction);
     vec3 to_light_direction = -light_direction;
-
-    vec3 irradiance_map_color = vec3(0.0f);
-    vec4 base_color = texture2D(u_mesh_base_color_texture, vs_texcoords);
-    //base_color = vec4(1.0, 0.71, 0.29, 1); //Hardcoded gold color
 
     //Handling transparency on the texture
     if (base_color.a < 0.5)
@@ -188,8 +184,6 @@ void main()
         vec3 view_direction = normalize(u_camera_position - vs_position);
         vec3 halfway_vector = normalize(view_direction + to_light_direction);
 
-        // Sampling the irradiance map with the microfacet normal
-        irradiance_map_color = sample_irradiance_map(halfway_vector);
 
         float NoV = max(0.0001f, dot(surface_normal_normalized, view_direction));
         float NoL = max(0.0f, dot(surface_normal_normalized, to_light_direction));
