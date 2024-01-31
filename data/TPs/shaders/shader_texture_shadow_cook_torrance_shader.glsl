@@ -80,7 +80,6 @@ float percentage_closer_filtering(sampler2D shadow_map, vec2 texcoords, float sc
 
 float compute_shadow(vec4 light_space_fragment_position, vec3 normal, vec3 to_light_direction)
 {
-
     vec3 projected_point = light_space_fragment_position.xyz / light_space_fragment_position.w;
     projected_point = projected_point * 0.5 + 0.5;
 
@@ -88,8 +87,8 @@ float compute_shadow(vec4 light_space_fragment_position, vec3 normal, vec3 to_li
     if(scene_projected_depth > 1)
         return 1.0f;
 
-    //Bias with a minimum of 0.0005 for perpendicular angles. 0.001 for grazing angles
-    float bias = max((1.0f - dot(normal, to_light_direction)) * 0.0005, 0.001);
+    // Bias with a minimum of 0.001 for perpendicular angles. 0.002 for grazing angles
+    float bias = max((1.0f - dot(normal, light_direction)) * 0.001, 0.0008);
     float shadow_map_depth = percentage_closer_filtering(u_shadow_map, projected_point.xy, scene_projected_depth, bias);
 
     return shadow_map_depth;
@@ -165,6 +164,10 @@ vec3 normal_mapping(vec2 normal_map_uv)
 
 void main()
 {
+    vec4 base_color = texture2D(u_mesh_base_color_texture, vs_texcoords);
+    vec3 irradiance_map_color = texture2D(u_irradiance_map, vs_texcoords).rgb;
+    base_color = vec4(1.0, 0.71, 0.29, 1); //Hardcoded gold color
+
     vec3 surface_normal = vs_normal;
     if (u_has_normal_map && u_do_normal_mapping)
         surface_normal = normal_mapping(vs_texcoords);

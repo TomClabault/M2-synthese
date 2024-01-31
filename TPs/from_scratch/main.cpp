@@ -26,8 +26,8 @@ int main(int argc, char** argv)
     TP2 tp(commandline_arguments);
 	tp.run();
 
-	ImGui_ImplSdlGL3_Shutdown();
-	ImGui::DestroyContext();
+    ImGui_ImplSdlGL3_Shutdown();
+    ImGui::DestroyContext();
 
-	return 0;
+    return 0;
 }

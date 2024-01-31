@@ -1,3 +1,6 @@
+#ifndef TP2_H
+#define TP2_H
+
 #include "app_camera.h"
 #include "application_settings.h"
 #include "application_state.h"
@@ -11,8 +14,8 @@
 
 struct BoundingBox
 {
-	Point pMin;
-	Point pMax;
+    Point pMin;
+    Point pMax;
 };
 
 struct CommandlineArguments
@@ -26,6 +29,24 @@ class TP2 : public AppCamera
 public:
     TP2(const CommandlineArguments& commandline_arguments);
 
+    struct alignas(16) CullObject
+    {
+        vec3 min;
+        unsigned int vertex_base;
+        vec3 max;
+        unsigned int vertex_count;
+    };
+
+    struct alignas(4) MultiDrawIndirectParam
+    {
+        unsigned int vertex_count;
+        unsigned int instance_count;
+        unsigned int vertex_base;
+        unsigned int instance_base;
+    };
+
+    TP2();
+
 	int get_window_width();
 	int get_window_height();
 
@@ -36,15 +57,23 @@ public:
 	int postrender() override;
 
 	void update_ambient_uniforms();
-	void setup_diffuse_color_uniform();
-	void setup_roughness_uniform(const float roughness);
 
     GLuint create_opengl_texture(std::string& filepath, int GL_tex_format, float anisotropy = 0.0f);
     void load_mesh_textures_thread_function(const Materials& materials);
 
 	void compute_bounding_boxes_of_groups(std::vector<TriangleGroup>& groups);
-    bool rejection_test_bbox_frustum_culling(const BoundingBox& bbox, const Transform& mvpMatrix);
-    bool rejection_test_bbox_frustum_culling_scene(const BoundingBox& bbox, const Transform& inverse_mvp_matrix);
+    bool rejection_test_bbox_frustum_culling(const CullObject& object, const Transform& mvpMatrix);
+    bool rejection_test_bbox_frustum_culling_scene(const CullObject& object, const Transform& inverse_mvp_matrix);
+
+    /**
+     * @param object Object to try to cull
+     * @param z_buffer_mipmaps The mipmaps of the z-buffer that will be
+     * used for the hierarchical occlusion test
+     * @return True if the object has been culled and is not visible.
+     * False if it is visible
+     */
+    bool occlusion_cull_cpu(const Transform &mvpv_matrix, CullObject& object, int depth_buffer_width, int depth_buffer_height, const std::vector<std::vector<float>>& z_buffer_mipmaps, const std::vector<std::pair<int, int>>& mipmaps_widths_heights);
+    void occlusion_cull_gpu(const Transform& mvp_matrix, const Transform& view_matrix, const Transform& viewport_matrix, GLuint object_ids_to_cull_buffer, int number_of_objects_to_cull);
 
 	// creation des objets de l'application
 	int init();
@@ -55,13 +84,25 @@ public:
 	void update_recomputed_irradiance_map();
 
     int resize_hdr_frame();
+    void resize_z_buffer_mipmaps();
     int create_hdr_frame();
+    void create_z_buffer_mipmaps_textures(int width, int height);
     int create_shadow_map();
+
 	void draw_shadow_map();
-    void draw_light_camera_frustum();
     void draw_fullscreen_quad_texture(GLuint texture_to_draw);
     void draw_fullscreen_quad_texture_hdr_exposure(GLuint texture_to_draw);
 	void draw_skysphere();
+
+    std::vector<TP2::MultiDrawIndirectParam> generate_draw_params_from_object_ids(std::vector<int> object_ids);
+
+    void draw_by_groups_cpu_frustum_culling(const Transform &vp_matrix, const Transform &mvp_matrix_inverse);
+    void draw_multi_draw_indirect_from_ids(const std::vector<int>& object_ids);
+    void draw_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse);
+    void draw_mdi_occlusion_culling(const Transform &mvp_matrix, const Transform &mvp_matrix_inverse);
+    int gpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse);
+    void cpu_mdi_frustum_culling(const Transform& mvp_matrix, const Transform& mvp_matrix_inverse);
+    void cpu_mdi_selective_frustum_culling(const std::vector<int>& objects_id, const Transform& mvp_matrix, const Transform& mvp_matrix_inverse);
 
 	void draw_general_settings();
     void draw_lighting_window();
@@ -90,36 +131,54 @@ protected:
 
     CommandlineArguments m_commandline_arguments;
 
+    int m_frame_number = 0;
 
 
 
 	//Mesh m_repere;
 	Mesh m_mesh;
     int m_mesh_groups_drawn;
-	std::vector<BoundingBox> m_mesh_groups_bounding_boxes;
+
+    //Variables used for mesh rendering
     std::vector<TriangleGroup> m_mesh_triangles_group;
     std::vector<GLuint> m_mesh_base_color_textures;
     std::vector<GLuint> m_mesh_specular_textures;
     std::vector<GLuint> m_mesh_normal_maps;
     GLuint m_default_texture;
-
 	GLuint m_cubemap_vao;
     GLuint m_mesh_vao;
     GLuint m_texture_shadow_cook_torrance_shader;
-
 	GLuint m_cubemap_shader;
 	GLuint m_cubemap;
 	GLuint m_skysphere;
 	GLuint m_irradiance_map;
-
     GLuint m_hdr_shader_output_texture;
+    GLuint m_hdr_depth_buffer_texture;
     GLuint m_hdr_framebuffer;
-
     GLuint m_fullscreen_quad_texture_shader;
     GLuint m_fullscreen_quad_texture_hdr_exposure_shader;
 	GLuint m_shadow_map_program;
 	GLuint m_shadow_map_framebuffer;
     GLuint m_shadow_map = 0;
+
+    //Variables used for the culling (frustum and occlusion)
+    GLuint m_z_buffer_mipmaps_texture;
+    int m_z_buffer_mipmaps_count;
+    std::vector<int> m_objects_drawn_last_frame;
+    std::vector<CullObject> m_cull_objects;
+    GLuint m_occlusion_culling_shader;
+    GLuint m_frustum_culling_shader;
+    GLuint m_mdi_draw_params_buffer;
+    GLuint m_culling_objects_id_to_draw;
+    GLuint m_culling_passing_ids;
+    GLuint m_culling_input_object_buffer;
+    GLuint m_culling_nb_objects_passed_buffer;
+
+
+
+
+
+
 
     Orbiter m_light_camera;
 	Vector m_light_direction = Vector(0.4f, -1.0f, -0.3f);
@@ -143,3 +202,5 @@ protected:
 	//such as whether or not we're currently recomputing an irradiance map
 	ApplicationState m_application_state;
 };
+
+#endif

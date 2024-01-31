@@ -6,6 +6,7 @@
 
 #include "mat.h"
 
+#define M_PI 3.14159265358979323846
 
 float radians( const float deg )
 {
@@ -352,7 +353,6 @@ Transform Ortho( const float left, const float right, const float bottom, const 
         0,                                       0, -2.f / (zfar - znear), tz,
         0,                                       0,                     0, 1);
 }
-
 
 Transform Viewport( const float width, const float height )
 {

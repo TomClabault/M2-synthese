@@ -179,6 +179,16 @@ struct vec4
     //! cree un vecteur generique a partir des coordonnees du vecteur v, (v.x, v.y, v.z, 0).
     vec4( const Vector& v );    // l'implementation se trouve en fin de fichier.
     
+    vec4& operator /= (float k)
+    {
+        x /= k;
+        y /= k;
+        z /= k;
+        w /= k;
+
+        return *this;
+    }
+
     //! renvoie la ieme composante du vecteur.
     float operator() ( const unsigned int i ) const { return (&x)[i]; }
     float& operator() ( const unsigned int i ) { return (&x)[i]; }
@@ -209,6 +219,22 @@ inline float Vector::operator( ) ( const unsigned int i ) const { return (&x)[i]
 
 inline float& Point::operator( ) ( const unsigned int i ) { return (&x)[i]; }
 inline float& Vector::operator( ) ( const unsigned int i ) { return (&x)[i]; }
+
+inline bool all(vec3 a)
+{
+    return a.x && a.y && a.z;
+}
+
+inline vec3 lessThanOrEq(vec4 a, vec4 b)
+{
+    return vec3(a.x <= b.x, a.y <= b.y, a.z <= b.z);
+}
+
+inline vec3 greaterThanOrEq(vec4 a, vec4 b)
+{
+    return vec3(a.x >= b.x, a.y >= b.y, a.z >= b.z);
+}
+
 
 //
 #include <iostream>

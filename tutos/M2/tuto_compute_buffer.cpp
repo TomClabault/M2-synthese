@@ -22,15 +22,11 @@ struct ComputeBuffer : public App
         glGenBuffers(1, &m_gpu_buffer1);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_gpu_buffer1);
         glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(int) * m_data.size(), m_data.data(), GL_STATIC_COPY);
-        // ou : 
-        // glBufferStorage(GL_SHADER_STORAGE_BUFFER, sizeof(int) * data.size(), data.data(), 0);
         
         // buffer resultat, meme taille, mais pas de donnees...
         glGenBuffers(1, &m_gpu_buffer2);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_gpu_buffer2);
         glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(int) * m_data.size(), nullptr, GL_STATIC_COPY);
-        // ou : 
-        // glBufferStorage(GL_SHADER_STORAGE_BUFFER, sizeof(int) * data.size(), nullptr, 0);
         
         return 0;
     }

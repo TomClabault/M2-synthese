@@ -169,8 +169,6 @@ int last_event_count( ) { return event_count; }
 #include "imgui.h"
 #include "imgui_impl_sdl_gl3.h"
 
-#define IMGUI_PROCESS_EVENTS
-
 int events( Window window, bool& resize_event_fired)
 {
     resize_event_fired = false;
