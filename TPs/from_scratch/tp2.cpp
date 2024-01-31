@@ -535,18 +535,6 @@ int TP2::init()
     auto stop = std::chrono::high_resolution_clock::now();
     std::cout << "Texture loading time: " << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << "ms" << std::endl;
 
-    //Generating the default textures that the triangle groups that don't have texture will use
-    // Unused since multi draw indirect
-    /*unsigned char default_texture_data[3] = { 255, 255, 255 };
-    glGenTextures(1, &m_default_texture);
-    glBindTexture(GL_TEXTURE_2D, m_default_texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGB, GL_UNSIGNED_BYTE, default_texture_data);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_REPEAT);
-    glGenerateMipmap(GL_TEXTURE_2D);*/
-
     //Creating the VAO for the mesh that will be displayed
     glGenVertexArrays(1, &m_mesh_vao);
     //Selecting the VAO that we're going to configure
@@ -559,7 +547,7 @@ int TP2::init()
     glBindBuffer(GL_ARRAY_BUFFER, mesh_buffer);
 
     std::vector<int> material_ids = create_material_ids_data();
-    size_t total_size = m_mesh.normal_buffer_size() + m_mesh.positions().size() * sizeof(vec3) + m_mesh.texcoord_buffer_size() + material_ids.size() * sizeof(int);
+    size_t total_size = m_mesh.normal_buffer_size() + m_mesh.positions().size() * sizeof(vec3) + m_mesh.texcoord_buffer_size();
     // Creating the vertex buffer
     glBufferData(GL_ARRAY_BUFFER, total_size, nullptr, GL_STATIC_DRAW);
 
@@ -573,10 +561,10 @@ int TP2::init()
 
     //Envoie des texcoords
     glBufferSubData(GL_ARRAY_BUFFER, position_size + normal_size, m_mesh.texcoord_buffer_size(), m_mesh.texcoord_buffer());
-    size_t texcoord_size = m_mesh.texcoord_buffer_size();
 
-    //Envoie des material ids
-    glBufferSubData(GL_ARRAY_BUFFER, position_size + normal_size + texcoord_size, material_ids.size() * sizeof(int), material_ids.data());
+    glGenBuffers(1, &m_materials_indices_buffer);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_materials_indices_buffer);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, material_ids.size() * sizeof(int), material_ids.data(), GL_STATIC_DRAW);
 
 
     glUseProgram(m_texture_shadow_cook_torrance_shader);
@@ -592,8 +580,6 @@ int TP2::init()
     glEnableVertexAttribArray(normal_attribute);
     glVertexAttribPointer(texcoord_attribute, /* size */ 2, /* type */ GL_FLOAT, GL_FALSE, /* stride */ 0, /* offset */ (GLvoid*)(position_size + normal_size));
     glEnableVertexAttribArray(texcoord_attribute);
-    glVertexAttribIPointer(material_id_attribute, /* size */ 1, /* type */ GL_INT, /* stride */ 0, /* offset */ (GLvoid*)(position_size + normal_size + texcoord_size));
-    glEnableVertexAttribArray(material_id_attribute);
 
     // Creating an empty VAO that will be used for the cubemap
     // Empty because we're hardcoding the triangles of the wholescreen cubemap into the vertex shader
@@ -1219,8 +1205,8 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
             //culling compute shaders
             glUseProgram(m_texture_shadow_cook_torrance_shader);
             // Binding the buffer of materials
-            glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_materials_buffer);
-            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_materials_buffer);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_materials_indices_buffer);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_materials_buffer);
 
             draw_multi_draw_indirect_from_ids(objects_to_draw);
         }
@@ -1263,7 +1249,8 @@ void TP2::draw_mdi_occlusion_culling(const Transform& mvp_matrix, const Transfor
         //are visible
         glUseProgram(m_texture_shadow_cook_torrance_shader);
         // Binding the buffer of materials
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_materials_buffer);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_materials_indices_buffer);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_materials_buffer);
 
         draw_multi_draw_indirect_from_ids(objects_to_fill_zbuffer);
 

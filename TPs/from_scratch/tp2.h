@@ -146,6 +146,7 @@ protected:
     GLuint m_diffuse_texture_array;
     GLuint m_specular_texture_array;
     GLuint m_normal_map_texture_array;
+    GLuint m_materials_indices_buffer;
     GLuint m_materials_buffer;
     GLuint m_default_texture;
 	GLuint m_cubemap_vao;

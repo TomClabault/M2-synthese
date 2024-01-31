@@ -50,7 +50,12 @@ struct Material
     int normal_map_texture_id;
 };
 
-layout(std430, binding = 0) buffer MaterialUniformBlock
+layout(std430, binding = 0) buffer MaterialIndicesUniformBlock
+{
+    int material_indices_buffer[];
+};
+
+layout(std430, binding = 1) buffer MaterialUniformBlock
 {
     Material material_buffer[];
 };
@@ -189,7 +194,8 @@ void main()
     //frag_color = vec4(vec3(vs_material_id / 128.0f), 1.0f);
     //return;
 
-    Material material = material_buffer[vs_material_id];
+    int material_index = material_indices_buffer[gl_PrimitiveID];
+    Material material = material_buffer[material_index];
 
     vec4 base_color;
     if (material.base_color_texture_id != -1)
