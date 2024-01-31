@@ -20,8 +20,8 @@ struct BoundingBox
 
 struct CommandlineArguments
 {
-    std::string obj_file_path = "data/bistro-big/exterior.obj";
-    std::string camera_orbiter_file_path = "data/orbiter_bistro.txt";
+    std::string obj_file_path = "../data/occlusion_culling_demo.obj";
+    std::string camera_orbiter_file_path = "this_file_doesnt_exist.txt";
 };
 
 class TP2 : public AppCamera
@@ -112,7 +112,7 @@ public:
 	// dessiner une nouvelle image
     int render();
 
-    inline static const std::string IRRADIANCE_MAPS_CACHE_FOLDER = "data/irradiance_maps_cache";
+    inline static const std::string IRRADIANCE_MAPS_CACHE_FOLDER = "../data/irradiance_maps_cache";
 
     inline static const int FULLSCREEN_QUAD_TEXTURE_UNIT = 0;
 	inline static const int SKYBOX_UNIT = 0;

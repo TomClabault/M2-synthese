@@ -266,7 +266,7 @@ GLuint Utils::precompute_irradiance_map_from_skysphere_gpu(const char* skysphere
 
     std::cout << "Skysphere loaded" << std::endl;
 
-    GLuint irradiance_map_precomputation_shader = read_program("data/shaders/TPCG/irradiance_map_precomputation.glsl");
+    GLuint irradiance_map_precomputation_shader = read_program("../data/shaders/TPCG/irradiance_map_precomputation.glsl");
     program_print_errors(irradiance_map_precomputation_shader);
     glUseProgram(irradiance_map_precomputation_shader);
 
@@ -311,6 +311,7 @@ GLuint Utils::precompute_irradiance_map_from_skysphere_gpu(const char* skysphere
     int nb_groups_y = std::ceil(skysphere_image.height() / (float)threads[1]);
     glUseProgram(irradiance_map_precomputation_shader);
 
+    std::cout << "Precomputing the irradiance map..." << std::endl;
     //To avoid the compute shader timeout, we're going to accumulate several iterations
     for (int i = 0; i < nb_iterations; i++)
     {
@@ -476,8 +477,8 @@ std::vector<std::vector<float>> Utils::compute_mipmaps(const std::vector<float>&
 
 void Utils::compute_mipmaps_gpu(GLuint input_image, int width, int height, GLuint z_buffer_mipmap_texture)
 {
-    static GLuint compute_mipmap_shader_sampler = read_program("data/shaders/TPCG/compute_mipmap_sampler.glsl");
-    static GLuint compute_mipmap_shader_image_unit = read_program("data/shaders/TPCG/compute_mipmap_image_unit.glsl");
+    static GLuint compute_mipmap_shader_sampler = read_program("../data/shaders/TPCG/compute_mipmap_sampler.glsl");
+    static GLuint compute_mipmap_shader_image_unit = read_program("../data/shaders/TPCG/compute_mipmap_image_unit.glsl");
 
     int level = 0;
     while (width > 4 && height > 4)//Stop at a 4*4 mipmap
