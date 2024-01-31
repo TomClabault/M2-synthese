@@ -44,7 +44,7 @@ struct ApplicationSettings
     //Whether or not to use the metalness and roughness here for the material shading
     //If true, these values are going to be used. If false, the values found in
     //the metalness / roughness maps will be used
-    bool override_material = false;
+    bool override_material = true;
 	float mesh_roughness = 0.3f;
     float mesh_metalness = 1.0f;
 	Color ambient_color = Color(0.1, 0.1, 0.1, 0);
